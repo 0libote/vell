@@ -19,7 +19,7 @@
        Island moves the gear and the screenshot inside its capsule at runtime
        (placeSideControls in overlay.js), so the capsule's own clip reveals
        them as it opens; it has no grip. -->
-  <button type="button" class="flow-side flow-settings" id="flow-settings" title="Voxden settings" aria-label="Open Voxden settings">
+  <button type="button" class="flow-side flow-settings" id="flow-settings" title="Vell settings" aria-label="Open Vell settings">
     <!-- Island's gear: a dashed ring. Hidden for every other style. -->
     <svg class="side-icon-island" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
       <circle cx="8" cy="8" r="5.6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-dasharray="2.2 2.2"/>
@@ -49,7 +49,7 @@
       </g>
     </svg>
   </button>
-  <div id="pill" class="pill idle" role="group" aria-label="Voxden" title="Dictate">
+  <div id="pill" class="pill idle" role="group" aria-label="Vell" title="Dictate">
     <button type="button" id="orb-trigger" class="orb-trigger" aria-label="Start dictation" title="Start dictation" tabindex="-1" disabled></button>
     <button type="button" class="act act-cancel" id="btn-cancel" title="Cancel" aria-label="Cancel recording">
       <svg viewBox="0 0 16 16" width="9" height="9" aria-hidden="true">
@@ -137,7 +137,6 @@
   </div>
   <script src="cleanup.js"></script>
   <script src="chunking.js"></script>
-  <script src="cloud-segments.js"></script>
   <script src="speech-gate.js"></script>
   <script src="energy-orb.js"></script>
   <script src="sound-cues.js"></script>

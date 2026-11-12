@@ -24,7 +24,7 @@ BrowserWindow.prototype.focus = function () {};
 globalShortcut.register = () => true;
 globalShortcut.unregister = () => {};
 globalShortcut.unregisterAll = () => {};
-require('../src/updater').startUpdater = () => {};
+
 if (!process.argv.includes('--hidden')) process.argv.push('--hidden');
 process.env.VOXDEN_FLOW_BAR_PING_MS = '300';
 process.env.VOXDEN_FLOW_BAR_PING_TIMEOUT_MS = '250';

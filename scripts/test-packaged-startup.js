@@ -52,8 +52,7 @@ const shown = new Set();
 BrowserWindow.prototype.show = function () { shown.add(this); };
 BrowserWindow.prototype.showInactive = function () {};
 BrowserWindow.prototype.focus = function () {};
-const updater = require(path.join(appRoot, 'src/updater'));
-updater.startUpdater = () => {};
+
 const hotkeys = require('electron').globalShortcut;
 hotkeys.register = () => true;
 hotkeys.unregister = () => {};

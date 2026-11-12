@@ -48,8 +48,7 @@ app.setLoginItemSettings = () => {};
 // window -- but the dashboard has no business appearing during a test.
 BrowserWindow.prototype.show = function () {};
 BrowserWindow.prototype.focus = function () {};
-const updater = require('../src/updater');
-updater.startUpdater = () => {};
+
 const shortcuts = require('electron').globalShortcut;
 shortcuts.register = () => true;
 shortcuts.unregister = () => {};

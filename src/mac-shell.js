@@ -29,8 +29,8 @@ function pasteKeys(platform) {
 
 function trayLabels(platform) {
   return isMac(platform)
-    ? { launchAtLogin: 'Open at login', quit: 'Quit Voxden' }
-    : { launchAtLogin: 'Start with Windows', quit: 'Exit Voxden' };
+    ? { launchAtLogin: 'Open at login', quit: 'Quit Vell' }
+    : { launchAtLogin: 'Start with Windows', quit: 'Exit Vell' };
 }
 
 // The menu bar is 22 points tall and draws a status item at up to about 18.

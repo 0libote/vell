@@ -280,7 +280,7 @@ check('an update with no version raises nothing', announcements.updateReadyEntry
 // A runtime notification carries its own words, so it survives a build whose
 // catalog knows nothing about it.
 check('a runtime notification does not need the catalog',
-  announcements.list(noted.state, []).map((i) => i.title), ['Voxden 1.0.11 is ready']);
+  announcements.list(noted.state, []).map((i) => i.title), ['Vell 1.0.11 is ready']);
 
 // --- Newest first ----------------------------------------------------------
 

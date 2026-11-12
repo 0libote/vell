@@ -132,7 +132,7 @@ const CATALOG = [
     since: '2.1.4',
     kind: 'feature',
     title: 'Voxden Pro, outside India too',
-    body: 'Voxden Pro is now $8 a month everywhere outside India, charged through Razorpay by international card.',
+    body: 'Voxden Pro is now $8 a month everywhere outside India, charged by international card.',
     action: { settings: 'billing' },
   },
   {
@@ -587,22 +587,22 @@ function updateReadyEntry(version) {
   return {
     id: 'update-ready:' + v,
     kind: 'update',
-    title: 'Voxden ' + v + ' is ready',
-    body: 'The update is downloaded. Restart Voxden to finish installing it, or it installs when you next quit.',
+    title: 'Vell ' + v + ' is ready',
+    body: 'The update is downloaded. Restart Vell to finish installing it, or it installs when you next quit.',
     action: { settings: 'system' },
   };
 }
 
-// The Mac build cannot install its own updates yet (see src/updater.js), so a
-// newer release there is news the moment it is found, not once downloaded.
+// Vell has no automatic updates: a newer release is news the moment it is
+// found, and it is fetched by hand, not downloaded by the app.
 function updateAvailableEntry(version) {
   const v = text(version).trim();
   if (!v) return null;
   return {
     id: 'update-available:' + v,
     kind: 'update',
-    title: 'Voxden ' + v + ' is out',
-    body: 'Download it from voxden.app/download and drag it over this copy in Applications.',
+    title: 'Vell ' + v + ' is out',
+    body: 'Fetch the new release and drag it over this copy in Applications.',
     action: { settings: 'system' },
   };
 }

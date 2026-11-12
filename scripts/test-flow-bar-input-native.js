@@ -42,7 +42,7 @@ app.setLoginItemSettings = () => {};
 globalShortcut.register = () => true;
 globalShortcut.unregister = () => {};
 globalShortcut.unregisterAll = () => {};
-require('../src/updater').startUpdater = () => {};
+
 // The overlay must be genuinely on screen; the dashboard has no business appearing.
 BrowserWindow.prototype.show = function () {};
 BrowserWindow.prototype.focus = function () {};

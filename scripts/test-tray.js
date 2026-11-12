@@ -110,7 +110,7 @@ function find(tpl, label) {
 
 const base = build({});
 
-check('menu opens with the window and ends with exit', [labels(base)[0], labels(base).pop()], ['Open Voxden', 'Exit Voxden']);
+check('menu opens with the window and ends with exit', [labels(base)[0], labels(base).pop()], ['Open Vell', 'Exit Vell']);
 check('menu is grouped, not a flat list', base.filter((it) => it.type === 'separator').length, 4);
 
 // The dictation item is the only label that changes, and it has to reflect the
@@ -148,7 +148,7 @@ check('launch on', checkedOf(build({ settings: { launchAtLogin: true } }), 'Star
 // A Mac has no Windows to start with and quits rather than exits; its chords
 // are written with Mac key names.
 const mac = build({ platform: 'darwin', settings: { launchAtLogin: true } });
-check('mac menu ends with quit', labels(mac).pop(), 'Quit Voxden');
+check('mac menu ends with quit', labels(mac).pop(), 'Quit Vell');
 check('mac launch item', checkedOf(mac, 'Open at login'), true);
 check('mac has no Windows item', labels(mac).includes('Start with Windows'), false);
 check('mac dictate shows the Mac chord', find(mac, 'Start dictation').label, 'Start dictation\tCmd+Shift+Space');

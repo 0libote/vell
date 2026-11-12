@@ -113,7 +113,6 @@ ok('the tray words come from mac-shell', /label: words\.launchAtLogin/.test(main
 ok('no hard-coded Ctrl+V hint in the flow bar', !/Paste it with Ctrl\+V/.test(mainSrc));
 eq('no hard-coded "this PC" in user-facing strings of main.js (console lines aside)',
   mainSrc.split('\n').filter((line) => /'[^']*\bthis PC\b[^']*'/.test(line) && !/console\.\w+\(/.test(line)), []);
-ok('an available update is noted on a Mac', /status\.status === 'available'[\s\S]{0,200}updateAvailableEntry\(status\.availableVersion\)/.test(mainSrc));
 
 // --- the renderer --------------------------------------------------------------
 
@@ -134,65 +133,9 @@ ok('a Mac hides the mute switch, which the Mac helper cannot act on',
 {
   const entry = announcements.updateAvailableEntry('2.2.0');
   eq('an available release is keyed apart from a downloaded one', entry.id, 'update-available:2.2.0');
-  ok('it says where the download is', /voxden\.app\/download/.test(entry.body));
+  ok('it says how the release arrives', /Fetch the new release/.test(entry.body));
   eq('it opens the System pane', entry.action, { settings: 'system' });
   eq('no version, no notice', announcements.updateAvailableEntry(' '), null);
-}
-
-// --- updater: check-only on a Mac, unchanged on Windows ------------------------
-
-function loadUpdater(platform) {
-  const autoUpdater = new EventEmitter();
-  let checks = 0;
-  autoUpdater.checkForUpdates = async () => { checks += 1; return {}; };
-  const opened = [];
-  const installs = [];
-  autoUpdater.quitAndInstall = (...args) => installs.push(args);
-  const module = { exports: {} };
-  vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'src', 'updater.js'), 'utf8'), {
-    module, setInterval: () => 1, clearInterval: () => {},
-    require: (name) => (name === 'electron'
-      ? { app: { isPackaged: true, getVersion: () => '2.1.6' }, shell: { openExternal: (url) => { opened.push(url); return Promise.resolve(); } } }
-      : { autoUpdater }),
-  });
-  const updater = module.exports;
-  const statuses = [];
-  updater.startUpdater({ platform, onStatusChange: (s) => statuses.push(s.status) });
-  return { updater, autoUpdater, opened, installs, statuses, checkCount: () => checks };
-}
-
-{
-  const mac = loadUpdater('darwin');
-  eq('a Mac never downloads an update it cannot install', mac.autoUpdater.autoDownload, false);
-  mac.autoUpdater.emit('update-available', { version: '2.2.0' });
-  eq('a newer release reads available', mac.updater.getUpdateStatus().status, 'available');
-  eq('with its version', mac.updater.getUpdateStatus().availableVersion, '2.2.0');
-  eq('and no progress bar', mac.updater.getUpdateStatus().progress, null);
-  eq('the button opens the download page', mac.updater.installNow(), { ok: true, reason: '' });
-  eq('in the browser', mac.opened, [mac.updater.MANUAL_DOWNLOAD_URL]);
-  eq('which is voxden.app/download', mac.updater.MANUAL_DOWNLOAD_URL, 'https://voxden.app/download');
-  eq('nothing is ever installed', mac.installs, []);
-  eq('quitting installs nothing', mac.updater.installOnQuit(), false);
-  mac.autoUpdater.emit('update-downloaded', { version: '2.2.0' });
-  eq('even a stray download event does not install on quit', mac.updater.installOnQuit(), false);
-  eq('still nothing installed', mac.installs, []);
-  const idle = loadUpdater('darwin');
-  eq('with nothing available the button refuses', idle.updater.installNow().ok, false);
-  eq('and opens nothing', idle.opened, []);
-  idle.autoUpdater.emit('error', new Error('Cannot find latest-mac.yml'));
-  eq('a failed check is the ordinary error state, not a loop', idle.updater.getUpdateStatus().status, 'error');
-  eq('one check at launch and none retried on error', idle.checkCount(), 1);
-}
-
-{
-  const win = loadUpdater('win32');
-  eq('Windows still downloads by itself', win.autoUpdater.autoDownload, true);
-  win.autoUpdater.emit('update-available', { version: '2.2.0' });
-  eq('Windows goes straight to downloading', win.updater.getUpdateStatus().status, 'downloading');
-  win.autoUpdater.emit('update-downloaded', { version: '2.2.0' });
-  eq('and restarts through the installer', win.updater.installNow(), { ok: true, reason: '' });
-  eq('silently, relaunching', win.installs, [[true, true]]);
-  eq('without opening a browser', win.opened, []);
 }
 
 // --- after-pack.js signs ad hoc, in order, and verifies -------------------------

@@ -13,8 +13,8 @@ const plain = value => JSON.parse(JSON.stringify(value));
   try {
     h.context.testGeneralState = (_channel, state) => states.push(plain(state));
     h.run(`
-      accountPlan = () => 'pro';
-      settings.cloudTranscription = true;
+      // Local-only: no plan and no cloud switch. Every language choice lands
+      // on English, the only language local engines hear.
       settings.alwaysShowFlowBar = false;
       overlayWin = { isDestroyed: () => false, webContents: { send: testGeneralState } };
     `);
@@ -27,7 +27,8 @@ const plain = value => JSON.parse(JSON.stringify(value));
       { autoAddToDictionary: false }, { autoAddToDictionary: true },
     ];
     for (const patch of patches) {
-      const [key, value] = Object.entries(patch)[0];
+      const [key, rawValue] = Object.entries(patch)[0];
+      const value = key === 'dictationLanguages' ? ['en'] : rawValue;
       const snapshot = plain(await set(null, patch));
       const saved = JSON.parse(fs.readFileSync(h.run('SETTINGS_FILE'), 'utf8'));
       assert.deepStrictEqual(snapshot[key], value, key + ' returns the confirmed value');
@@ -40,8 +41,8 @@ const plain = value => JSON.parse(JSON.stringify(value));
       if (key === 'dictateMode') assert.strictEqual(h.run('isPtt()'), value === 'ptt');
       if (key === 'dictationQuality') assert.strictEqual(h.run('planDictationRoute({ ranked: [] }).requested'), value);
       if (key === 'dictationLanguages') {
-        assert.strictEqual(h.run('engineLanguage()'), value.length > 1 ? 'auto' : value[0]);
-        assert.strictEqual(h.run('wantsHinglish()'), value.includes('hg'));
+        assert.strictEqual(h.run('engineLanguage()'), 'en');
+        assert.strictEqual(h.run('wantsHinglish()'), false);
       }
     }
     console.log('General settings: 12 preference changes persisted, reloaded, and reached recording mode, microphone, quality and language routing.');

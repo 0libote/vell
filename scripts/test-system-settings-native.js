@@ -26,7 +26,7 @@ app.setLoginItemSettings = options => loginCalls.push(options);
 globalShortcut.register = () => true;
 globalShortcut.unregister = () => {};
 globalShortcut.unregisterAll = () => {};
-require('../src/updater').startUpdater = () => {};
+
 // Keep the fixture visible for native hit testing without taking keyboard focus.
 const nativeShowInactive = BrowserWindow.prototype.showInactive;
 const shown = new Set();

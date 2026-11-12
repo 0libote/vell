@@ -257,13 +257,12 @@ async function main() {
       openHistory = (c) => opened.push(c);
       flashError = (m) => flashed.push(m);
       retryPendingCapture = () => { retried++; };
-      noteFreeWordWarnings = () => {};
       tryRegisterGameShortcut('F8');
     `);
     const game = gameWatcher(h, 0x77);
+    // Local-only: no sign-in and no word cap, so only an engine that is not
+    // ready can block the game key.
     const blockers = {
-      'signed out': ['signInRequired = () => true', 'signInRequired = () => false', 'account'],
-      'out of free words': ['freeWordsMeter = () => ({ exhausted: true })', 'freeWordsMeter = () => null', 'billing'],
       'engine not ready': ["sidecarState = 'unavailable'", "sidecarState = 'ready'", 'speech-engines'],
     };
     for (const [why, [block, unblock, pane]] of Object.entries(blockers)) {

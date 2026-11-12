@@ -21,7 +21,7 @@ app.setLoginItemSettings = () => {};
 globalShortcut.register = () => true;
 globalShortcut.unregister = () => {};
 globalShortcut.unregisterAll = () => {};
-require('../src/updater').startUpdater = () => {};
+
 BrowserWindow.prototype.show = function () {};
 BrowserWindow.prototype.showInactive = function () {};
 BrowserWindow.prototype.focus = function () {};

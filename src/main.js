@@ -6,7 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 const { cleanup, cleanupVerbatim, dedupeRepeats } = require('./cleanup');
-const { applySpokenCorrections, checkModelEdit, mayTakeBack, removePieces } = require('./spoken-corrections');
+const { applySpokenCorrections } = require('./spoken-corrections');
 const { autoCleanup } = require('./auto-cleanup');
 const { spokenNumbersToDigits } = require('./numbers');
 const dict = require('./dictionary');
@@ -21,7 +21,6 @@ const style = require('./style');
 const metrics = require('./metrics');
 const insights = require('./insights');
 const corpus = require('./corpus');
-const atomicStore = require('./atomic-store');
 const historyStore = require('./history-store');
 const { createHistoryUsage } = require('./history-usage');
 const { createClipboardPaste, readRestorable } = require('./clipboard-paste');
@@ -30,10 +29,6 @@ const { ownWindowId } = require('./window-id');
 const macShell = require('./mac-shell');
 const models = require('./models');
 const asr = require('./asr');
-const { AccountManager } = require('./account');
-const cloudAsr = require('./cloud');
-const polishLib = require('./polish');
-const quota = require('./quota');
 const hinglish = require('./hinglish');
 const hotkeys = require('./hotkeys');
 const flowBar = require('./flow-bar');
@@ -42,10 +37,6 @@ const appTheme = require('./app-theme');
 const { createHealthMonitor, createFrameMonitor, timerLateness } = require('./overlay-health');
 const { createDiagLog } = require('./diag');
 const announcements = require('./announcements');
-const credits = require('./credits');
-const feedback = require('./feedback');
-const googleAuth = require('./google-auth');
-const updater = require('./updater');
 const { createSidecarQueue } = require('./sidecar-queue');
 const { createMediaController } = require('./media-controller');
 const { AsrRuntimeManager } = require('./asr-runtime');
@@ -62,9 +53,9 @@ const { startSidecarAfterGpuDetection } = require('./startup-gpu');
 const warmStart = require('./warm-start');
 const elevation = require('./elevation');
 
-app.setName('Voxden');
+app.setName('Vell');
 if (process.platform === 'win32') {
-  app.setAppUserModelId('com.voxden.app');
+  app.setAppUserModelId('com.vell.app');
 }
 // One --disable-features value: a second appendSwitch for the same key
 // replaces the first rather than adding to it.
@@ -137,7 +128,7 @@ let sidecarStartToken = 0;
 let sidecarProbe = null;
 let sidecarRestartTimer = null;
 // A cold app launch only probes the speech runtime. The multi-gigabyte model
-// process is requested by the first dictation, so opening Voxden never competes
+// process is requested by the first dictation, so opening Vell never competes
 // with the desktop for disk, RAM, CPU and GPU all at once.
 let sidecarStartRequested = false;
 let asrOperation = null;
@@ -165,7 +156,7 @@ let isQuitting = false;
 let dictionary = { phrases: [], variants: [] };
 // Structured vocabulary derived from `dictionary`, rebuilt whenever the
 // dictionary is edited. Kept as a cache rather than as the store: the
-// dictionary file stays the thing the UI edits and the thing an older Voxden
+// dictionary file stays the thing the UI edits and the thing an older Vell
 // can still read, and this is the ranked, script-aware view of it that the
 // engines and the repair stage actually consume.
 let vocabularyEntries = [];
@@ -209,9 +200,8 @@ let settings = {
   soundsEnabled: true,
   suggestionsEnabled: true,
   keepTrainingAudio: false,
-  keepRecordings: true,
+  keepRecordings: false,
   useTunedModel: true,
-  cloudTranscription: false,
   asrEngine: asr.DEFAULT_ASR_ENGINE,
   asrDevice: 'auto',
   dictationLanguage: 'en',
@@ -237,18 +227,6 @@ let settings = {
 let asrRuntimeManager = null;
 let asrModelManager = null;
 let speechModelsManager = null;
-let accountManager = null;
-let cloudTranscriber = null;
-let polishClient = null;
-// The dictation the flow bar may still polish where it was pasted: its entry,
-// the exact words pasted, the window they went to, and when.
-let lastPaste = null;
-let polishingEntryId = null;
-// Whether the success on screen offers Polish, so hovering the bar keeps it.
-let successOffersPolish = false;
-// Voxden Cloud is the only cloud recognizer. Failures stay visible instead of waiting
-// for a second model; local dictation remains available when cloud is off.
-let cloudStatus = { lastResult: '', lastError: '', lastAt: 0, lastMs: 0, count: 0 };
 let cudaPackManager = null;
 let cudaPackState = { status: 'idle', progress: null, message: '' };
 let qwenCudaPackManager = null;
@@ -327,138 +305,7 @@ const backgroundMedia = createMediaController({
 let mediaShutdownDone = false;
 let mediaPreparing = false;
 let recordingSessionToken = 0;
-let cloudSessionAbort = null;
-// Lanes: the relay advertises them in the account's cloud meter, as
-// account.cloud.dictation = { lanes: true, minSegmentMs, silenceMs,
-// longSegmentMs, longSilenceMs, bodyConcurrency }, for the accounts it runs
-// them for (it sends it with /v1/me and every clip's meter). The overlay then
-// cuts pieces at these sizes and runs up to bodyConcurrency at once; pieces
-// cut while the user talks go up on the body lane (MAI), the last one and
-// anything sent after stop on the tail lane (AssemblyAI), and at stop the
-// relay is asked to hurry the body pieces still out (src/cloud.js). Anything
-// missing or malformed means no lanes: the recording is cut and sent exactly
-// as 2.1.10 does. The sizes are clamped to what the segmenter and the relay's
-// per-user pools (body 4, tail 4) can take.
-const CLOUD_DICTATION_KEYS = ['minSegmentMs', 'silenceMs', 'longSegmentMs', 'longSilenceMs', 'bodyConcurrency'];
-function cloudDictationSettings(raw) {
-  if (!raw || typeof raw !== 'object' || raw.lanes !== true) return null;
-  if (!CLOUD_DICTATION_KEYS.every((key) => typeof raw[key] === 'number' && Number.isFinite(raw[key]))) return null;
-  const clamp = (value, low, high) => Math.round(Math.min(high, Math.max(low, value)));
-  const minSegmentMs = clamp(raw.minSegmentMs, 1500, 8000);
-  return {
-    lanes: true,
-    minSegmentMs,
-    silenceMs: clamp(raw.silenceMs, 250, 1000),
-    longSegmentMs: clamp(raw.longSegmentMs, minSegmentMs, 45000),
-    longSilenceMs: clamp(raw.longSilenceMs, 200, 700),
-    bodyConcurrency: Math.min(4, Math.max(1, Math.floor(raw.bodyConcurrency))),
-  };
-}
-function cloudDictationConfig() {
-  if (!accountManager) return null;
-  const account = accountManager.snapshot();
-  return cloudDictationSettings(account && account.cloud && account.cloud.dictation);
-}
-// One recording's lanes: the settings it started with (null for none), its
-// id for the relay, whether the user has stopped (every piece sent from then
-// on, a retry included, goes up as the tail), and the body pieces still out,
-// which 'cloud-finishing' asks the relay to hurry. Decided once, as the
-// recording starts, exactly as the overlay decides: if the relay withdraws
-// lanes mid-recording, that recording's pieces still carry their lane, which
-// a relay without lanes for the account serves from the same pools, rather
-// than landing in the general pool of three behind a body pool of four.
-let cloudLaneSession = null;
-function startCloudLaneSession(token) {
-  cloudLaneSession = {
-    token, lanes: settings.cloudTranscription === true ? cloudDictationConfig() : null,
-    dictation: require('crypto').randomBytes(8).toString('hex'), stopped: false, body: new Set(),
-  };
-  return cloudLaneSession;
-}
-// A session nothing started (a retry, a clip from disk) has no lanes.
-function cloudLaneSessionFor(token) {
-  if (!cloudLaneSession || cloudLaneSession.token !== token) {
-    cloudLaneSession = { token, lanes: null, dictation: '', stopped: false, body: new Set() };
-  }
-  return cloudLaneSession;
-}
-// What the overlay is told: the current recording's settings while it lasts,
-// and the account's as they stand otherwise.
-function overlayCloudDictation() {
-  return cloudLaneSession && cloudLaneSession.token === recordingSessionToken
-    && (mode === 'arming' || mode === 'recording' || mode === 'transcribing')
-    ? cloudLaneSession.lanes : cloudDictationConfig();
-}
-
-// Keep the cloud model warm for as long as the user is talking, but only when
-// it would otherwise go idle. One warm-up at the start only helped dictations
-// that ended within a few seconds of it: the provider answers in ~0.5 s when
-// it handled a clip moments ago and in 2-3 s after a gap of five seconds or
-// more, and that gap is exactly what a longer dictation's final clip met at
-// stop. But the provider bills whole seconds per request, so every warm-up is
-// a billed second; sent every 2.5 s, they were estimated from one PC's log
-// (October 2026) at about a third of the speech seconds paid for. They are
-// never charged to the user, yet they are not free. The pieces sent during a
-// recording keep the model warm by
-// themselves, so CLOUD_KEEP_WARM_MS only checks: a warm-up goes out when no
-// cloud request is in flight and nothing was sent, finished or warmed for
-// CLOUD_KEEP_WARM_IDLE_MS. The model then waits about four seconds at most,
-// under the five it takes to go cold. The warm-up at record start always goes
-// out and counts as activity, like any request. CLOUD_KEEP_WARM_MAX_MS bounds
-// a recording somebody forgot to stop.
-const CLOUD_KEEP_WARM_MS = 1000;
-const CLOUD_KEEP_WARM_IDLE_MS = 3000;
-const CLOUD_KEEP_WARM_MAX_MS = 10 * 60e3;
-let cloudWarmTimer = null;
-let cloudRequestsInFlight = 0;
-let cloudActivityAt = 0;
-function noteCloudRequestStart() {
-  cloudRequestsInFlight++;
-  cloudActivityAt = Date.now();
-}
-function noteCloudRequestEnd() {
-  cloudRequestsInFlight = Math.max(0, cloudRequestsInFlight - 1);
-  cloudActivityAt = Date.now();
-}
-// The promise never rejects; nothing waits on a warm-up.
-function warmCloudNow() {
-  if (!cloudTranscriber) return Promise.resolve(false);
-  cloudActivityAt = Date.now();
-  try {
-    // With lanes the relay warms the body lane's model as well as the tail's.
-    const lane = cloudDictationConfig() ? 'body' : '';
-    return Promise.resolve(cloudTranscriber.warm({ lane })).catch(() => false);
-  } catch (_) {
-    return Promise.resolve(false);
-  }
-}
-function stopKeepingCloudWarm() {
-  if (cloudWarmTimer) clearInterval(cloudWarmTimer);
-  cloudWarmTimer = null;
-}
-function keepCloudWarm(sessionToken) {
-  stopKeepingCloudWarm();
-  const started = Date.now();
-  // The warm-up that opened the microphone has just gone out.
-  cloudActivityAt = started;
-  cloudWarmTimer = setInterval(() => {
-    const now = Date.now();
-    const live = sessionToken === recordingSessionToken
-      && (mode === 'arming' || mode === 'recording')
-      && settings.cloudTranscription && cloudTranscriber
-      && now - started < CLOUD_KEEP_WARM_MAX_MS;
-    if (!live) { stopKeepingCloudWarm(); return; }
-    // A clock set back must not silence the warm-ups until it catches up.
-    if (now < cloudActivityAt) cloudActivityAt = now;
-    if (cloudRequestsInFlight > 0 || now - cloudActivityAt < CLOUD_KEEP_WARM_IDLE_MS) return;
-    warmCloudNow();
-  }, CLOUD_KEEP_WARM_MS);
-  if (cloudWarmTimer && typeof cloudWarmTimer.unref === 'function') cloudWarmTimer.unref();
-}
-
 function advanceRecordingSession() {
-  cloudSessionAbort?.abort();
-  cloudSessionAbort = null;
   return ++recordingSessionToken;
 }
 // A dictation that never leaves "arming" -- getUserMedia that hangs, a media
@@ -506,7 +353,6 @@ let VOCAB_SEED;
 let HIST_FILE;
 let SETTINGS_FILE;
 let NOTIFICATIONS_FILE;
-let FREE_WORDS_FILE;
 let WIN32;
 let HELPER;
 let SIDECAR;
@@ -536,7 +382,6 @@ function initPaths() {
     HIST_FILE = path.join(DATA, 'history.json');
     SETTINGS_FILE = path.join(DATA, 'settings.json');
     NOTIFICATIONS_FILE = path.join(DATA, 'notifications.json');
-    FREE_WORDS_FILE = path.join(DATA, 'free-words.json');
     VOCAB_SEED = path.join(res, 'scripts', 'vocabulary-seed.json');
     WIN32 = path.join(res, 'scripts', 'win32.ps1');
     HELPER = path.join(res, 'helper', 'voxden-helper');
@@ -557,7 +402,6 @@ function initPaths() {
     HIST_FILE = path.join(DATA, 'history.json');
     SETTINGS_FILE = path.join(DATA, 'settings.json');
     NOTIFICATIONS_FILE = path.join(DATA, 'notifications.json');
-    FREE_WORDS_FILE = path.join(DATA, 'free-words.json');
     WIN32 = path.join(ROOT, 'scripts', 'win32.ps1');
     HELPER = path.join(ROOT, 'build', 'mac-helper', 'voxden-helper');
     SIDECAR = path.join(ROOT, 'sidecar', 'transcribe.py');
@@ -594,49 +438,6 @@ function initPaths() {
     cacheRoot: MODELS,
     purgeLegacy: app.isPackaged,
     onProgress: state => reportSetup('extras', state),
-  });
-  // The session token is kept under the OS keychain (DPAPI on Windows) when
-  // Electron offers it. Without it the token is written as is, and the panel
-  // says so; the test harness's Electron stand-in has no safeStorage at all.
-  const canEncrypt = !!(safeStorage && typeof safeStorage.isEncryptionAvailable === 'function'
-    && safeStorage.isEncryptionAvailable());
-  accountManager = new AccountManager({
-    file: path.join(DATA, 'account.json'),
-    baseUrl: process.env.VOXDEN_ACCOUNT_URL || undefined,
-    fetchImpl: typeof globalThis.fetch === 'function' ? globalThis.fetch.bind(globalThis) : undefined,
-    encrypt: canEncrypt ? (text) => safeStorage.encryptString(text) : null,
-    decrypt: canEncrypt ? (buffer) => safeStorage.decryptString(Buffer.from(buffer)) : null,
-    // Three numbers about the week this PC is inside, sent with the plan
-    // check the manager already makes. Null on Pro, and null until a free
-    // week has actually started.
-    freeWords: () => {
-      const meter = freeWordsMeter();
-      return meter && meter.started
-        ? { used: meter.used, cap: meter.cap, periodStart: meter.periodStart }
-        : null;
-    },
-    onChange: () => {
-      let changed = syncDictationLanguages();
-      if (syncProfileName()) changed = true;
-      if (changed) {
-        try { saveSettings(); } catch (_) {}
-      }
-      syncAvatar();
-      broadcast();
-    },
-  });
-  syncProfileName();
-  syncAvatar();
-  cloudTranscriber = new cloudAsr.CloudTranscriber({
-    baseUrl: accountManager.baseUrl,
-    fetchImpl: typeof globalThis.fetch === 'function' ? globalThis.fetch.bind(globalThis) : undefined,
-    token: () => accountManager.token(),
-    onWarm: result => diagLog('cloud-warm', result),
-  });
-  polishClient = new polishLib.PolishClient({
-    baseUrl: accountManager.baseUrl,
-    fetchImpl: typeof globalThis.fetch === 'function' ? globalThis.fetch.bind(globalThis) : undefined,
-    token: () => accountManager.token(),
   });
   // The three GPU packs are Windows builds: two cuBLAS DLLs, a Windows CUDA
   // PyTorch and a Windows ROCm PyTorch. There is nothing to download on a Mac,
@@ -724,7 +525,31 @@ function initPaths() {
   });
 }
 
+// An install that used to be Vell keeps its words: on first launch the
+// small local files (settings, dictionary, history, notifications) are
+// copied from the old Vell data folder when the Vell one has none yet.
+// Model and runtime downloads stay where they are and are re-fetched only
+// if missing.
+function migrateLegacyData() {
+  if (!DATA || process.env.VELL_SKIP_MIGRATION === '1') return;
+  if (fs.existsSync(path.join(DATA, 'settings.json'))) return;
+  let legacyBase = null;
+  try {
+    if (app.isPackaged) legacyBase = path.join(path.dirname(app.getPath('userData')), 'Voxden', 'data');
+  } catch (_) { return; }
+  if (!legacyBase || !fs.existsSync(legacyBase)) return;
+  try {
+    fs.mkdirSync(DATA, { recursive: true });
+    for (const name of ['settings.json', 'dictionary.json', 'history.json', 'notifications.json']) {
+      const from = path.join(legacyBase, name);
+      const to = path.join(DATA, name);
+      if (!fs.existsSync(to) && fs.existsSync(from)) fs.copyFileSync(from, to);
+    }
+  } catch (_) {}
+}
+
 function ensureData() {
+  migrateLegacyData();
   fs.mkdirSync(DATA, { recursive: true });
   corpus.init(AUDIO);
   if (!fs.existsSync(DICT_FILE) && fs.existsSync(VOCAB_SEED)) {
@@ -746,7 +571,7 @@ function windowIconPath() {
   try {
     const buf = fs.readFileSync(src);
     const hash = require('crypto').createHash('sha1').update(buf).digest('hex').slice(0, 12);
-    const dest = path.join(os.tmpdir(), 'voxden-icon-' + hash + path.extname(src));
+    const dest = path.join(os.tmpdir(), 'vell-icon-' + hash + path.extname(src));
     if (!fs.existsSync(dest)) fs.writeFileSync(dest, buf);
     return dest;
   } catch (_) {
@@ -831,9 +656,8 @@ function loadSettings() {
     suggestionsEnabled: true,
     autoAddToDictionary: true,
     keepTrainingAudio: false,
-    keepRecordings: true,
+    keepRecordings: false,
     useTunedModel: true,
-    cloudTranscription: false,
     asrEngine: asr.DEFAULT_ASR_ENGINE,
     localModelChosen: false,
     asrDevice: 'auto',
@@ -863,7 +687,7 @@ function loadSettings() {
         settings.dictateMode = 'toggle';
       }
       if (typeof settings.gameShortcut !== 'string') settings.gameShortcut = defaults.gameShortcut;
-      // 2.1.7 took the game key for everyone, and a key Voxden takes stops
+      // 2.1.7 took the game key for everyone, and a key Vell takes stops
       // working in every other app. It is off until the user turns it on,
       // including for the files 2.1.7 wrote, which have no such switch.
       if (typeof settings.gameShortcutEnabled !== 'boolean') settings.gameShortcutEnabled = false;
@@ -905,7 +729,9 @@ function loadSettings() {
       settings.verbatimDictionary = !!settings.verbatimDictionary;
       settings.numbersAsDigits = settings.numbersAsDigits !== false;
       settings.autoCleanup = settings.autoCleanup === true;
-      settings.keepRecordings = settings.keepRecordings !== false;
+      settings.keepRecordings = settings.keepRecordings === true;
+      // The hosted plan is gone: an old file may still carry the switch.
+      delete settings.cloudTranscription;
       settings.autoAddToDictionary = settings.autoAddToDictionary !== false;
       settings.flowBarAnchor = flowBar.normalizeAnchor(settings.flowBarAnchor);
       settings.flowBarStyle = flowBar.normalizeStyle(settings.flowBarStyle);
@@ -973,7 +799,6 @@ function loadStores() {
   loadSettings();
   loadNotifications();
   dropOldAdminAppNotes();
-  loadFreeWords();
   history = historyStore.load(HIST_FILE);
   historyAnalyticsRevision += 1;
   historyUsage.invalidate();
@@ -1033,7 +858,7 @@ function deliverAnnouncements() {
   );
 }
 
-// Whether this Voxden runs as administrator: true or false once the Win32
+// Whether this Vell runs as administrator: true or false once the Win32
 // helper has said (checkElevation), null before that, and on a Mac.
 let runningAsAdmin = null;
 let elevationCheck = null;
@@ -1053,8 +878,8 @@ function checkElevation() {
 }
 
 // An app run as administrator -- some games are -- is out of reach of a
-// Voxden that is not: while it is in front, Windows passes Voxden none of its
-// shortcuts and drops every key Voxden sends it (measured 2026-10-02). A
+// Vell that is not: while it is in front, Windows passes Vell none of its
+// shortcuts and drops every key Vell sends it (measured 2026-10-02). A
 // dictation into it is left on the clipboard instead, and the flow bar says so
 // for under two seconds, often unseen over a fullscreen game. The bell keeps
 // the why and the lasting fix, once per app: one note, whether the app was
@@ -1064,77 +889,21 @@ const ADMIN_PASTE_FLASH = 'Runs as admin: press Ctrl+V to paste';
 // front of the window the words were for (win32.ps1, paste).
 const FULLSCREEN_PASTE_FLASH = 'Fullscreen app in front: press Ctrl+V to paste';
 function noteAdminApp(exe) {
-  // Elevated, Voxden reaches these apps, and the fix is where it already is.
+  // Elevated, Vell reaches these apps, and the fix is where it already is.
   if (runningAsAdmin === true) return;
   const name = String(exe || '').trim() || 'This app';
   applyNotifications(announcements.note(notifications, {
     id: 'admin-app:' + name.toLowerCase(),
     kind: 'paste',
     title: name + ' runs as administrator',
-    body: 'Windows does not let Voxden hear its shortcuts or type into it while it is in front, '
+    body: 'Windows does not let Vell hear its shortcuts or type into it while it is in front, '
       + 'so a dictation into it waits on the clipboard for your Ctrl+V. '
       + 'To dictate into it as usual, open Settings, System, and choose Restart as administrator.',
     action: { settings: 'system' },
   }));
 }
 
-function maybeNoteCreditWarnings() {
-  if (!accountManager) return;
-  const cloud = accountManager.snapshot().cloud;
-  for (const entry of credits.pendingWarnings(cloud)) {
-    applyNotifications(announcements.note(notifications, entry), { broadcast: false });
-  }
-}
-
 // --- the free plan's weekly words -------------------------------------------
-// Free dictation runs on this PC, often with no network at all, so the meter
-// that stops it lives here rather than on the account service: one small file,
-// charged at the end of every dictation made on a free account. src/quota.js
-// holds the rules; this owns the file and the moments it is read and written.
-let freeWords = quota.normalizeState(null);
-
-function loadFreeWords() {
-  freeWords = quota.normalizeState(atomicStore.readJson(FREE_WORDS_FILE, null));
-}
-
-function saveFreeWords() {
-  ensureData();
-  try {
-    atomicStore.writeJson(FREE_WORDS_FILE, freeWords);
-  } catch (err) {
-    // A week that cannot be written is not a reason to refuse dictation. The
-    // count stays right for this run and starts over on the next one.
-    console.warn('Could not save the free word count:', err.message);
-  }
-}
-
-// What this account has left this week, or null for a plan with no word cap.
-function freeWordsMeter() {
-  const account = accountManager ? accountManager.snapshot() : null;
-  if (!quota.appliesTo(account)) return null;
-  return quota.meter(freeWords, { cap: quota.capFor(account) });
-}
-
-function noteFreeWordWarnings() {
-  const meter = freeWordsMeter();
-  if (!meter) return;
-  for (const entry of quota.pendingWarnings(meter)) {
-    applyNotifications(announcements.note(notifications, entry), { broadcast: false });
-  }
-}
-
-// Charge a finished dictation to the week. Pro dictations are not counted at
-// all, so an account whose subscription lapses does not arrive already out of
-// words for something it paid for.
-function chargeFreeWords(text) {
-  if (!freeWordsMeter()) return;
-  const words = quota.countWords(text);
-  if (!words) return;
-  freeWords = quota.add(freeWords, words, Date.now());
-  saveFreeWords();
-  noteFreeWordWarnings();
-}
-
 function saveHistory(next = history) {
   ensureData();
   // Retained transcripts and archived statistics commit as one document.
@@ -1189,15 +958,10 @@ function currentVocabulary() {
 // Language filtering happens here: a Devanagari term has no business in the
 // prompt for an English dictation, and including it is both wasted budget and
 // a false-substitution risk.
-// The dictation languages, one to three, first is the main one.
-function accountPlan() {
-  const account = accountManager && typeof accountManager.snapshot === 'function'
-    ? accountManager.snapshot() : null;
-  return account && account.signedIn && account.plan === 'pro' ? 'pro' : 'free';
-}
-
+// Local-only: there is no plan and no cloud, so every policy is free/offline
+// and local engines hear English.
 function dictationPolicy() {
-  return { plan: accountPlan(), cloud: settings.cloudTranscription === true };
+  return { plan: 'free', cloud: false };
 }
 
 function syncDictationLanguages(list) {
@@ -1221,21 +985,20 @@ function dictationLanguages() {
 // The language the text rules run in: commands, numbers, tone, the
 // dictionary, Hinglish. English wins whenever it is on the list, because a
 // mixed dictation is an English sentence with other words in it. Local
-// engines are English-only, so Cloud off always uses English rules.
+// engines are English-only, so the text rules always use English.
 function textLanguage() {
   if (!asr.dictationLanguageUnlocked(dictationPolicy())) return 'en';
   const list = dictationLanguages();
   return list.includes('en') || list.includes('hg') ? 'en' : asr.engineLanguageId(list[0]);
 }
 
-// Whether the Hindi an engine writes should come back as Hinglish: only when
-// Cloud is on and Hinglish, not Hindi, is what the user picked.
+// Whether the Hindi an engine writes should come back as Hinglish. Local-only
+// builds never unlock extra languages, so this is always false.
 function wantsHinglish() {
   return asr.dictationLanguageUnlocked(dictationPolicy()) && dictationLanguages().includes('hg');
 }
 
-// The language an engine is told. Local (Cloud off) is always English. One
-// Cloud language is passed as before; more than one uses automatic detection.
+// The language an engine is told. Local engines are always told English.
 function engineLanguage(_engine) {
   return asr.wireLanguage(dictationLanguages(), dictationPolicy());
 }
@@ -1248,8 +1011,6 @@ function vocabularyForDictation(language) {
 }
 
 function snapshot() {
-  maybeNoteCreditWarnings();
-  noteFreeWordWarnings();
   const usageStats = historyUsage.getStats(history, historyAnalyticsRevision);
   const wordCount = usageStats.wordCount;
   const understanding = dict.understandingState(wordCount);
@@ -1263,9 +1024,6 @@ function snapshot() {
     variantCount: (dictionary.variants || []).length,
     engine,
     engineStatus: sidecarState,
-    // Whether the next clip goes to the cloud first, so the bar does not
-    // announce a local model load that is not on the clip's path.
-    cloudReady: settings.cloudTranscription === true && !!accountManager && accountManager.snapshot().plan === 'pro',
     model: engineModel,
     device: engineDevice,
     // What the app will actually run, which on a Mac is not always what the
@@ -1290,14 +1048,7 @@ function snapshot() {
     asrOperation: asrOperation ? asrOperation.kind : null,
     asrRuntimeState,
     asrRuntimeWouldHelp: asrRuntimeWouldHelp(),
-    account: accountManager ? accountManager.snapshot() : null,
-    accountAvatar: avatar.dataUrl,
-    signInRequired: signInRequired(),
-    // The free plan's week: null on Pro, which is not metered in words.
-    freeWords: freeWordsMeter(),
-    cloudTranscription: settings.cloudTranscription === true,
     localModelChosen: settings.localModelChosen === true,
-    cloudStatus,
     asrEngineProgress: engineProgress,
     fastEngine: engineFastBackend,
     // Whether every dictation is going through Parakeet, not just the fast
@@ -1389,7 +1140,6 @@ function snapshot() {
     notificationsUnread: announcements.unreadCount(notificationList),
     wordCount,
     ...understanding,
-    ...updater.getUpdateStatus(),
   };
 }
 
@@ -1887,7 +1637,7 @@ function findSidecarPython() {
   return findPython();
 }
 
-// Voxden transcribes through a Python sidecar it does not bundle. When that
+// Vell transcribes through a Python sidecar it does not bundle. When that
 // interpreter is missing entirely, `execFile` fails before the sidecar can
 // explain anything, so the explanation has to come from here. On a clean
 // Windows box `python.exe` resolves to the Microsoft Store stub, which exits
@@ -1897,12 +1647,12 @@ function pythonLaunchError(err, py) {
   const code = err && err.code;
   const usedPathLookup = py === 'python.exe' || py === 'python3';
   if (code === 'ETIMEDOUT') {
-    return 'The speech engine took too long to start. Restart Voxden to try again.';
+    return 'The speech engine took too long to start. Restart Vell to try again.';
   }
   if (code === 'ENOENT' || usedPathLookup) {
     return 'The speech engine is not set up on ' + macShell.deviceName(process.platform) + ' yet.';
   }
-  return 'Voxden could not run the speech engine (' + path.basename(py) + ').';
+  return 'Vell could not run the speech engine (' + path.basename(py) + ').';
 }
 
 // Whether the Set up button has something to fix. A machine with no
@@ -1930,7 +1680,6 @@ function sendOverlay(extra) {
   // dictation with the button still down. Put the bar down where it is rather
   // than let the recording pill carry on following the cursor.
   if (extra && extra.mode && extra.mode !== 'idle') stopOverlayDrag(true);
-  if (extra && extra.mode) successOffersPolish = extra.mode === 'success' && !!extra.polish;
   if (extra && extra.mode === 'idle') {
     overlayEditing = false;
     if (overlayWin && !overlayWin.isDestroyed()) {
@@ -1945,14 +1694,6 @@ function sendOverlay(extra) {
     prepareOnly: mediaPreparing,
     engine,
     engineStatus: sidecarState,
-    // Whether the next clip goes to the cloud first, so the bar does not
-    // announce a local model load that is not on the clip's path.
-    cloudReady: settings.cloudTranscription === true && !!accountManager && accountManager.snapshot().plan === 'pro',
-    // The relay's piece sizes and lanes for this recording (or, between
-    // recordings, for the next), or null for today's.
-    cloudDictation: overlayCloudDictation(),
-    // Hindi or Hinglish is dictated: the cloud join may use their word lists.
-    cloudHindi: asr.dictationLanguageUnlocked(dictationPolicy()) && dictationLanguages().some((id) => id === 'hi' || id === 'hg'),
     model: engineModel,
     device: engineDevice,
     asrEngineActive: engineBackend,
@@ -2387,9 +2128,6 @@ function overlayCursorTick() {
   // hears about the boolean changing -- not about every pixel the pointer
   // crosses inside the window.
   setOverlayMouseIgnore(mode === 'idle' && !overlayEditing ? !hover : false);
-  // A result that offers Polish stays while the pointer is on the bar, so
-  // reaching for the button never races the bar leaving.
-  if (inside && mode === 'success' && successOffersPolish && successTimer) endSuccessAfter(2500);
   if (lastCursor && lastCursor.inside === inside && !hoverChanged) return;
   lastCursor = { x, y, inside, hover };
   try {
@@ -2823,7 +2561,7 @@ function createOverlay() {
     focusable: false,
     show: false,
     icon: icon || undefined,
-    title: 'Voxden',
+    title: 'Vell',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -2918,7 +2656,7 @@ function createHistoryWindow() {
     minWidth: 640,
     minHeight: 440,
     backgroundColor: colors.background,
-    title: 'Voxden',
+    title: 'Vell',
     icon: icon || undefined,
     autoHideMenuBar: true,
     show: false,
@@ -3089,7 +2827,7 @@ function buildTrayTemplate() {
   const quality = style.normalizeDictationQuality(settings.dictationQuality);
   const words = macShell.trayLabels(process.platform);
   return [
-    { label: 'Open Voxden', click: () => openHistory() },
+    { label: 'Open Vell', click: () => openHistory() },
     { type: 'separator' },
     {
       // The one item whose label is worth changing: from the tray there is no
@@ -3156,15 +2894,6 @@ function buildTrayTemplate() {
       checked: !!settings.launchAtLogin,
       click: (item) => setTrayFlag('launchAtLogin', item.checked),
     },
-    {
-      label: 'Check for updates…',
-      click: () => {
-        // Opened first: a check with no window to report into looks like the
-        // menu item did nothing.
-        openHistory('system');
-        updater.checkNow().then(broadcast).catch(() => {});
-      },
-    },
     { type: 'separator' },
     { label: words.quit, click: () => app.quit() },
   ];
@@ -3188,7 +2917,7 @@ function refreshTray() {
 function createTray() {
   const img = trayImage();
   tray = new Tray(img.isEmpty() ? nativeImage.createEmpty() : img);
-  tray.setToolTip('Voxden');
+  tray.setToolTip('Vell');
   trayMenuSig = '';
   refreshTray();
   tray.on('double-click', () => openHistory());
@@ -3278,63 +3007,6 @@ async function captureTargetInfo() {
   return winInfo(lastExternalHwnd);
 }
 
-// Voxden asks for an account before it does anything. A build with no
-// account service has nobody to ask, and is not gated.
-function signInRequired() {
-  return !!accountManager && !accountManager.signedIn();
-}
-
-// The greeting's name belongs to whichever account is signed in: it follows
-// that account's first name where the provider sends one, and is cleared when
-// a different account signs in without one, so nobody is greeted by the last
-// person's name. An emailed code carries no name at all, which is how a stale
-// one used to survive. A name typed by hand stays with the account it was
-// typed on. Returns true when the setting changed and needs saving.
-function syncProfileName() {
-  if (!accountManager || !accountManager.signedIn()) return false;
-  const snapshot = accountManager.snapshot();
-  const email = String(snapshot.email || '').trim().toLowerCase();
-  const profile = snapshot.profile;
-  const first = profile && String(profile.firstName || '').trim().slice(0, 40);
-  if (first) {
-    if (settings.displayName === first && settings.displayNameFrom === email) return false;
-    settings.displayName = first;
-    settings.displayNameFrom = email;
-    return true;
-  }
-  if (!settings.displayName || settings.displayNameFrom === email) return false;
-  settings.displayName = '';
-  settings.displayNameFrom = email;
-  return true;
-}
-
-// The account photo, fetched once per address and handed to the renderer as
-// a data URL: its content policy allows no remote images, and a photo that
-// fails to load should simply mean initials instead.
-const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
-let avatar = { url: '', dataUrl: '', loading: '' };
-function syncAvatar() {
-  const profile = accountManager && accountManager.signedIn() ? accountManager.snapshot().profile : null;
-  const url = profile && /^https:\/\//.test(String(profile.pictureUrl || '')) ? String(profile.pictureUrl) : '';
-  if (url === avatar.url) return;
-  if (!url) { avatar = { url: '', dataUrl: '', loading: '' }; return; }
-  if (avatar.loading === url || typeof globalThis.fetch !== 'function') return;
-  avatar.loading = url;
-  const controller = typeof AbortController === 'function' ? new AbortController() : null;
-  const timer = controller ? setTimeout(() => controller.abort(), 8000) : null;
-  globalThis.fetch(url, { signal: controller ? controller.signal : undefined })
-    .then(async (res) => {
-      const type = String(res.headers.get('content-type') || '');
-      if (!res.ok || !/^image\//.test(type)) throw new Error('not an image');
-      const bytes = Buffer.from(await res.arrayBuffer());
-      if (bytes.length > AVATAR_MAX_BYTES) throw new Error('too large');
-      avatar = { url, dataUrl: 'data:' + type.split(';')[0] + ';base64,' + bytes.toString('base64'), loading: '' };
-      broadcast();
-    })
-    .catch(() => { avatar = { url, dataUrl: '', loading: '' }; })
-    .finally(() => { if (timer) clearTimeout(timer); });
-}
-
 function startRecording(fromPtt, { game = false } = {}) {
   const pressedAt = Date.now();
   if (isQuitting) return;
@@ -3342,21 +3014,6 @@ function startRecording(fromPtt, { game = false } = {}) {
   // over a game takes its focus, and an exclusive-fullscreen one minimizes.
   // The bar says why; the dictation key and the tray still open the
   // dashboard.
-  if (signInRequired()) {
-    flashError('Sign in to Voxden to start dictating');
-    if (!game) openHistory('account');
-    return;
-  }
-  // Out of free words: say so before the microphone opens, not after a
-  // dictation the user cannot have. The bell and the billing page carry the
-  // date the week turns over; the bar has one line and only gets the verdict.
-  const freeMeter = freeWordsMeter();
-  if (freeMeter && freeMeter.exhausted) {
-    flashError(quota.blockedFlash());
-    noteFreeWordWarnings();
-    if (!game) openHistory('billing');
-    return;
-  }
   if (screenCapture && screenCapture.hasRetry) {
     // A screenshot retry pastes into the app it was taken for, which would
     // pull that app over the game.
@@ -3369,18 +3026,7 @@ function startRecording(fromPtt, { game = false } = {}) {
   }
   if (screenCapture && screenCapture.active && !screenCapture.canRecord) return;
   if (mode === 'arming' || mode === 'recording' || mode === 'transcribing') return;
-  if (settings.cloudTranscription) {
-    const decision = cloudAsr.shouldTryCloud({ enabled: true, account: accountManager && accountManager.snapshot(), audioSeconds: 1 });
-    if (!decision.ok) { flashError('Voxden Cloud is unavailable. Check your account and cloud hours in Settings.'); return; }
-    // Wake the model now, while the microphone is still opening. A short
-    // dictation is sent whole at stop, and the provider answers in ~0.5 s
-    // when it handled a clip moments ago against 2-3 s when it did not; a
-    // warm-up fired here lands before most short dictations end, and
-    // keepCloudWarm() repeats it for the longer ones that go idle. It always
-    // goes out, and counts as activity for keepCloudWarm(). Nothing waits on it.
-    warmCloudNow();
-  }
-  if (!settings.cloudTranscription && (asrOperation || asrIsDisabled() || sidecarState === 'unavailable')) {
+  if (asrOperation || asrIsDisabled() || sidecarState === 'unavailable') {
     if (game) {
       flashError('The speech engine is not ready yet');
       return;
@@ -3391,10 +3037,8 @@ function startRecording(fromPtt, { game = false } = {}) {
   stopCorrectionLearning();
   autoLearnNotice = null;
   autoLearnReceipt = null;
-  if (!settings.cloudTranscription) requestSidecarStart();
+  requestSidecarStart();
   const sessionToken = advanceRecordingSession();
-  startCloudLaneSession(sessionToken);
-  if (settings.cloudTranscription && cloudTranscriber) keepCloudWarm(sessionToken);
   gameDictation = game;
   pttOwner = fromPtt && isPtt() ? (game ? 'game' : 'dictation') : null;
   captureVoiceSession = screenCapture && screenCapture.active ? screenCapture.sessionId : null;
@@ -3781,7 +3425,7 @@ async function pasteText(text, { game = false, pasteLast = false } = {}) {
   if (target !== '0' && target === historyHwnd) {
     const win = historyWin;
     if (!win || win.isDestroyed() || !win.isVisible() || win.isMinimized()) {
-      throw new Error('Voxden text field is no longer available');
+      throw new Error('Vell text field is no longer available');
     }
     // Native insertion preserves the field's selection, input events, undo,
     // and maxlength without borrowing the clipboard or sending OS paste keys.
@@ -3795,9 +3439,9 @@ async function pasteText(text, { game = false, pasteLast = false } = {}) {
     })()`);
     if (session !== recordingSessionToken) throw new Error('Dictation cancelled');
     if (win !== historyWin || win.isDestroyed() || !win.isVisible() || win.isMinimized()) {
-      throw new Error('Voxden text field is no longer available');
+      throw new Error('Vell text field is no longer available');
     }
-    if (!editable) throw new Error('Click a text field in Voxden and try again');
+    if (!editable) throw new Error('Click a text field in Vell and try again');
     await win.webContents.insertText(text);
     return;
   }
@@ -3819,7 +3463,7 @@ async function pasteText(text, { game = false, pasteLast = false } = {}) {
       // is a helper that timed out or died; win32.ps1 answers a failed paste
       // with its reason, a window that would not come forward among them.
       const answer = String(pasted);
-      // An app run as administrator takes no simulated keys from Voxden, but
+      // An app run as administrator takes no simulated keys from Vell, but
       // takes the user's own: the words stay on the clipboard for them.
       if (/runs as administrator/.test(answer)) {
         const err = new Error('Paste helper failed: target runs as administrator');
@@ -3856,7 +3500,6 @@ async function pasteCapturePayload(value, hwnd, valid, image) {
 }
 
 function addHistoryEntry(text, meta) {
-  chargeFreeWords(text);
   const entry = {
     id: nid(),
     ts: Date.now(),
@@ -3950,11 +3593,10 @@ function finishDictation(text, meta) {
   const entry = addHistoryEntry(text, timedMeta);
   dictationTiming = null;
   armTiming = null;
-  const polish = polishOffer(text);
-  sendOverlay({ mode: 'success', text, entryId: entry.id, polish });
+  sendOverlay({ mode: 'success', text, entryId: entry.id });
   registerEscape(false);
   resumeBackgroundMedia();
-  endSuccessAfter(polish ? 3000 : corpus.hasRetry() ? 4000 : 1600);
+  endSuccessAfter(corpus.hasRetry() ? 4000 : 1600);
   return entry;
 }
 
@@ -3968,268 +3610,6 @@ function endSuccessAfter(ms) {
 }
 
 // --- Polish ------------------------------------------------------------------
-// A dictation, or any text, rewritten as clean writing by the relay's text
-// model (server/polish.js), for Pro accounts, out of the cloud credits. Only
-// ever on request: the flow bar offers it on a fresh result, the Polish page
-// takes any text. The cost is shown before anything is sent.
-
-// What the flow bar may offer for these words: null when Polish is not open to
-// this account or there are no credits for it.
-function polishOffer(text) {
-  if (!accountManager || !polishClient) return null;
-  const quote = polishLib.polishQuote(text, accountManager.snapshot());
-  return quote.ok ? { label: quote.label, credits: quote.credits } : null;
-}
-
-function polishRefusal(quote) {
-  if (quote.reason === 'plan') return 'Polish is part of Voxden Pro.';
-  if (quote.reason === 'signed-out') return 'Sign in to use Polish.';
-  if (quote.reason === 'cap') return 'Not enough cloud credits left. This polish needs ' + quote.label + '.';
-  if (quote.reason === 'long') return 'Polish takes up to ' + quote.maxWords.toLocaleString() + ' words at a time.';
-  return 'Nothing to polish.';
-}
-
-// `mode` is polish, grammar or tighten (src/polish.js POLISH_MODES).
-async function runPolish(text, mode) {
-  if (!polishClient || !accountManager) {
-    throw Object.assign(new Error('Polish is not available right now.'), { code: 'unconfigured' });
-  }
-  const quote = polishLib.polishQuote(text, accountManager.snapshot());
-  if (!quote.ok) throw Object.assign(new Error(polishRefusal(quote)), { code: quote.reason });
-  const terms = vocabularyForDictation(textLanguage()).map((entry) => entry && entry.canonical).filter(Boolean);
-  try {
-    const result = await polishClient.polish(text, { terms, mode });
-    if (result.cloud) accountManager.noteCloudUsage(result.cloud);
-    return result;
-  } catch (err) {
-    if (err && err.code === 'auth') accountManager.refresh({ force: true }).catch(() => {});
-    throw err;
-  }
-}
-
-function graphemeCount(text) {
-  return [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(String(text || ''))].length;
-}
-
-// Terminals get the polished words on the clipboard instead. Shift+Left there
-// is the shell's to interpret, and a shell that moves the caret instead of
-// selecting would be left with it somewhere else.
-const TERMINAL_EXES = new Set([
-  'windowsterminal.exe', 'wt.exe', 'openconsole.exe', 'conhost.exe', 'cmd.exe',
-  'powershell.exe', 'pwsh.exe', 'powershell_ise.exe', 'wsl.exe', 'bash.exe',
-  'mintty.exe', 'wezterm-gui.exe', 'alacritty.exe', 'kitty.exe', 'hyper.exe',
-  'tabby.exe', 'warp.exe', 'conemu.exe', 'conemu64.exe', 'cmder.exe',
-  'fluentterminal.app.exe', 'putty.exe', 'mobaxterm.exe', 'termius.exe',
-]);
-
-function isTerminalExe(exe) {
-  return TERMINAL_EXES.has(String(exe || '').split(/[\\/]/).pop().toLowerCase());
-}
-
-// Put the polished words where the dictation went: select exactly the words
-// just pasted and paste over them. scripts/win32.ps1 select-back steps back
-// over them and copies; the copy is read here, against an emptied clipboard,
-// so a copy that did nothing can never look like a match. This process holds
-// the clipboard throughout. One the PowerShell helper set stayed its property
-// while it waited for its next request, and taking it back from a thread that
-// was not reading its messages froze this one for five seconds. False whenever
-// the words cannot be proved -- another window in front, words edited since,
-// a field that will not copy -- and the caller copies the polished text
-// instead.
-async function replaceLastPaste(oldText, newText) {
-  // Every way this can end is logged to the flow bar log, by name and without
-  // the words, so a field that will not be replaced says why.
-  const outcome = (why, fields) => {
-    diagLog('polish-replace', Object.assign({ why }, fields || {}));
-    return why === 'replaced';
-  };
-  if (process.platform !== 'win32' || !lastPaste) return false;
-  if (isTerminalExe(lastPaste.exe)) return outcome('terminal');
-  // Shift+Left and Ctrl+Insert into a game are moves and binds, not editing.
-  if (lastPaste.game) return outcome('game');
-  const hwnd = String(lastPaste.hwnd || '0');
-  if (!hwnd || hwnd === '0' || isOurHwnd(hwnd)) return outcome('no-target');
-  const steps = graphemeCount(oldText);
-  if (steps < 1 || steps > 4000) return outcome('length', { steps });
-  // The dictation's paste may not have put the user's clipboard back yet. Do
-  // it now, so that is what gets saved here.
-  if (clipboardPaste) clipboardPaste.restore();
-  // The clipboard is borrowed on the same terms as the dictation's paste: what
-  // can be put back is, a copied screenshot among them, and copied files are
-  // never taken.
-  const saved = readRestorable(clipboard);
-  if (!saved) return outcome('clipboard', { formats: clipboard.availableFormats() });
-  const norm = (s) => String(s).replace(/\r\n/g, '\n').trimEnd();
-  if (!(await writeClipboardChecked({}))) return outcome('clipboard-busy');
-  let answer = '';
-  try { answer = await ps(['select-back', '-Hwnd', hwnd, '-Keys', String(steps)], 8000); } catch (_) {}
-  const sent = String(answer).split(/\r?\n/).includes('VOXDEN_SENT');
-  // Every Shift+Left is an edit the field makes before the copy can come:
-  // 472 of them took 0.6-0.7 s in a bare Chromium textarea. A rich editor
-  // (Claude's) is slower, and copies its own idea of the selection, which
-  // trails the keys: its first copy of a 449-character dictation held only
-  // the last 427. A copy that is the end of the dictation is the selection
-  // still growing, so it is asked again until it is the whole dictation.
-  // Anything else is not the dictation.
-  const expected = norm(oldText);
-  const copyWaitMs = Math.min(15000, 600 + steps * 8);
-  const copyStarted = Date.now();
-  const deadline = copyStarted + copyWaitMs;
-  let copied = '';
-  let copies = 1;
-  while (sent && Date.now() < deadline) {
-    let got = '';
-    for (const landBy = Math.min(deadline, Date.now() + 400); !got && Date.now() < landBy;) {
-      await new Promise((resolve) => setTimeout(resolve, 20));
-      got = clipboard.readText();
-    }
-    if (got) copied = got;
-    if (got && (norm(got) === expected || !expected.endsWith(norm(got)))) break;
-    await new Promise((resolve) => setTimeout(resolve, 80));
-    if (!(await writeClipboardChecked({}))) break;
-    const again = await ps(['copy-keys', '-Hwnd', hwnd]);
-    if (!String(again).split(/\r?\n/).includes('VOXDEN_SENT')) break;
-    copies++;
-  }
-  const copyMs = Date.now() - copyStarted;
-  if (!copied || norm(copied) !== expected) {
-    await writeClipboardChecked(saved);
-    // Whatever is selected is not the dictation: put the caret back, once the
-    // field has caught up with the keys that selected it.
-    if (sent) {
-      await new Promise((resolve) => setTimeout(resolve, 250));
-      await ps(['collapse-right', '-Hwnd', hwnd]);
-    }
-    if (!sent) return outcome('keys', { answer: String(answer).trim().slice(0, 40) });
-    if (!copied) return outcome('no-copy', { steps, copyMs, copies });
-    const a = norm(copied);
-    let at = 0;
-    while (at < a.length && at < expected.length && a[at] === expected[at]) at++;
-    return outcome('mismatch', { steps, copied: a.length, expected: expected.length, at, copyMs, copies,
-      copiedCode: a.charCodeAt(at) || 0, expectedCode: expected.charCodeAt(at) || 0 });
-  }
-  // The dictation is selected: the polish goes over it.
-  if (!(await writeClipboardChecked({ text: newText }))) return outcome('clipboard-busy', { stage: 'paste' });
-  const pasted = await ps(['paste', '-Hwnd', hwnd]);
-  if (!String(pasted).split(/\r?\n/).includes('VOXDEN_OK')) {
-    const front = String(await ps(['get'])).trim();
-    return outcome('paste', { targetInFront: front === hwnd, copyMs });
-  }
-  // The field reads the clipboard as it handles Ctrl+V. After that the user's
-  // own clipboard comes back, unless something else has been copied since.
-  setTimeout(() => {
-    if (norm(clipboard.readText()) === norm(newText)) writeClipboardChecked(saved).catch(() => {});
-  }, 600);
-  return outcome('replaced', { steps, copyMs, copies });
-}
-
-// Another process holding the clipboard open (a clipboard history, the app
-// that just copied) makes a write fail without a word; the read-back shows it.
-async function writeClipboardChecked(data) {
-  const text = data && typeof data.text === 'string' ? data.text.replace(/\r\n/g, '\n') : null;
-  const empty = !data || !Object.keys(data).length;
-  for (let attempt = 0; attempt < 6; attempt++) {
-    try {
-      if (empty) clipboard.clear();
-      else clipboard.write(data);
-    } catch (_) {}
-    if (empty ? !clipboard.availableFormats().length
-      : text === null || clipboard.readText().replace(/\r\n/g, '\n') === text) return true;
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-  return false;
-}
-
-// Polish a history entry. From the flow bar it also replaces the dictation in
-// the app it was pasted into when it still can, and shows its progress there.
-// The flow bar only polishes; the Polish page may also ask for grammar or
-// tighten, and the entry keeps which one its result came from.
-async function polishEntry(id, options) {
-  const opts = options || {};
-  const polishMode = opts.fromBar ? 'polish' : (opts.mode || 'polish');
-  const entry = history.entries.find((x) => x.id === id);
-  if (!entry) return { ok: false, code: 'missing', message: 'That dictation is no longer in history.' };
-  if (polishingEntryId) return { ok: false, code: 'busy', message: 'Another polish is still running.' };
-  const fromBar = !!opts.fromBar;
-  if (fromBar && ['arming', 'recording', 'transcribing'].includes(mode)) {
-    return { ok: false, code: 'busy', message: 'Finish the current dictation first.' };
-  }
-  polishingEntryId = id;
-  const before = entry.text;
-  const startedAt = Date.now();
-  if (fromBar) {
-    if (successTimer) clearTimeout(successTimer);
-    successTimer = null;
-    // Whatever the user types next is not a correction of this dictation, and
-    // the replacement below must not be learned as one either.
-    stopCorrectionLearning();
-    mode = 'transcribing';
-    sendOverlay({ mode: 'transcribing', text: 'Polishing…', reveal: true });
-  }
-  try {
-    const result = await runPolish(before, polishMode);
-    const current = history.entries.find((x) => x.id === id);
-    let placed = 'none';
-    if (fromBar) {
-      const fresh = lastPaste && lastPaste.entryId === id && lastPaste.text === before
-        && Date.now() - lastPaste.ts < 10 * 60e3;
-      // The polish is paid for by now, so a paste that fails still hands the
-      // words over: on the clipboard, where Ctrl+V lands them on the words
-      // still selected.
-      let replaced = false;
-      if (fresh) {
-        try { replaced = await replaceLastPaste(before, result.text); } catch (err) {
-          diagLog('polish-replace', { why: 'error', message: String((err && err.message) || err).slice(0, 80) });
-        }
-      } else {
-        // Not the words pasted last, or pasted too long ago: nothing to select.
-        diagLog('polish-replace', { why: 'stale', sameEntry: !!lastPaste && lastPaste.entryId === id,
-          sameText: !!lastPaste && lastPaste.text === before,
-          ageS: lastPaste ? Math.round((Date.now() - lastPaste.ts) / 1000) : null });
-      }
-      placed = replaced ? 'replaced' : 'copied';
-      if (placed === 'copied') await writeClipboardChecked({ text: result.text });
-      else lastPaste = Object.assign({}, lastPaste, { text: result.text, ts: Date.now() });
-    }
-    diagLog('polish', { placed, ms: Date.now() - startedAt });
-    if (current) {
-      // The dictation keeps its own words: they are what was said, what the
-      // statistics count and what an edit teaches the dictionary against. The
-      // polished version rides beside them, and the card shows it underneath.
-      const spent = ((current.polished && current.polished.credits) || 0) + result.credits;
-      const updated = Object.assign({}, current, {
-        polished: { text: result.text, at: Date.now(), credits: Math.round(spent * 100) / 100, mode: polishMode },
-      });
-      saveHistory({ ...history, entries: history.entries.map((item) => (item === current ? updated : item)) });
-    }
-    broadcast();
-    if (fromBar) {
-      mode = 'success';
-      sendOverlay({ mode: 'success', text: placed === 'replaced' ? result.text : 'Polished. Paste it with ' + macShell.pasteKeys(process.platform), entryId: id });
-      endSuccessAfter(placed === 'replaced' ? 2600 : 4200);
-    }
-    return { ok: true, text: result.text, credits: result.credits, mode: polishMode, placed };
-  } catch (err) {
-    const code = (err && err.code) || 'upstream';
-    const message = (err && err.message) || 'Polish did not work this time. Nothing was charged.';
-    diagLog('polish-failed', { code, fromBar });
-    if (fromBar) flashPolishError(message);
-    return { ok: false, code, message };
-  } finally {
-    polishingEntryId = null;
-  }
-}
-
-// A polish that did not happen. Not flashError: that one ends a dictation and
-// shelves its clip, and the dictation behind a polish already succeeded.
-function flashPolishError(msg) {
-  mode = 'error';
-  showOverlay();
-  makeUnfocusable(overlayWin);
-  sendOverlay({ mode: 'error', text: msg });
-  endSuccessAfter(3200);
-}
-
 // Apply the user's vocabulary to a finished transcript.
 //
 // Two stages, deliberately kept apart:
@@ -4363,55 +3743,8 @@ function vocabularyDiagnostics(result) {
 // or the verbatim rules instead. Shared by a live dictation and a retry from
 // the history page, so a retried transcript is exactly what that dictation
 // would have pasted. Returns an empty text when there was no speech.
-// Spoken corrections the rules cannot see ("walk into the field. Uh. No, no,
-// not in the field. Let's put it in the water."), asked of Voxden Cloud's text
-// model when the setting is on, the account is Pro and the dictation has a cue
-// word in it -- about one dictation in fourteen, measured on real history. The
-// model only names pieces to take out, and each is checked here first
-// (checkModelEdit). A slow, failed or refused answer leaves the rules in
-// composeTranscript to do what they can; nothing is ever pasted later.
-const SPOKEN_CORRECTION_WAIT_MS = 2500;
-
-// Spoken corrections are still being worked on, so a release leaves them out:
-// no switch in Settings, nothing applied, nothing sent, whatever a settings
-// file says. A development build (npm start) has them, and so does a packaged
-// one started with VOXDEN_SPOKEN_CORRECTIONS=1.
-function spokenCorrectionsAvailable() {
-  return !app.isPackaged || process.env.VOXDEN_SPOKEN_CORRECTIONS === '1';
-}
-
-function takeBackWanted(raw) {
-  if (settings.spokenCorrections !== true || !spokenCorrectionsAvailable() || settings.verbatimMode) return false;
-  if (!/^en(?:-|$)/i.test(textLanguage())) return false;
-  if (!polishClient || !accountManager) return false;
-  const account = accountManager.snapshot();
-  if (!account || !account.signedIn || account.plan !== 'pro') return false;
-  const text = String(raw || '').trim();
-  return !!text && mayTakeBack(text);
-}
-
-// Callers wait on this only when takeBackWanted says so: a dictation with no
-// question for the model keeps every step of its paste as it was.
-async function modelTakeBack(raw) {
-  if (!takeBackWanted(raw)) return null;
-  const text = String(raw || '').trim();
-  const started = Date.now();
-  try {
-    const answer = await polishClient.takeBack(text, { timeoutMs: SPOKEN_CORRECTION_WAIT_MS });
-    const edited = answer.remove.length ? removePieces(text, answer.remove) : null;
-    const checked = edited && edited !== text ? checkModelEdit(text, edited) : null;
-    // How it went, never the words.
-    diagLog('spoken-corrections', { ms: Date.now() - started, pieces: answer.remove.length, used: !!checked });
-    return checked;
-  } catch (err) {
-    diagLog('spoken-corrections', { ms: Date.now() - started, failed: String((err && err.code) || 'error') });
-    return null;
-  }
-}
-
-// `takenBack` is modelTakeBack's answer, when it had one: the words to use in
-// place of `raw`, and what came out. `raw` is still what the history keeps.
-function composeTranscript(raw, tone, quality, takenBack) {
+// Local-only: the transcript is worked over on this PC by rules --
+function composeTranscript(raw, tone, quality) {
   const engine = (lastAsrReport && lastAsrReport.engine)
     || (lastVocabularyReport && lastVocabularyReport.engine)
     || asrEngineFor(quality);
@@ -4420,7 +3753,7 @@ function composeTranscript(raw, tone, quality, takenBack) {
   // English with Hindi mixed in wants "aap kidhar se ho", so the script is
   // turned back into letters before cleanup and the dictionary see it. The
   // raw transcript is kept as the engine gave it.
-  const said = takenBack && !settings.verbatimMode ? takenBack.text : raw;
+  const said = raw;
   const spoken = wantsHinglish()
     ? hinglish.romanizeHindi(said)
     : said;
@@ -4493,11 +3826,8 @@ function composeTranscript(raw, tone, quality, takenBack) {
       rawAsr: String(raw || '').trim(),
       afterCleanup: cleaned,
       // Only when something was taken out: the words, cue included.
-      ...(corrections.removed.length || takenBack
-        ? {
-          afterCorrections: corrections.text,
-          spokenCorrections: [...(takenBack ? takenBack.removed : []), ...corrections.removed],
-        }
+      ...(corrections.removed.length
+        ? { afterCorrections: corrections.text, spokenCorrections: corrections.removed.slice() }
         : {}),
       afterDedupe: deduped,
       afterDictionary: text,
@@ -4518,10 +3848,9 @@ async function onTranscript(raw, sessionToken = recordingSessionToken) {
   );
   const category = style.classifyTarget(lastTarget.exe, lastTarget.title);
   const tone = style.toneForCategory(category, settings.writingStyles);
-  const takenBack = takeBackWanted(raw) ? await modelTakeBack(raw) : null;
   if (sessionToken !== recordingSessionToken) return;
   const composeStarted = Date.now();
-  const composed = composeTranscript(raw, tone, currentDictationQuality(), takenBack);
+  const composed = composeTranscript(raw, tone, currentDictationQuality());
   diagLog('text-processing', { ms: Date.now() - composeStarted, characters: String(raw || '').length });
   if (!composed.text) {
     flashError('No speech');
@@ -4549,23 +3878,18 @@ async function onTranscript(raw, sessionToken = recordingSessionToken) {
     addHistoryEntry(composed.text, composed.meta);
     const admin = !!(err && err.adminTarget);
     if (admin) noteAdminApp(lastTarget.exe);
-    flashError(needsAccess ? 'Allow Voxden in Accessibility to paste'
+    flashError(needsAccess ? 'Allow Vell in Accessibility to paste'
       : admin ? ADMIN_PASTE_FLASH
       : err && err.fullscreenInFront ? FULLSCREEN_PASTE_FLASH
       : 'Paste failed — text saved in history');
     return;
   }
   if (sessionToken !== recordingSessionToken) return;
-  const pastedInto = String(lastHwnd || '0');
-  const entry = finishDictation(composed.text, Object.assign({
+  finishDictation(composed.text, Object.assign({
     exe: lastTarget.exe || '',
     title: lastTarget.title || '',
     category,
   }, composed.meta));
-  lastPaste = {
-    entryId: entry.id, text: composed.text, hwnd: pastedInto, exe: lastTarget.exe || '', ts: Date.now(),
-    game: gameDictation,
-  };
   recordVocabularyUse(composed.text, composed.entries);
 }
 
@@ -4577,9 +3901,7 @@ async function finishCaptureDictation(text, captureId, token) {
     }
     const pasted = text === null ? await screenCapture.retry() : await screenCapture.complete(text, captureId);
     if (!pasted || token !== recordingSessionToken) return;
-    // Spoken into a screenshot is still dictation. A retry re-pastes words
-    // that were already charged, so only a first paste counts.
-    if (text !== null) chargeFreeWords(text);
+    // Spoken into a screenshot is still dictation.
     corpus.dropParked();
     corpus.clearRetry();
     dictationTiming = null;
@@ -4648,8 +3970,7 @@ async function retryEntry(id) {
     }
     const category = entry.category || style.classifyTarget(entry.exe, entry.title);
     const tone = style.toneForCategory(category, settings.writingStyles);
-    const composed = composeTranscript(raw, tone, currentDictationQuality(),
-      takeBackWanted(raw) ? await modelTakeBack(raw) : null);
+    const composed = composeTranscript(raw, tone, currentDictationQuality());
     if (!composed.text) return { ok: false, reason: 'The engine heard no speech in this recording.' };
     const changed = composed.text !== entry.text;
     const updated = { ...entry };
@@ -4682,10 +4003,8 @@ async function retryEntry(id) {
   }
 }
 
-// Turn a shelved clip into the dictation it never became. The engine is
-// whichever one the user has selected now -- Voxden Cloud when cloud dictation
-// is on, the local model otherwise -- so a recovery costs what a dictation of
-// the same length costs, which is why the page says so before this runs.
+// Turn a shelved clip into the dictation it never became, with the local
+// engine the user has selected now.
 //
 // The words are not pasted: the window this was dictated into is long gone.
 // They go to history and to the clipboard, where the user can put them
@@ -4705,8 +4024,7 @@ async function recoverRecording(id) {
     const raw = await transcribeSavedFile(file);
     const category = style.classifyTarget(item.exe, item.title);
     const tone = style.toneForCategory(category, settings.writingStyles);
-    const composed = composeTranscript(raw, tone, currentDictationQuality(),
-      takeBackWanted(raw) ? await modelTakeBack(raw) : null);
+    const composed = composeTranscript(raw, tone, currentDictationQuality());
     // Nothing heard is not a reason to destroy the evidence: the clip stays
     // shelved so the user can play it, save it, or try a different engine.
     if (!composed.text) return { ok: false, reason: 'The engine heard no speech in this recording.' };
@@ -4887,9 +4205,9 @@ function adoptForegroundHwnd(hwnd) {
   }
 }
 
-// A window the watcher marked as running above Voxden (" admin"). Its app is
+// A window the watcher marked as running above Vell (" admin"). Its app is
 // looked up once per window, and the bell explains, once per app (the note's
-// id). Never while Voxden runs as administrator itself; a mark that arrives
+// id). Never while Vell runs as administrator itself; a mark that arrives
 // before the helper has said whether it does waits for that answer. Windows'
 // own programs, Task Manager among them, are never marked: only a paste they
 // actually refuse brings their note.
@@ -4935,7 +4253,7 @@ function launchForegroundWatch() {
       }
       adoptForegroundHwnd(seen[1]);
       // An app run as administrator earns the note only when it fills its
-      // screen -- a game, where the shortcut cannot reach Voxden and nothing
+      // screen -- a game, where the shortcut cannot reach Vell and nothing
       // else would say why. Any other gets one if a paste is refused.
       if (seen[6] && seen[2] !== undefined) noteAdminForeground(seen[1]);
     }
@@ -5017,7 +4335,7 @@ function tunedModelInfo() {
   return models.tunedModelInfo(MODELS);
 }
 
-// Whether the sidecar is running on the interpreter Voxden installed rather
+// Whether the sidecar is running on the interpreter Vell installed rather
 // than one the user manages. It carries all three backends; end users never run pip.
 function usingManagedRuntime() {
   const py = findSidecarPython();
@@ -5209,10 +4527,8 @@ function systemIdleSeconds() {
 }
 
 function scheduleSidecarWarmStart() {
-  // Warming is for the engine that is about to be asked to transcribe. On
-  // Cloud that is never the local one, and the warm start is a second full
-  // model load on top of the probe's.
-  if (sidecarWarmTimer || lazyAsr() || settings.cloudTranscription) return;
+  // Warming is for the engine that is about to be asked to transcribe.
+  if (sidecarWarmTimer || lazyAsr()) return;
   const startedAt = Date.now();
   const gateOnIdle = sidecarColdLaunch;
   const loginLaunch = gateOnIdle && process.argv.includes('--hidden');
@@ -5398,7 +4714,7 @@ function startSidecar(probeOnly) {
     // A choice this PC cannot honour is not a choice. Users who picked
     // Qwen3-ASR back when the picker offered it unconditionally kept that value
     // through every update, and it bought them a permanent "not installed on
-    // this PC" banner for an engine no Voxden download has ever supplied. The
+    // this PC" banner for an engine no Vell download has ever supplied. The
     // sidecar has already fallen back to Whisper by this point, so this only
     // makes the stored setting agree with what is running.
     // Preserve the user's selection through missing/removed dependencies.
@@ -5608,17 +4924,10 @@ engineFastVocabulary = '';
 function friendlyEngineError(msg) {
   // Electron prefixes rejected invoke() messages before the renderer sends
   // them back as capture failures. Remove that wrapper before judging their
-  // length, so a useful cloud error does not become "Transcribe failed".
+  // length, so a useful engine error does not become "Transcribe failed".
   const m = String(msg || '').trim()
     .replace(/^Error invoking remote method ['"][^'"]+['"]:\s*(?:Error:\s*)?/i, '')
     .replace(/^Error:\s*/i, '');
-  if (/(?:cloud transcription|speech model).*could not be reached/i.test(m)) return 'Voxden Cloud unreachable — check connection and retry';
-  if (/cloud transcription timed out|speech model did not answer in time/i.test(m)) return 'Voxden Cloud timed out — try again';
-  if (/(?:Voxden Cloud|Cloud) transcription is (?:unavailable|not available|not configured)/i.test(m)) return 'Voxden Cloud unavailable — check Cloud settings';
-  // The relay refused the language (code 'language'): the model behind it does
-  // not take it. The menu only offers languages it does, so this is a relay
-  // that has moved on; cloudFailureIsTransient does not retry it.
-  if (/doesn.t support that language/i.test(m)) return "Voxden Cloud doesn't support that language yet. Change it in Settings.";
   if (/charmap|codec can't encode|character maps/i.test(m)) return "Couldn't send transcript — try again";
   if (/speech engine timeout|whisper timeout/i.test(m)) return 'Transcription timed out';
   if (/speech engine not ready|whisper not ready|sidecar exited/i.test(m)) return 'Speech engine not ready';
@@ -5682,7 +4991,7 @@ function recoveryPolicy() {
 
 // Which engine this dictation was asking for, as the recovery shelf records it.
 function currentEngineLabel() {
-  return settings.cloudTranscription ? 'cloud' : String(settings.asrEngine || '');
+  return String(settings.asrEngine || '');
 }
 
 // A dictation that failed still has the user's words in it. Move the clip off
@@ -5722,7 +5031,7 @@ function rescueUnfinishedClip() {
     corpus.dropLive();
   } else if (corpus.hasRetry()) {
     id = corpus.keepFailure({
-      reason: 'Voxden closed before this dictation finished',
+      reason: 'Vell closed before this dictation finished',
       source: 'crash',
       engine: currentEngineLabel(),
     });
@@ -5734,7 +5043,7 @@ function rescueUnfinishedClip() {
     // Nothing finished: the session ended mid-sentence. This partial copy is
     // all there is, which is exactly the case it was written for.
     id = corpus.rescueLive({
-      reason: 'Voxden closed while you were dictating',
+      reason: 'Vell closed while you were dictating',
       engine: currentEngineLabel(),
     });
   }
@@ -6530,7 +5839,7 @@ function registerHotkeys() {
       : ' Paste last has no shortcut right now.'));
   }
 
-  // No fallback key for games: a key Voxden takes stops working everywhere
+  // No fallback key for games: a key Vell takes stops working everywhere
   // else, so it does not take one the user did not choose.
   const game = tryRegisterGameShortcut(settings.gameShortcut);
   if (!game.ok) notices.push(game.reason + ' The game shortcut is off until you pick another key.');
@@ -6737,18 +6046,6 @@ ipcMain.on('capture-ended', (e) => {
 // From now on every piece of it goes up on the tail lane, and the relay is
 // asked to start its fast model on the body pieces still out instead of
 // waiting for MAI. Not awaited: the answers arrive on the pieces' own requests.
-ipcMain.on('cloud-finishing', (e) => {
-  if (!overlayWin || overlayWin.isDestroyed() || e.sender !== overlayWin.webContents) return;
-  if (mode !== 'transcribing') return;
-  const session = cloudLaneSessionFor(recordingSessionToken);
-  session.stopped = true;
-  if (!session.lanes || !session.body.size || !cloudTranscriber) return;
-  const pieces = [...session.body].sort((a, b) => a - b);
-  diagLog('cloud-hurry', { pieces: pieces.length });
-  try {
-    Promise.resolve(cloudTranscriber.hurry({ dictation: session.dictation, pieces })).catch(() => {});
-  } catch (_) {}
-});
 ipcMain.on('cancelled', (e) => {
   if (!overlayWin || overlayWin.isDestroyed() || e.sender !== overlayWin.webContents) return;
   if (mode !== 'arming' && mode !== 'recording' && mode !== 'transcribing') return;
@@ -6757,205 +6054,10 @@ ipcMain.on('cancelled', (e) => {
   makeUnfocusable(overlayWin);
   sendOverlay({ mode: 'idle' });
 });
-// The speech provider sometimes never answers one request while the next one
-// for the same audio answers in a second or two (two identical requests sent
-// together took 21.5 s and 3.0 s). One piece of a long dictation that hit the
-// relay's 20 s deadline used to fail the whole dictation. So a request that
-// failed in a way a fresh one could well survive is sent again, once.
-//
-// Retried: the client's own `timeout` or `network`, a relay `timeout` (its 20 s
-// deadline), and an `upstream` failure that is a 5xx -- the relay reports every
-// provider failure under its own 502 and quotes the provider's status in the
-// message ("The speech model returned 503: ..."), so the quoted status wins
-// when there is one, and the reply's own status decides otherwise.
-// Never retried: `cancelled`, `auth`, `plan`, `cap`, the relay's per-user
-// concurrency limit (429, code `busy`), any 4xx (a bad clip stays bad), and the
-// provider's own 429, which cloudThenLocal hands to the local engine.
-const CLOUD_RESCUE_STATUSES = [500, 502, 503, 504];
-function providerStatusOf(err) {
-  const quoted = /\breturned (\d{3})\b/.exec(String((err && err.message) || ''));
-  return quoted ? Number(quoted[1]) : 0;
-}
-function cloudFailureIsTransient(err) {
-  const code = err && err.code;
-  if (code === 'timeout' || code === 'network') return true;
-  if (code !== 'upstream' || cloudAsr.providerBusy(err)) return false;
-  return CLOUD_RESCUE_STATUSES.includes(providerStatusOf(err) || Number(err.status));
-}
-
-// One cloud request, including a completed phrase from a recording in progress.
-// Null means cloud is unavailable; a failed request throws its actual reason.
-// A transient failure is tried once more before it is allowed to fail.
-async function tryCloudTranscribe(buf, options, audioSeconds) {
-  const opts = options || {};
-  const sessionToken = recordingSessionToken;
-  if (!cloudTranscriber || !accountManager) return null;
-  const account = accountManager.snapshot();
-  const decision = cloudAsr.shouldTryCloud({
-    enabled: settings.cloudTranscription === true,
-    account,
-    audioSeconds,
-  });
-  if (!decision.ok) {
-    if (decision.reason !== 'off' && decision.reason !== 'short') {
-      cloudStatus = Object.assign({}, cloudStatus, { lastResult: 'skipped', lastError: decision.reason, lastAt: Date.now() });
-    }
-    return null;
-  }
-  // The cloud model detects when told nothing, so more than one language
-  // goes up as 'auto'; the dictionary is ranked for the text language.
-  const language = opts.language || engineLanguage('cloud');
-  const ranked = vocabularyForDictation(textLanguage());
-  const terms = ranked.map((entry) => entry && entry.canonical).filter(Boolean);
-  // Lanes only for a piece of a recording that started with them (the
-  // overlay then says which piece it is).
-  const recording = cloudLaneSessionFor(sessionToken);
-  const laneSession = opts.segment && Number.isInteger(opts.piece) && opts.piece >= 0 && opts.piece <= 999
-    && recording.lanes ? recording : null;
-  try {
-    const signal = (cloudSessionAbort || (cloudSessionAbort = new AbortController())).signal;
-    for (let attempt = 1; ; attempt++) {
-      const sentAt = Date.now();
-      // Decided again for the retry: one sent after the user stopped is the tail.
-      const lane = laneSession ? (opts.final === true || laneSession.stopped ? 'tail' : 'body') : '';
-      const laneFields = lane ? { lane, dictation: laneSession.dictation, piece: opts.piece } : null;
-      if (lane === 'body') laneSession.body.add(opts.piece);
-      // keepCloudWarm() leaves the model alone while this is in flight and for a
-      // moment after; the pair always balances, whether it answers, fails or aborts.
-      noteCloudRequestStart();
-      let result;
-      try {
-        result = await cloudTranscriber.transcribe(buf, { language, terms, audioSeconds, signal, ...laneFields });
-      } catch (err) {
-        if (lane === 'body') laneSession.body.delete(opts.piece);
-        // No audio and no text: how often a request fails, and how, is the point.
-        const status = Number(err && err.status) || 0;
-        const providerStatus = providerStatusOf(err);
-        diagLog('cloud-request-failed', {
-          audioMs: Math.round(audioSeconds * 1000), code: (err && err.code) || 'upstream',
-          elapsedMs: Date.now() - sentAt, attempt, segment: !!opts.segment,
-          ...(status ? { status } : {}),
-          ...(providerStatus ? { providerStatus } : {}),
-        });
-        // One more try, straight away and only once, with the same clip; never
-        // for a dictation that is already gone. Nothing else is sent meanwhile,
-        // so the relay's per-user cap and its metering are untouched (it charges
-        // only a clip that is answered).
-        if (attempt > 1 || !cloudFailureIsTransient(err)
-            || sessionToken !== recordingSessionToken || signal.aborted) throw err;
-        console.warn('[cloud] transcription failed: ' + ((err && err.code) || 'upstream') + '; trying once more');
-        // The user has stopped and is waiting; while they still talk, the bar stays as it is.
-        try {
-          if (mode === 'transcribing') sendOverlay({ mode: 'transcribing', text: 'Cloud is slow. Trying again…' });
-        } catch (_) {}
-        continue;
-      } finally {
-        noteCloudRequestEnd();
-      }
-      if (lane === 'body') laneSession.body.delete(opts.piece);
-      diagLog('cloud-request', {
-        audioMs: Math.round(audioSeconds * 1000), roundTripMs: result.ms,
-        relayMs: Number.isFinite(result.timing?.relayMs) ? result.timing.relayMs : null,
-        hedged: !!result.timing?.hedged, retried: !!result.timing?.retried,
-        ...(attempt > 1 ? { clientRetry: true, attempt } : {}),
-        // Which lane it went on, and on the relay's side what answered it
-        // ('main' or 'rescue') and what started the rescue ('timer', 'error',
-        // 'urgent' for a hurry at stop, or '' for none).
-        ...(lane ? {
-          lane, piece: opts.piece,
-          trigger: String(result.timing?.trigger || '').slice(0, 16),
-          source: String(result.timing?.source || '').slice(0, 16),
-        } : {}),
-      });
-      if (result.cloud) accountManager.noteCloudUsage(result.cloud);
-      if (sessionToken !== recordingSessionToken) return result.text;
-      const route = opts.segment ? 'cloud-segments' : 'cloud';
-      lastAsrReport = {
-        engine: 'cloud',
-        device: route,
-        vocabulary: terms.length ? 'phrase_list' : 'none',
-        routed: route,
-        segments: null,
-        modelRecognitionMs: result.ms,
-      };
-      lastVocabularyReport = {
-        selectedEngine: engineBackend || '',
-        selectedDevice: settings.asrDevice || '',
-        engine: 'cloud',
-        device: route,
-        language,
-        requestedQuality: opts.requestedQuality || opts.quality || 'auto',
-        quality: 'cloud',
-        mechanism: terms.length ? 'phrase_list' : 'unsupported',
-        via: terms.length ? 'phrase_list' : 'none',
-        offered: ranked.length,
-        sent: terms.length,
-        tokens: 0,
-        dropped: 0,
-        droppedTerms: [],
-        reason: '',
-        fallbackFrom: '',
-        degraded: false,
-        lostCapabilities: [],
-        summary: (opts.segment ? 'Voxden Cloud transcribed phrases during recording' : 'Transcribed with Voxden Cloud') + (terms.length ? ' with ' + terms.length + ' dictionary terms as hints.' : '.'),
-      };
-      cloudStatus = { lastResult: route, lastError: '', lastAt: Date.now(), lastMs: result.ms, count: cloudStatus.count + 1 };
-      broadcast();
-      return result.text;
-    }
-  } catch (err) {
-    if (sessionToken !== recordingSessionToken) throw err;
-    const code = (err && err.code) || 'upstream';
-    cloudStatus = Object.assign({}, cloudStatus, {
-      lastResult: 'error', lastError: code, lastAt: Date.now(), lastMs: 0,
-    });
-    // A refused clip may exceed only the unreserved allowance. Read the real
-    // meter instead of marking an account exhausted while other clips run.
-    if ((code === 'cap' || code === 'auth') && accountManager) {
-      accountManager.refresh({ force: true }).catch(() => {});
-    }
-    console.warn('[cloud] transcription failed: ' + code + (err && err.message ? ' (' + err.message + ')' : ''));
-    broadcast();
-    throw err;
-  }
-}
-
 async function transcribeSavedFile(file) {
   const seconds = corpus.wavSeconds(file);
   const opts = { timeoutMs: transcriptionTimeout(seconds) };
-  const local = () => sidecarTranscribe(file, opts);
-  if (!settings.cloudTranscription) return local();
-  // A clip is often on disk precisely because the cloud could not take it. Give
-  // the retry the same fallback the live path has, or a provider outage makes
-  // its own failures permanently unrecoverable.
-  const text = await cloudAsr.cloudThenLocal(
-    async () => tryCloudTranscribe(await fs.promises.readFile(file), {}, seconds),
-    local,
-    {
-      allowed: () => localEngineCanStart(),
-      starting: () => startLocalForBusyCloud(),
-    },
-  );
-  if (text === null) throw new Error('Voxden Cloud transcription is unavailable. Check Cloud settings and try again.');
-  return text;
-}
-
-// A busy cloud provider (see cloudThenLocal) hands the clip to the local engine.
-// Not while setup owns the runtime, and not when there is no engine to start.
-function localEngineCanStart() {
-  return !asrOperation && !asrIsDisabled() && sidecarState !== 'unavailable';
-}
-
-// A Cloud session never probes the local engine, so it is still in its boot
-// state -- 'starting', with no process and no probe -- and requestSidecarStart
-// declines that state and would leave the clip waiting ten minutes for a model
-// nobody is loading. Start it outright. The load is the slow part (a cold model
-// can take most of a minute), so the bar says why it is waiting; after that the
-// engine stays up for the session and the next busy spell costs nothing.
-function startLocalForBusyCloud() {
-  console.warn('[cloud] provider busy (429); transcribing on this PC instead');
-  if (!sidecar && !sidecarProbe && sidecarState === 'starting') startSidecar();
-  if (mode === 'transcribing') sendOverlay({ mode: 'transcribing', text: 'Cloud busy. Using ' + macShell.deviceName(process.platform) + '…' });
+  return sidecarTranscribe(file, opts);
 }
 
 // Only the app's own pages run in its windows: a file under this folder.
@@ -7019,31 +6121,14 @@ ipcMain.handle('transcribe-local', async (_e, wav, options) => {
   // behind work nobody will read.
   const audioSec = Math.max(0, (buf.length - 44) / 32000);
   opts.timeoutMs = transcriptionTimeout(audioSec);
-  const cloudSelected = opts.cloud === true || (opts.cloud !== false && settings.cloudTranscription === true);
   let tmp = null;
-  // Only a local engine needs a temporary file. The cloud receives the in-memory
-  // audio immediately, without a disk write on its request path.
   const local = async () => {
-    tmp = path.join(os.tmpdir(), 'voxden-' + Date.now() + '-' + process.hrtime.bigint() + '.wav');
+    tmp = path.join(os.tmpdir(), 'vell-' + Date.now() + '-' + process.hrtime.bigint() + '.wav');
     await fs.promises.writeFile(tmp, buf);
     return sidecarTranscribe(tmp, opts);
   };
   try {
-    let text;
-    if (cloudSelected) {
-      let fellBack = false;
-      text = await cloudAsr.cloudThenLocal(() => tryCloudTranscribe(buf, opts, audioSec), local, {
-        allowed: () => sessionToken === recordingSessionToken && localEngineCanStart(),
-        starting: () => { fellBack = true; startLocalForBusyCloud(); },
-      });
-      if (text === null) throw new Error('Voxden Cloud transcription is unavailable. Check Cloud settings and try again.');
-      if (fellBack && lastVocabularyReport) {
-        lastVocabularyReport.fallbackFrom = lastVocabularyReport.fallbackFrom || 'cloud';
-        lastVocabularyReport.reason = lastVocabularyReport.reason || 'Voxden Cloud was busy, so this was transcribed on ' + macShell.deviceName(process.platform) + '.';
-      }
-    } else {
-      text = await local();
-    }
+    const text = await local();
     // Hold the clip until the history entry it becomes can claim it. Without
     // this the audio is gone before the user ever gets to correct it.
     if (opts.park !== false && sessionToken === recordingSessionToken) parkCompletedClip(buf);
@@ -7335,182 +6420,30 @@ ipcMain.handle('asr-runtime-remove', () => runAsrOperation('remove', async () =>
   setSidecarState('unavailable');
   saveAsrSetupState();
 }));
-// Account: sign in with an emailed code, and what the plan entitles this PC
-// to. Every handler answers with the full snapshot so the panel repaints from
-// one shape, and every failure comes back as a message rather than a throw
-// the renderer would have to unpick.
-function accountResult(work) {
-  return Promise.resolve().then(work).then(() => snapshot(), (err) => {
-    if (accountManager) accountManager.lastError = (err && err.message) || 'Something went wrong. Try again.';
-    return snapshot();
-  });
-}
-ipcMain.handle('account-code', (_e, email) => accountResult(() => {
-  if (!accountManager) throw new Error('Accounts are not available in this build.');
-  return accountManager.requestCode(email);
-}));
-ipcMain.handle('account-verify', (_e, email, code) => accountResult(() => {
-  if (!accountManager) throw new Error('Accounts are not available in this build.');
-  return accountManager.verifyCode(email, code);
-}));
-ipcMain.handle('account-sign-out', () => accountResult(() => accountManager && accountManager.signOut()));
-ipcMain.handle('account-auth-options', () => accountResult(() => accountManager && accountManager.authOptions()));
-ipcMain.handle('account-update-profile', (_e, profile) => accountResult(() => {
-  if (!accountManager) throw new Error('Accounts are not available in this build.');
-  return accountManager.updateProfile(profile);
-}));
-ipcMain.handle('account-delete', () => accountResult(() => {
-  if (!accountManager) throw new Error('Accounts are not available in this build.');
-  return accountManager.deleteAccount();
-}));
-// Google sign-in: the browser does the consent, a loopback listener gets the
-// code, the service finishes it. Only one attempt runs at a time; Cancel in
-// the app ends the wait.
-let googlePending = null;
-ipcMain.handle('account-google', () => accountResult(async () => {
-  if (!accountManager) throw new Error('Accounts are not available in this build.');
-  if (googlePending) throw new Error('Google sign-in is already open in your browser.');
-  const options = await accountManager.authOptions();
-  if (!options.google) throw new Error('Google sign-in is not set up on this service yet. Use your email instead.');
-  accountManager.busy = 'google';
-  accountManager.lastError = '';
-  accountManager.changed();
-  try {
-    googlePending = googleAuth.signIn({
-      clientId: options.googleClientId,
-      openExternal: (url) => {
-        if (!shell || typeof shell.openExternal !== 'function') throw new Error('no browser available');
-        return shell.openExternal(url);
-      },
-    });
-    const grant = await googlePending.promise;
-    await accountManager.signInWithGoogle(grant);
-  } finally {
-    googlePending = null;
-    if (accountManager.busy === 'google') accountManager.busy = '';
-    accountManager.changed();
-  }
-}));
-ipcMain.handle('account-google-cancel', () => accountResult(() => {
-  if (googlePending) googlePending.cancel();
-}));
-ipcMain.handle('account-refresh', () => accountResult(() => accountManager && accountManager.refresh({ force: true })));
-ipcMain.handle('account-cancel', () => accountResult(() => accountManager && accountManager.cancelPending()));
-
-// Payments. The checkout page opens in the system browser -- never inside
-// the app, so no card detail ever passes through an Electron window -- and
-// the plan flips on the service when the provider's webhook lands. Until
-// then the app asks /me every ten seconds so the panel turns Pro on its own.
-let checkoutPollTimer = null;
-function pollCheckout() {
-  if (checkoutPollTimer) { clearTimeout(checkoutPollTimer); checkoutPollTimer = null; }
-  if (!accountManager || accountManager.checkoutSettled()) return;
-  checkoutPollTimer = setTimeout(async () => {
-    checkoutPollTimer = null;
-    try { await accountManager.refresh({ force: true }); } catch (_) {}
-    pollCheckout();
-  }, 10e3);
-  if (checkoutPollTimer && typeof checkoutPollTimer.unref === 'function') checkoutPollTimer.unref();
-}
-ipcMain.handle('account-billing-options', () => accountResult(() => accountManager && accountManager.billingOptions()));
-ipcMain.handle('account-billing', () => accountResult(() => accountManager && accountManager.billingStatus()));
-ipcMain.handle('account-cancel-subscription', () => accountResult(() => {
-  if (!accountManager) throw new Error('Accounts are not available in this build.');
-  return accountManager.cancelSubscription();
-}));
-ipcMain.handle('account-checkout', (_e, provider, plan, region) => accountResult(async () => {
-  if (!accountManager) throw new Error('Accounts are not available in this build.');
-  const url = await accountManager.checkout(provider, plan, region);
-  if (!/^https:\/\//.test(url)) throw new Error('The payment page address was not secure, so it was not opened.');
-  if (shell && typeof shell.openExternal === 'function') await shell.openExternal(url);
-  pollCheckout();
-}));
-ipcMain.handle('account-manage-billing', () => accountResult(async () => {
-  if (!accountManager) throw new Error('Accounts are not available in this build.');
-  const sub = await accountManager.billingStatus();
-  const url = sub && sub.manageUrl;
-  if (!url) throw new Error('There is no billing page for this subscription yet. Manage it from the payment provider’s email receipt.');
-  if (!/^https:\/\//.test(url)) throw new Error('The billing page address was not secure, so it was not opened.');
-  if (shell && typeof shell.openExternal === 'function') await shell.openExternal(url);
-}));
-
-// Fixed destinations; only the explicit local-test launcher opts a packaged
-// build into the preview. The renderer cannot supply arbitrary URLs.
-ipcMain.handle('changelog-open', () => shell.openExternal(
-  !app.isPackaged || process.env.VOXDEN_LOCAL_PREVIEW === '1'
-    ? 'http://127.0.0.1:4174/changelog' : 'https://voxden.app/changelog'));
-
-// Feedback from the Help menu. The report goes to the account service; when
-// that cannot be reached the renderer offers a prefilled GitHub issue instead,
-// built here from the same report.
-function feedbackDiagnostics() {
-  const account = accountManager && typeof accountManager.snapshot === 'function' ? accountManager.snapshot() : null;
-  return {
-    version: app.getVersion(),
-    os: (process.platform === 'darwin' ? 'macOS ' : 'Windows ') + os.release(),
-    engine: settings.asrEngine || '',
-    device: settings.asrDevice || '',
-    cloud: settings.cloudTranscription === true,
-    plan: account && account.signedIn ? (account.plan || 'free') : 'free',
-    language: Array.isArray(settings.dictationLanguages) ? settings.dictationLanguages.join(', ') : (settings.dictationLanguage || ''),
-  };
-}
-ipcMain.handle('feedback-send', async (_e, body) => {
-  const report = feedback.prepare(body, feedbackDiagnostics());
-  if (!report.ok) return { ok: false, error: report.error };
-  if (!accountManager) return { ok: false, error: 'Feedback needs the account service, which this build does not have.', fallback: true };
-  try {
-    await accountManager.sendFeedback(report.body);
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: (err && err.message) || 'Could not send right now.', fallback: true };
-  }
-});
-ipcMain.handle('feedback-open-issue', async (_e, body) => {
-  const report = feedback.prepare(body, feedbackDiagnostics());
-  if (!report.ok) return { ok: false, error: report.error };
-  const url = feedback.issueUrl(report.body);
-  if (shell && typeof shell.openExternal === 'function') await shell.openExternal(url);
-  return { ok: true, url };
-});
-
-ipcMain.handle('update-check', async () => {
-  await updater.checkNow();
-  broadcast();
-  return updater.getUpdateStatus();
-});
-// The restart button, in the bell and under System. A refusal comes back with
-// its reason so the row can say why rather than silently doing nothing.
-ipcMain.handle('update-install', async () => {
-  const result = updater.installNow();
-  broadcast();
-  return Object.assign({}, result, updater.getUpdateStatus());
-});
-
 // Settings > System > Restart as administrator, for the games and apps that
-// run as administrator and are out of an ordinary Voxden's reach
+// run as administrator and are out of an ordinary Vell's reach
 // (noteAdminApp). Windows elevates only a new process, after its own prompt,
-// so this starts a second Voxden that way and quits once Windows has started
+// so this starts a second Vell that way and quits once Windows has started
 // it; the new one waits for this one to be gone before it takes the
 // single-instance lock (afterPid, at the bottom of this file). A no at the
-// prompt leaves this Voxden running and the row says so.
+// prompt leaves this Vell running and the row says so.
 //
 // The elevated copy starts in System32 whatever folder it is given, so every
 // path in its command is absolute (elevation.restartCommand).
 //
-// Two things are left as they are. The elevated copy does not inherit this
+// One thing is left as it is. The elevated copy does not inherit this
 // process's environment variables: Windows starts it with the elevated
-// account's own, so a development run loses the VOXDEN_* variables
-// start-local-cloud.js set (the dev data folder still pins the service URL).
-// And a standard Windows user elevates as a different, administrator account
-// -- or, with Windows' Administrator protection on, a hidden one -- whose
-// AppData, and so whose Voxden settings, history and sign-in, are not theirs.
+// account's own, so a development run loses the VOXDEN_* variables it was
+// started with. And a standard Windows user elevates as a different,
+// administrator account -- or, with Windows' Administrator protection on, a
+// hidden one -- whose AppData, and so whose Vell settings and history, are
+// not theirs.
 const RESTART_AS_ADMIN_TIMEOUT_MS = 5 * 60 * 1000;
 let restartingAsAdmin = false;
 ipcMain.handle('restart-as-admin', async () => {
   if (process.platform !== 'win32') return { ok: false, reason: 'Only Windows runs apps as administrator.' };
-  if (runningAsAdmin === true) return { ok: false, reason: 'Voxden is already running as administrator.' };
-  if (restartingAsAdmin || isQuitting) return { ok: false, reason: 'Voxden is already restarting.' };
+  if (runningAsAdmin === true) return { ok: false, reason: 'Vell is already running as administrator.' };
+  if (restartingAsAdmin || isQuitting) return { ok: false, reason: 'Vell is already restarting.' };
   restartingAsAdmin = true;
   const cmd = elevation.restartCommand({
     packaged: app.isPackaged, execPath: process.execPath,
@@ -7669,17 +6602,14 @@ ipcMain.handle('settings-set', async (_e, patch) => {
     'launchAtLogin', 'alwaysShowFlowBar', 'showInTaskbar',
     'soundsEnabled', 'suggestionsEnabled', 'muteMusicWhileDictating',
     'verbatimMode', 'verbatimDictionary', 'numbersAsDigits', 'autoCleanup', 'autoAddToDictionary',
-    'cloudTranscription', 'spokenCorrections',
+    'spokenCorrections',
   ];
-  const cloudWas = settings.cloudTranscription === true;
   for (const key of boolKeys) {
     if (typeof patch[key] === 'boolean') settings[key] = patch[key];
   }
-  // A Cloud session skipped the launch probe, so the local engine is still
-  // 'starting' and requestSidecarStart would decline it. Turning Cloud off is
-  // the moment to probe, so the first dictation after the toggle waits for a
-  // transcription rather than for a model load.
-  if (cloudWas && settings.cloudTranscription !== true) startSidecar(true);
+  // An old settings file may still carry the cloud switch; it no longer does
+  // anything, so a stale true must not linger.
+  delete settings.cloudTranscription;
   if (settings.autoAddToDictionary === false) stopCorrectionLearning();
 
   if (typeof patch.flowBarStyle === 'string') {
@@ -7739,11 +6669,7 @@ ipcMain.handle('settings-set', async (_e, patch) => {
 
   if (typeof patch.displayName === 'string') {
     settings.displayName = patch.displayName.trim().slice(0, 40);
-    // Typed by hand, so it belongs to this account and syncProfileName leaves
-    // it alone until a different one signs in.
-    settings.displayNameFrom = accountManager && accountManager.signedIn()
-      ? String(accountManager.snapshot().email || '').trim().toLowerCase()
-      : '';
+    settings.displayNameFrom = '';
   }
 
   if (typeof patch.microphone === 'string' && patch.microphone) {
@@ -7797,28 +6723,6 @@ ipcMain.handle('history-delete', async (_e, id) => {
   }
   return true;
 });
-// Polish. The page asks what a text would cost before it offers the button,
-// then polishes on a click; the flow bar polishes the dictation it just showed.
-ipcMain.handle('polish-quote', (_e, text) => polishLib.polishQuote(String(text || ''),
-  accountManager ? accountManager.snapshot() : null));
-ipcMain.handle('polish-text', async (_e, text, mode) => {
-  if (polishingEntryId) return { ok: false, code: 'busy', message: 'Another polish is still running.' };
-  polishingEntryId = 'page';
-  try {
-    const result = await runPolish(String(text || ''), polishLib.POLISH_MODES.includes(mode) ? mode : 'polish');
-    broadcast();
-    return { ok: true, text: result.text, credits: result.credits, mode: result.mode };
-  } catch (err) {
-    return { ok: false, code: (err && err.code) || 'upstream',
-      message: (err && err.message) || 'Polish did not work this time. Nothing was charged.' };
-  } finally {
-    polishingEntryId = null;
-  }
-});
-ipcMain.handle('polish-entry', async (e, id, mode) => polishEntry(String(id || ''), {
-  fromBar: !!(overlayWin && !overlayWin.isDestroyed() && e.sender === overlayWin.webContents),
-  mode: polishLib.POLISH_MODES.includes(mode) ? mode : 'polish',
-}));
 ipcMain.handle('history-edit', async (_e, id, text) => {
   const entry = history.entries.find((x) => x.id === id);
   if (!entry) return { ok: false, learned: [] };
@@ -7964,7 +6868,7 @@ ipcMain.handle('history-audio-save', async (_e, id) => {
 async function saveWavDialog(file) {
   const stamp = new Date();
   const pad = (n) => String(n).padStart(2, '0');
-  const name = 'Voxden ' + stamp.getFullYear() + '-' + pad(stamp.getMonth() + 1) + '-' + pad(stamp.getDate())
+  const name = 'Vell ' + stamp.getFullYear() + '-' + pad(stamp.getMonth() + 1) + '-' + pad(stamp.getDate())
     + ' ' + pad(stamp.getHours()) + '-' + pad(stamp.getMinutes()) + '-' + pad(stamp.getSeconds()) + '.wav';
   let target;
   try {
@@ -8010,10 +6914,10 @@ ipcMain.handle('recovery-delete', async (_e, id) => {
   broadcast();
   return { ok: removed, snapshot: snapshot(), reason: removed ? '' : 'The recording could not be deleted.' };
 });
-// A Voxden restarted as administrator (restart-as-admin) starts while the one
+// A Vell restarted as administrator (restart-as-admin) starts while the one
 // that asked for it is still closing, and that one holds the single-instance
 // lock until it is gone: taken now, the lock would be refused and this copy
-// would quit, leaving no Voxden at all. So the old process is waited out
+// would quit, leaving no Vell at all. So the old process is waited out
 // first. Blocking, since the lock is taken right here as the file loads, and
 // bounded: a copy that never exits costs this launch 15 s, not forever.
 //
@@ -8033,7 +6937,7 @@ if (!gotLock) {
     if (app.isReady()) openHistory();
     else app.once('ready', () => openHistory());
   });
-  // macOS never starts a second copy: opening Voxden again from Finder,
+  // macOS never starts a second copy: opening Vell again from Finder,
   // Launchpad or Spotlight sends the running one 'activate' instead (Electron
   // emits it nowhere else), so that is where the window comes back. With no
   // Dock icon (mac-shell.js bringForward) this is the only way back in apart
@@ -8056,28 +6960,6 @@ if (!gotLock) {
     loadAsrSetupState();
     tidyModelStorage();
     deliverAnnouncements();
-    updater.startUpdater({
-      getMode: () => mode,
-      onStatusChange: (status) => {
-        // Only a finished download is news. Checking and downloading are
-        // states the System settings pane already reports, and neither is
-        // something the user has to do anything about.
-        if (status && status.status === 'ready') {
-          applyNotifications(
-            announcements.note(notifications, announcements.updateReadyEntry(status.availableVersion)),
-            { broadcast: false },
-          );
-        }
-        // macOS only: a release it has to be sent to the website for.
-        if (status && status.status === 'available') {
-          applyNotifications(
-            announcements.note(notifications, announcements.updateAvailableEntry(status.availableVersion)),
-            { broadcast: false },
-          );
-        }
-        broadcast();
-      },
-    });
     const ses = require('electron').session.defaultSession;
     // The microphone, and nothing else, for the app's own pages. Any other
     // page (none should ever load) and any camera request is refused.
@@ -8096,9 +6978,9 @@ if (!gotLock) {
     Menu.setApplicationMenu(appMenu ? Menu.buildFromTemplate(appMenu) : null);
     screenCapture = createScreenCapture({
       electron: require('electron'),
-      canStart: () => isQuitting ? 'Voxden is closing.'
+      canStart: () => isQuitting ? 'Vell is closing.'
         : ['arming', 'recording', 'transcribing'].includes(mode) ? 'Finish dictating before taking a screenshot.' : '',
-      hideVoxden: () => {
+      hideVell: () => {
         stopOverlayDrag(true);
         stopCursorWatch();
         for (const win of [overlayWin, historyWin]) {
@@ -8107,7 +6989,7 @@ if (!gotLock) {
           win.hide();
         }
       },
-      restoreVoxden: () => {
+      restoreVell: () => {
         if (!isQuitting) {
           for (const win of captureHiddenWindows) {
             if (!win.isDestroyed() && win !== overlayWin) win.showInactive();
@@ -8121,8 +7003,8 @@ if (!gotLock) {
       targetInfo: winInfo,
       isOurTarget: isOurHwnd,
       toggleVoice: async () => {
-        if (!settings.cloudTranscription && (asrOperation || asrIsDisabled() || sidecarState === 'unavailable')) {
-          throw new Error('Set up a speech engine in Voxden settings to speak with your screenshot.');
+        if (asrOperation || asrIsDisabled() || sidecarState === 'unavailable') {
+          throw new Error('Set up a speech engine in Vell settings to speak with your screenshot.');
         }
         toggleListen();
       },
@@ -8146,7 +7028,7 @@ if (!gotLock) {
     // Compile the Win32 helper now, while nothing is waiting on it, so the
     // first paste does not pay for it.
     warmPsServers();
-    // Whether this Voxden runs as administrator, for Settings and the admin-app note.
+    // Whether this Vell runs as administrator, for Settings and the admin-app note.
     checkElevation();
     // Resolution, scale and taskbar changes all come through metrics-changed;
     // plugging a monitor in or out does not, and that is the case that used to
@@ -8166,25 +7048,7 @@ if (!gotLock) {
     // Probe imports and model availability, but defer the expensive --serve
     // process until the user starts dictating.
     //
-    // A Voxden Cloud session never asks the local engine for anything, so it
-    // loads no model at all. Even the probe is a real model load -- two
-    // seconds of CPU and a few hundred megabytes for an engine that will not
-    // be called. The GPU report is still collected, because a local start
-    // later in the session must not be the one that happens before it.
-    if (settings.cloudTranscription) {
-      await detectGpu();
-      broadcast();
-    } else {
-      await startSidecarAfterGpuDetection(detectGpu, startSidecar, broadcast, { probeOnly: true });
-    }
-    // The plan is checked on launch and every six hours. Neither call can
-    // block startup or sign anybody out on a bad connection: refresh keeps
-    // the cached answer through a network failure and only reacts to a 401.
-    if (accountManager) {
-      accountManager.refresh().catch(() => {});
-      const accountTimer = setInterval(() => accountManager.refresh().catch(() => {}), 6 * 3600e3);
-      if (accountTimer && typeof accountTimer.unref === 'function') accountTimer.unref();
-    }
+    await startSidecarAfterGpuDetection(detectGpu, startSidecar, broadcast, { probeOnly: true });
   });
 
   app.on('before-quit', (event) => {
@@ -8212,17 +7076,9 @@ if (!gotLock) {
     });
   });
 
-  // A downloaded update installs on the way out, silently. The installer is a
-  // detached process by the time installOnQuit returns, so the quit is never
-  // held up and the cleanup below runs as on any other exit. Not on a restart
-  // as administrator: the new Voxden is already starting from this exe, and
-  // an installer replacing it would race that copy. That update installs on
-  // the next quit instead.
   app.on('will-quit', () => {
     stopCorrectionLearning();
     if (clipboardPaste) clipboardPaste.restore();
-    if (!restartingAsAdmin) updater.installOnQuit();
-    updater.stopUpdater();
     globalShortcut.unregisterAll();
     pttReleasePending = false;
     // A watcher left running would outlive the app and hold a powershell process.

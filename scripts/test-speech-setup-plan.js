@@ -210,18 +210,17 @@ async function main() {
   h.run("settings.dictationLanguages = ['en', 'hg'];");
   eq('saved Hinglish is ignored on the local wire', h.run("engineLanguage('parakeet')"), 'en');
   eq('local Parakeet does not run Hinglish postprocessing', h.run('wantsHinglish()'), false);
-  h.run("accountManager.snapshot = function () { return { signedIn: true, plan: 'pro', email: 'pro@example.com' }; };");
-  h.run("settings.cloudTranscription = true; settings.dictationLanguages = ['en', 'hg'];");
-  eq('Cloud keeps automatic detection for both languages', h.run("engineLanguage('cloud')"), 'auto');
-  eq('Cloud keeps Hinglish enabled', h.run('wantsHinglish()'), true);
-  h.run("settings.cloudTranscription = false; settings.dictationLanguages = ['hg'];");
-  eq('Pro Cloud-off keeps the saved Hinglish selection', h.run('settings.dictationLanguages.join(",")'), 'hg');
-  eq('but still wires English locally', h.run("engineLanguage('parakeet')"), 'en');
-  eq('and text rules stay English while Cloud is off', h.run('textLanguage()'), 'en');
-  h.run("settings.cloudTranscription = true; settings.dictationLanguage = 'hi'; settings.dictationLanguages = ['hi', 'de'];");
-  eq('text rules follow the main Cloud language', h.run('textLanguage()'), 'hi');
-  h.run("accountManager.snapshot = function () { return { signedIn: false, plan: 'free' }; };");
-  h.run("settings.cloudTranscription = false; settings.dictationLanguage = 'en'; settings.dictationLanguages = ['en'];");
+  // Local-only: no plan and no cloud switch, so every saved selection wires
+  // English and the text rules stay English.
+  h.run("settings.dictationLanguages = ['en', 'hg'];");
+  eq('several saved languages still wire English', h.run("engineLanguage('parakeet')"), 'en');
+  eq('Hinglish postprocessing stays off', h.run('wantsHinglish()'), false);
+  h.run("settings.dictationLanguages = ['hg'];");
+  eq('a saved Hinglish-only selection still wires English locally', h.run("engineLanguage('parakeet')"), 'en');
+  eq('and text rules stay English', h.run('textLanguage()'), 'en');
+  h.run("settings.dictationLanguage = 'hi'; settings.dictationLanguages = ['hi', 'de'];");
+  eq('text rules stay English for any saved selection', h.run('textLanguage()'), 'en');
+  h.run("settings.dictationLanguage = 'en'; settings.dictationLanguages = ['en'];");
 
   // --- 9. The upgrade card downloads Qwen and switches to it in one go -----
   const upgrade = { calls: [], installed: { parakeet: true } };
