@@ -1,0 +1,181 @@
+{
+  "schemaVersion": 1,
+  "packs": [
+    {
+      "id": "qwen3-asr",
+      "name": "Qwen3-ASR 1.7B",
+      "repository": "Qwen/Qwen3-ASR-1.7B",
+      "revision": "7278e1e70fe206f11671096ffdd38061171dd6e5",
+      "files": [
+        {
+          "path": "chat_template.json",
+          "url": "https://huggingface.co/Qwen/Qwen3-ASR-1.7B/resolve/7278e1e70fe206f11671096ffdd38061171dd6e5/chat_template.json",
+          "size": 1161,
+          "sha256": "75a8cfca24f00de72d796fbfed6858fc9614ef3dabd8696684cc3bc03a9c58ff"
+        },
+        {
+          "path": "config.json",
+          "url": "https://huggingface.co/Qwen/Qwen3-ASR-1.7B/resolve/7278e1e70fe206f11671096ffdd38061171dd6e5/config.json",
+          "size": 6194,
+          "sha256": "2e74a751548b8ad7d7526d29365ad8144c345d8b412b1152d25dc6698452712f"
+        },
+        {
+          "path": "generation_config.json",
+          "url": "https://huggingface.co/Qwen/Qwen3-ASR-1.7B/resolve/7278e1e70fe206f11671096ffdd38061171dd6e5/generation_config.json",
+          "size": 142,
+          "sha256": "1da527824d81e07118facff437e03f2e24a23311e3bdeb2368973fe77e5f275c"
+        },
+        {
+          "path": "merges.txt",
+          "url": "https://huggingface.co/Qwen/Qwen3-ASR-1.7B/resolve/7278e1e70fe206f11671096ffdd38061171dd6e5/merges.txt",
+          "size": 1671853,
+          "sha256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
+        },
+        {
+          "path": "model-00001-of-00002.safetensors",
+          "url": "https://huggingface.co/Qwen/Qwen3-ASR-1.7B/resolve/7278e1e70fe206f11671096ffdd38061171dd6e5/model-00001-of-00002.safetensors",
+          "size": 4220320824,
+          "sha256": "a4cd1f1a04d90b757dc7f7dd26254e69a013b19e80efe590a83c6a3bde8608d6"
+        },
+        {
+          "path": "model-00002-of-00002.safetensors",
+          "url": "https://huggingface.co/Qwen/Qwen3-ASR-1.7B/resolve/7278e1e70fe206f11671096ffdd38061171dd6e5/model-00002-of-00002.safetensors",
+          "size": 478200688,
+          "sha256": "6e0b9d9e09e2e0238e7ef3cc8a484ab387e91b90f1900bedf88bc92d7929ccfc"
+        },
+        {
+          "path": "model.safetensors.index.json",
+          "url": "https://huggingface.co/Qwen/Qwen3-ASR-1.7B/resolve/7278e1e70fe206f11671096ffdd38061171dd6e5/model.safetensors.index.json",
+          "size": 64821,
+          "sha256": "f994739fe38e5210b9e3e8ce6c6307315e2ceac3cb630e7b7414d69dce520f60"
+        },
+        {
+          "path": "preprocessor_config.json",
+          "url": "https://huggingface.co/Qwen/Qwen3-ASR-1.7B/resolve/7278e1e70fe206f11671096ffdd38061171dd6e5/preprocessor_config.json",
+          "size": 330,
+          "sha256": "45e120a4eda2c20c5d7f2ea9354e63536bf35e27aa573fb7cdf78017b378770d"
+        },
+        {
+          "path": "tokenizer_config.json",
+          "url": "https://huggingface.co/Qwen/Qwen3-ASR-1.7B/resolve/7278e1e70fe206f11671096ffdd38061171dd6e5/tokenizer_config.json",
+          "size": 12487,
+          "sha256": "4942d005604266809309cabc9f4e9cb89ce855d59b14681fdc0e1cc62ea26c4c"
+        },
+        {
+          "path": "vocab.json",
+          "url": "https://huggingface.co/Qwen/Qwen3-ASR-1.7B/resolve/7278e1e70fe206f11671096ffdd38061171dd6e5/vocab.json",
+          "size": 2776833,
+          "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+        }
+      ]
+    },
+    {
+      "id": "parakeet",
+      "name": "Parakeet v3 (CPU)",
+      "repository": "istupakov/parakeet-tdt-0.6b-v3-onnx",
+      "revision": "8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce",
+      "files": [
+        {
+          "path": "config.json",
+          "url": "https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce/config.json",
+          "size": 97,
+          "sha256": "666903c76b9798caf2c210afd4f6cd60b08a8dbf9800ec8d7a3bc0d2148ac466"
+        },
+        {
+          "path": "decoder_joint-model.int8.onnx",
+          "url": "https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce/decoder_joint-model.int8.onnx",
+          "size": 18202004,
+          "sha256": "eea7483ee3d1a30375daedc8ed83e3960c91b098812127a0d99d1c8977667a70"
+        },
+        {
+          "path": "encoder-model.int8.onnx",
+          "url": "https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce/encoder-model.int8.onnx",
+          "size": 652183999,
+          "sha256": "6139d2fa7e1b086097b277c7149725edbab89cc7c7ae64b23c741be4055aff09"
+        },
+        {
+          "path": "vocab.txt",
+          "url": "https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce/vocab.txt",
+          "size": 93939,
+          "sha256": "d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d"
+        }
+      ]
+    },
+    {
+      "id": "parakeet-fp32",
+      "name": "Parakeet v3 (GPU)",
+      "repository": "istupakov/parakeet-tdt-0.6b-v3-onnx",
+      "revision": "8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce",
+      "files": [
+        {
+          "path": "config.json",
+          "url": "https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce/config.json",
+          "size": 97,
+          "sha256": "666903c76b9798caf2c210afd4f6cd60b08a8dbf9800ec8d7a3bc0d2148ac466"
+        },
+        {
+          "path": "decoder_joint-model.onnx",
+          "url": "https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce/decoder_joint-model.onnx",
+          "size": 72520893,
+          "sha256": "e978ddf6688527182c10fde2eb4b83068421648985ef23f7a86be732be8706c1"
+        },
+        {
+          "path": "encoder-model.onnx",
+          "url": "https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce/encoder-model.onnx",
+          "size": 41770866,
+          "sha256": "98a74b21b4cc0017c1e7030319a4a96f4a9506e50f0708f3a516d02a77c96bb1"
+        },
+        {
+          "path": "encoder-model.onnx.data",
+          "url": "https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce/encoder-model.onnx.data",
+          "size": 2435420160,
+          "sha256": "9a22d372c51455c34f13405da2520baefb7125bd16981397561423ed32d24f36"
+        },
+        {
+          "path": "vocab.txt",
+          "url": "https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx/resolve/8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce/vocab.txt",
+          "size": 93939,
+          "sha256": "d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d"
+        }
+      ]
+    },
+    {
+      "id": "whisper-turbo",
+      "name": "Whisper large-v3 turbo",
+      "repository": "deepdml/faster-whisper-large-v3-turbo-ct2",
+      "revision": "4df90f75321148c3a29a9e2351b7ddf8f5b115a8",
+      "files": [
+        {
+          "path": "config.json",
+          "url": "https://huggingface.co/deepdml/faster-whisper-large-v3-turbo-ct2/resolve/4df90f75321148c3a29a9e2351b7ddf8f5b115a8/config.json",
+          "size": 2263,
+          "sha256": "b0253ea6c0d3bea6b1e19e91a02acfd3b53f4467362efcb5a3e6b16c9b3a9b7e"
+        },
+        {
+          "path": "model.bin",
+          "url": "https://huggingface.co/deepdml/faster-whisper-large-v3-turbo-ct2/resolve/4df90f75321148c3a29a9e2351b7ddf8f5b115a8/model.bin",
+          "size": 1617884929,
+          "sha256": "e76620f83d5f5b69efd3d87e3dc180c1bd21df9fbebacfd4335e5e1efcc018da"
+        },
+        {
+          "path": "preprocessor_config.json",
+          "url": "https://huggingface.co/deepdml/faster-whisper-large-v3-turbo-ct2/resolve/4df90f75321148c3a29a9e2351b7ddf8f5b115a8/preprocessor_config.json",
+          "size": 340,
+          "sha256": "7ccc62c6f2765af1f3b46c00c9b5894426835a05021c8b9c01eecb6dfb542711"
+        },
+        {
+          "path": "tokenizer.json",
+          "url": "https://huggingface.co/deepdml/faster-whisper-large-v3-turbo-ct2/resolve/4df90f75321148c3a29a9e2351b7ddf8f5b115a8/tokenizer.json",
+          "size": 2710337,
+          "sha256": "297b13372ac43916285644fb9687add3cc62ee2a1adb60da3dc25cc94c1871fd"
+        },
+        {
+          "path": "vocabulary.json",
+          "url": "https://huggingface.co/deepdml/faster-whisper-large-v3-turbo-ct2/resolve/4df90f75321148c3a29a9e2351b7ddf8f5b115a8/vocabulary.json",
+          "size": 1068114,
+          "sha256": "c69260f2ab26d659b7c398f9a2b2b48ed0df16c3b47d7326782fd9cba71690c1"
+        }
+      ]
+    }
+  ]
+}

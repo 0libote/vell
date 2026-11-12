@@ -1,0 +1,555 @@
+'use strict';
+
+// The desktop side of the account: sign in with an emailed code, keep the
+// session token, and remember what the plan entitles this PC to.
+//
+// Everything network-facing goes through `fetchImpl` and everything secret
+// through `encrypt`/`decrypt`, so main.js hands in Electron's fetch and
+// safeStorage and the tests hand in fakes. The file on disk carries the token
+// only in its encrypted form.
+//
+// The plan the app acts on is the cached answer from the last successful
+// /v1/me, trusted for GRACE_MS after it was fetched. A laptop that has been
+// offline for a week is still Pro; one that has been offline for a month is
+// Free until it can ask again. Nothing here downgrades a user because a
+// request happened to fail.
+
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
+// The production account service. VOXDEN_ACCOUNT_URL in the environment
+// overrides it for a staging or local instance. Explicit selections are saved
+// separately from sign-in, so a restart before authentication keeps them.
+const DEFAULT_BASE_URL = 'https://account.voxden.app/v1';
+const GRACE_MS = 7 * 24 * 3600e3;
+const REFRESH_EVERY_MS = 6 * 3600e3;
+const REQUEST_TIMEOUT_MS = 15e3;
+
+function normalizeEmail(value) {
+  const email = String(value || '').trim().toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) && email.length <= 254 ? email : '';
+}
+
+function networkErrorCode(err) {
+  return (err && err.cause && err.cause.code) || (err && err.code) || '';
+}
+
+function normalizeServiceUrl(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    const local = ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname);
+    if (url.protocol !== 'https:' && !(url.protocol === 'http:' && local)) return '';
+    if (url.username || url.password || url.search || url.hash) return '';
+    return url.href.replace(/\/+$/, '');
+  } catch (_) { return ''; }
+}
+
+function friendlyNetworkError(err) {
+  const name = err && err.name;
+  if (name === 'AbortError' || name === 'TimeoutError') return 'The account service did not answer in time. Check your connection and try again.';
+  const code = networkErrorCode(err);
+  if (['ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED'].includes(code)) {
+    return "Could not reach Voxden's account service. Please try again in a moment.";
+  }
+  return 'Could not reach the account service. Check your connection and try again.';
+}
+
+class AccountManager {
+  constructor(options) {
+    const opts = options || {};
+    this.file = opts.file;
+    this.serviceFile = this.file ? path.join(path.dirname(this.file), 'account-service.json') : null;
+    // An explicit URL (env, tests, start:local-cloud) wins. Otherwise a
+    // previous successful session remembers which service issued the token,
+    // so `npm start` does not silently send a local Pro session to production.
+    this.explicitBaseUrl = opts.baseUrl != null && String(opts.baseUrl).trim() !== '';
+    this.baseUrl = this.explicitBaseUrl ? opts.baseUrl : DEFAULT_BASE_URL;
+    if (!normalizeServiceUrl(this.baseUrl)) throw new Error('Use HTTPS for the account service, or HTTP on localhost for local testing.');
+    this.baseUrl = normalizeServiceUrl(this.baseUrl);
+    this.fetch = opts.fetchImpl || globalThis.fetch;
+    this.encrypt = opts.encrypt || null;
+    this.decrypt = opts.decrypt || null;
+    this.now = opts.now || (() => Date.now());
+    this.graceMs = Number.isFinite(opts.graceMs) ? opts.graceMs : GRACE_MS;
+    this.device = String(opts.device || os.hostname() || 'Windows PC').slice(0, 120);
+    this.onChange = typeof opts.onChange === 'function' ? opts.onChange : () => {};
+    // What this PC has dictated in the free week it is inside, asked for at
+    // refresh time so the service can see how the cap lands. Counts only;
+    // main.js supplies it and returns null when there is nothing to say.
+    this.freeWords = typeof opts.freeWords === 'function' ? opts.freeWords : null;
+    this.state = { email: '', token: '', account: null, fetchedAt: 0 };
+    this.pendingEmail = '';
+    this.lastError = '';
+    this.busy = '';
+    this.tokenProtected = !!(this.encrypt && this.decrypt);
+    this.billing = null;
+    this.auth = null;
+    this.checkoutPending = null;
+    this.load();
+    if (this.explicitBaseUrl && this.serviceFile) {
+      try {
+        fs.mkdirSync(path.dirname(this.serviceFile), { recursive: true });
+        const tmp = this.serviceFile + '.tmp';
+        fs.writeFileSync(tmp, JSON.stringify({ baseUrl: this.baseUrl }, null, 2));
+        fs.renameSync(tmp, this.serviceFile);
+      } catch (_) {
+        this.lastError = 'Could not save your sign-in settings. Check available disk space and try again.';
+      }
+    }
+  }
+
+  load() {
+    if (!this.file) return;
+    let configured = '';
+    try { configured = normalizeServiceUrl(JSON.parse(fs.readFileSync(this.serviceFile, 'utf8')).baseUrl); } catch (_) {}
+    if (!this.explicitBaseUrl && configured) this.baseUrl = configured;
+    let raw = null;
+    try { raw = JSON.parse(fs.readFileSync(this.file, 'utf8')); } catch (_) { return; }
+    if (!raw || typeof raw !== 'object') return;
+    const sessionService = raw.baseUrl ? normalizeServiceUrl(raw.baseUrl) : DEFAULT_BASE_URL;
+    if (!sessionService) return;
+    if (!this.explicitBaseUrl && !configured) this.baseUrl = sessionService;
+    // A staging/local selection must never send a production session token to
+    // another service, or keep that other service's cached Pro entitlement.
+    if (sessionService !== this.baseUrl) return;
+    let token = '';
+    try {
+      if (raw.tokenCipher && this.decrypt) token = this.decrypt(Buffer.from(raw.tokenCipher, 'base64'));
+      else if (raw.tokenPlain && !this.decrypt) token = String(raw.tokenPlain);
+    } catch (_) {
+      // A token this PC can no longer decrypt is a token that is gone.
+      token = '';
+    }
+    this.state = {
+      email: normalizeEmail(raw.email),
+      token: token && this.state ? String(token) : '',
+      account: raw.account && typeof raw.account === 'object' ? raw.account : null,
+      fetchedAt: Number(raw.fetchedAt) || 0,
+    };
+    if (!this.state.token) this.state.account = null;
+  }
+
+  save() {
+    if (!this.file) return;
+    const out = {
+      email: this.state.email,
+      account: this.state.account,
+      fetchedAt: this.state.fetchedAt,
+      baseUrl: this.baseUrl,
+    };
+    if (this.state.token) {
+      if (this.encrypt) out.tokenCipher = Buffer.from(this.encrypt(this.state.token)).toString('base64');
+      else out.tokenPlain = this.state.token;
+    }
+    fs.mkdirSync(path.dirname(this.file), { recursive: true });
+    const tmp = this.file + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(out, null, 2));
+    fs.renameSync(tmp, this.file);
+  }
+
+  changed() {
+    try { this.onChange(this.snapshot()); } catch (_) {}
+  }
+
+  signedIn() {
+    return !!(this.state.token && this.state.email);
+  }
+
+  // What the app should act on right now.
+  snapshot() {
+    const t = this.now();
+    const account = this.state.account;
+    const age = account ? t - this.state.fetchedAt : Infinity;
+    const stale = this.signedIn() && (!account || age > this.graceMs);
+    let plan = 'free';
+    if (this.signedIn() && account && !stale) {
+      plan = String(account.plan || 'free');
+      if (plan !== 'free' && account.planExpiresAt && Date.parse(account.planExpiresAt) <= t) plan = 'free';
+    }
+    return {
+      signedIn: this.signedIn(),
+      email: this.state.email,
+      pendingEmail: this.pendingEmail,
+      plan,
+      planExpiresAt: plan === 'free' ? null : (account && account.planExpiresAt) || null,
+      // Which prices this account is shown, 'in' or 'global', as the service
+      // placed it; null until it has.
+      region: account && ['in', 'global'].includes(account.region) ? account.region : null,
+      cloud: plan === 'free' ? { hoursUsed: 0, hoursCap: 0, periodEnd: null } : (account && account.cloud) || null,
+      // The free plan's weekly word allowance, as the service last stated it.
+      // Not an entitlement that expires with the plan, so a stale cache still
+      // reports it; null means this PC has never been told, and src/quota.js
+      // falls back to its own figure.
+      freeWeeklyWords: account && Number(account.freeWeeklyWords) > 0 ? Math.round(Number(account.freeWeeklyWords)) : null,
+      // The one-time welcome offer as the service last stated it: the credits a
+      // subscriber's first month brings, the monthly figure after it, and
+      // whether this account can still have it. Null until it has been told.
+      welcomeOffer: account && account.welcomeOffer ? Object.assign({}, account.welcomeOffer) : null,
+      checkedAt: this.state.fetchedAt || 0,
+      stale,
+      busy: this.busy,
+      lastError: this.lastError,
+      tokenProtected: this.tokenProtected,
+      baseUrl: this.baseUrl,
+      billing: this.billing,
+      auth: this.auth || null,
+      profile: account && account.profile ? Object.assign({}, account.profile) : null,
+      checkoutPending: this.checkoutPending ? Object.assign({}, this.checkoutPending) : null,
+    };
+  }
+
+  async request(route, options) {
+    const opts = options || {};
+    const headers = { 'Content-Type': 'application/json' };
+    if (opts.auth && this.state.token) headers.Authorization = 'Bearer ' + this.state.token;
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS) : null;
+    let res;
+    try {
+      res = await this.fetch(this.baseUrl + route, {
+        method: opts.method || 'GET',
+        headers,
+        body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+        signal: controller ? controller.signal : undefined,
+      });
+    } catch (err) {
+      throw Object.assign(new Error(friendlyNetworkError(err), { cause: err }), { network: true, code: networkErrorCode(err) });
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+    let body = null;
+    if (res.status !== 204) {
+      try { body = await res.json(); } catch (_) { body = null; }
+    }
+    if (!res.ok) {
+      const message = body && body.error ? String(body.error) : 'The account service returned ' + res.status + '.';
+      throw Object.assign(new Error(message), { status: res.status });
+    }
+    return body || {};
+  }
+
+  async requestCode(email) {
+    const clean = normalizeEmail(email);
+    if (!clean) throw new Error('Enter a valid email address.');
+    this.busy = 'code';
+    this.lastError = '';
+    this.changed();
+    try {
+      await this.request('/auth/code', { method: 'POST', body: { email: clean } });
+      this.pendingEmail = clean;
+    } catch (err) {
+      this.lastError = err.message;
+      throw err;
+    } finally {
+      this.busy = '';
+      this.changed();
+    }
+  }
+
+  async verifyCode(email, code) {
+    const clean = normalizeEmail(email || this.pendingEmail);
+    const digits = String(code || '').replace(/\D/g, '');
+    if (!clean) throw new Error('Enter a valid email address.');
+    if (digits.length !== 6) throw new Error('Enter the six-digit code from the email.');
+    this.busy = 'verify';
+    this.lastError = '';
+    this.changed();
+    try {
+      const result = await this.request('/auth/verify', {
+        method: 'POST', body: { email: clean, code: digits, device: this.device },
+      });
+      if (!result.token) throw new Error('The account service did not return a session.');
+      this.state = {
+        email: clean, token: String(result.token),
+        account: result.account || null, fetchedAt: this.now(),
+      };
+      this.pendingEmail = '';
+      this.save();
+    } catch (err) {
+      this.lastError = err.message;
+      throw err;
+    } finally {
+      this.busy = '';
+      this.changed();
+    }
+  }
+
+  // Which sign-in routes the service offers besides the emailed code. A yes
+  // is kept; a no is asked again next time, since the service may have been
+  // given its Google client since.
+  async authOptions() {
+    if (this.auth && this.auth.google) return this.auth;
+    const result = await this.request('/auth/options');
+    const google = result && result.google && result.google.clientId ? String(result.google.clientId) : '';
+    this.auth = { google: !!google, googleClientId: google };
+    this.changed();
+    return this.auth;
+  }
+
+  // The tail of a Google sign-in: the code from the browser goes to the
+  // service, which trades it with Google and answers with the same session
+  // shape as a verified email code.
+  async signInWithGoogle(grant) {
+    const g = grant || {};
+    if (!g.code || !g.codeVerifier || !g.redirectUri) throw new Error('Google sign-in did not finish. Try again.');
+    this.busy = 'google';
+    this.lastError = '';
+    this.changed();
+    try {
+      const result = await this.request('/auth/google', {
+        method: 'POST', body: { code: g.code, codeVerifier: g.codeVerifier, redirectUri: g.redirectUri, device: this.device },
+      });
+      if (!result.token || !result.account || !result.account.email) throw new Error('The account service did not return a session.');
+      this.state = {
+        email: normalizeEmail(result.account.email), token: String(result.token),
+        account: result.account, fetchedAt: this.now(),
+      };
+      this.pendingEmail = '';
+      this.save();
+    } catch (err) {
+      this.lastError = err.message;
+      throw err;
+    } finally {
+      this.busy = '';
+      this.changed();
+    }
+  }
+
+  // Ask the service what this account is entitled to. A network failure keeps
+  // the cached answer; a 401 means the session is gone and the PC is signed
+  // out. Returns the snapshot either way, so callers never have to catch.
+  async refresh(options) {
+    const opts = options || {};
+    if (!this.signedIn()) return this.snapshot();
+    const age = this.now() - this.state.fetchedAt;
+    if (!opts.force && this.state.account && age < REFRESH_EVERY_MS) return this.snapshot();
+    this.busy = 'refresh';
+    this.changed();
+    try {
+      const result = await this.reportAndRead();
+      this.state.account = result.account || this.state.account;
+      this.state.fetchedAt = this.now();
+      this.lastError = '';
+      this.save();
+    } catch (err) {
+      if (err.status === 401) {
+        this.state = { email: '', token: '', account: null, fetchedAt: 0 };
+        this.lastError = 'You were signed out. Sign in again to keep your plan on this PC.';
+        this.save();
+      } else {
+        this.lastError = err.message;
+      }
+    } finally {
+      this.busy = '';
+      this.changed();
+    }
+    return this.snapshot();
+  }
+
+  // Ask /me, carrying this PC's free-word count when there is one. An older
+  // service has no POST /me and answers 404; that is not a failed refresh, so
+  // the plain GET runs instead and the figure is simply not recorded.
+  async reportAndRead() {
+    let report = null;
+    try { report = this.freeWords ? this.freeWords() : null; } catch (_) { report = null; }
+    if (!report) return this.request('/me', { auth: true });
+    try {
+      return await this.request('/me', { method: 'POST', auth: true, body: { freeWords: report } });
+    } catch (err) {
+      if (err.status !== 404) throw err;
+      return this.request('/me', { auth: true });
+    }
+  }
+
+  // A report from the Help menu. Signed in or not; the token, when there is
+  // one, lets the service attach the sender's account.
+  async sendFeedback(report) {
+    await this.request('/feedback', { method: 'POST', auth: true, body: report });
+  }
+
+  // The names on the account, as typed in the app.
+  async updateProfile(profile) {
+    if (!this.signedIn()) throw new Error('Sign in first.');
+    const p = profile || {};
+    this.busy = 'profile';
+    this.lastError = '';
+    this.changed();
+    try {
+      const result = await this.request('/me/profile', {
+        method: 'PUT', auth: true, body: { firstName: String(p.firstName || ''), lastName: String(p.lastName || '') },
+      });
+      if (result.account) {
+        this.state.account = result.account;
+        this.state.fetchedAt = this.now();
+        this.save();
+      }
+    } catch (err) {
+      this.lastError = err.message;
+      throw err;
+    } finally {
+      this.busy = '';
+      this.changed();
+    }
+    return this.snapshot();
+  }
+
+  // Delete the account on the service, then forget it here. Unlike sign-out,
+  // this must reach the service: a deletion that did not land is not done.
+  async deleteAccount() {
+    if (!this.signedIn()) throw new Error('Sign in first.');
+    this.busy = 'delete';
+    this.lastError = '';
+    this.changed();
+    try {
+      await this.request('/me', { method: 'DELETE', auth: true });
+    } catch (err) {
+      this.busy = '';
+      this.lastError = err.message;
+      this.changed();
+      throw err;
+    }
+    this.state = { email: '', token: '', account: null, fetchedAt: 0 };
+    this.pendingEmail = '';
+    this.billing = null;
+    this.lastError = '';
+    this.busy = '';
+    this.save();
+    this.changed();
+    return this.snapshot();
+  }
+
+  async signOut() {
+    const hadToken = !!this.state.token;
+    if (hadToken) {
+      this.busy = 'signout';
+      this.changed();
+      try {
+        await this.request('/auth/signout', { method: 'POST', auth: true });
+      } catch (_) {
+        // The token is forgotten here whether or not the service heard; a
+        // revocation that did not land expires on its own.
+      }
+    }
+    this.state = { email: '', token: '', account: null, fetchedAt: 0 };
+    this.pendingEmail = '';
+    this.lastError = '';
+    this.busy = '';
+    this.save();
+    this.changed();
+    return this.snapshot();
+  }
+
+  cancelPending() {
+    this.pendingEmail = '';
+    this.lastError = '';
+    this.changed();
+  }
+
+  // --- billing ------------------------------------------------------------
+  // The app never sees a card. Checkout is a URL the service creates and the
+  // system browser opens; the plan flips when the provider's webhook lands,
+  // and the app notices by refreshing /me while a checkout is pending.
+
+  async billingOptions() {
+    // Signed in, the service answers with this account's region's plans only,
+    // and with none, plus the reason, where Pro is not sold yet.
+    const result = await this.request('/billing/options', { auth: this.signedIn() });
+    this.billing = Object.assign({}, this.billing || {}, {
+      options: Array.isArray(result.options) ? result.options : [],
+      unavailable: typeof result.unavailable === 'string' ? result.unavailable : '',
+    });
+    this.changed();
+    return this.billing.options;
+  }
+
+  // `region` is the price region the offer was shown for. The service holds a
+  // placed account to its own region whatever this says.
+  async checkout(provider, plan, region) {
+    if (!this.signedIn()) throw new Error('Sign in first.');
+    this.busy = 'checkout';
+    this.lastError = '';
+    this.changed();
+    try {
+      const body = region ? { provider, plan, region } : { provider, plan };
+      const result = await this.request('/billing/checkout', { method: 'POST', auth: true, body });
+      if (!result.url) throw new Error('The payment page could not be opened.');
+      this.checkoutPending = { provider: result.provider, plan: result.plan, startedAt: this.now() };
+      return result.url;
+    } catch (err) {
+      this.lastError = err.message;
+      throw err;
+    } finally {
+      this.busy = '';
+      this.changed();
+    }
+  }
+
+  // What the service knows about the subscription behind the plan.
+  async billingStatus() {
+    if (!this.signedIn()) return null;
+    return this.applyBilling(await this.request('/billing', { auth: true }));
+  }
+
+  // Stop renewal. The service answers with the subscription as it now
+  // stands: paid through its period end, renewing no more.
+  async cancelSubscription() {
+    if (!this.signedIn()) throw new Error('Sign in first.');
+    this.busy = 'cancel';
+    this.lastError = '';
+    this.changed();
+    try {
+      return this.applyBilling(await this.request('/billing/cancel', { method: 'POST', auth: true }));
+    } finally {
+      this.busy = '';
+      this.changed();
+    }
+  }
+
+  applyBilling(result) {
+    this.billing = Object.assign({}, this.billing || {}, { subscription: result.subscription || null });
+    if (result.account) {
+      this.state.account = result.account;
+      this.state.fetchedAt = this.now();
+      this.save();
+    }
+    this.changed();
+    return this.billing.subscription;
+  }
+
+  // A pending checkout ends when the plan turns Pro or after twenty minutes.
+  checkoutSettled() {
+    if (!this.checkoutPending) return true;
+    const snap = this.snapshot();
+    if (snap.plan === 'pro' || this.now() - this.checkoutPending.startedAt > 20 * 60e3) {
+      this.checkoutPending = null;
+      this.changed();
+      return true;
+    }
+    return false;
+  }
+
+  // The raw session token, for the one caller that speaks to the relay on
+  // this account's behalf. Main-process only; it never crosses to a renderer.
+  token() {
+    return this.state.token || '';
+  }
+
+  // The relay answers every clip with the running total, which is fresher
+  // than the last /me. Fold it into the cache so the panel and the next
+  // should-try-cloud decision see it without another round trip.
+  noteCloudUsage(cloud) {
+    if (!cloud || !this.state.account) return;
+    const previous = this.state.account.cloud || {};
+    // Concurrent section responses can arrive out of order. Do not roll the
+    // meter backwards within the same allowance, or back into an older month.
+    if (Date.parse(previous.periodEnd) > Date.parse(cloud.periodEnd)) return;
+    if (previous.periodEnd === cloud.periodEnd && previous.reset === cloud.reset
+        && previous.creditsCap === cloud.creditsCap && previous.creditsUsed > cloud.creditsUsed) return;
+    this.state.account = Object.assign({}, this.state.account, { cloud: Object.assign({}, this.state.account.cloud || {}, cloud) });
+    try { this.save(); } catch (_) {}
+    this.changed();
+  }
+}
+
+module.exports = { AccountManager, normalizeEmail, normalizeServiceUrl, DEFAULT_BASE_URL, GRACE_MS, REFRESH_EVERY_MS };

@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" role="img" aria-label="Voxden">
+  <defs>
+    <!-- colours: left arm and bowl (front ribbon), right arm (behind it), fold shade, speed bars -->
+    <linearGradient id="left-arm" gradientUnits="userSpaceOnUse" x1="25.86" y1="8.42" x2="13.27" y2="40.36">
+      <stop offset="0" stop-color="#7cdebf"/>
+      <stop offset="0.25" stop-color="#9ffcd1"/>
+      <stop offset="0.5" stop-color="#8df7ca"/>
+      <stop offset="0.75" stop-color="#a1ffd2"/>
+      <stop offset="1" stop-color="#97ffd3"/>
+    </linearGradient>
+    <radialGradient id="bowl-shade" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="1" gradientTransform="translate(23.23 34.78) rotate(18.72) scale(21.2 8.93)">
+      <stop offset="0" stop-color="#00bf9e" stop-opacity="0.38"/>
+      <stop offset="0.393" stop-color="#00bf9e" stop-opacity="0.19"/>
+      <stop offset="1" stop-color="#00bf9e" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="right-arm" gradientUnits="userSpaceOnUse" x1="21.17" y1="12.37" x2="42.18" y2="30">
+      <stop offset="0" stop-color="#7cffbf"/>
+      <stop offset="0.333" stop-color="#7eefc4"/>
+      <stop offset="0.667" stop-color="#66e2b8"/>
+      <stop offset="1" stop-color="#aaeed5"/>
+    </linearGradient>
+    <linearGradient id="fold-shade" gradientUnits="userSpaceOnUse" x1="24.21" y1="30.99" x2="30.84" y2="24.07">
+      <stop offset="0" stop-color="#00543a" stop-opacity="0.84"/>
+      <stop offset="0.618" stop-color="#0b9f7e" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#0b9f7e" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="bars" x2="0" y2="1">
+      <stop offset="0" stop-color="#c7fce3"/>
+      <stop offset="0.5" stop-color="#98fbd0"/>
+      <stop offset="1" stop-color="#8ffbce"/>
+    </linearGradient>
+    <!-- light along the edges of each ribbon, inside the fill; it scales with the ribbon brightness, so it fades in the fold shade -->
+    <filter id="edge-light" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="1.029"/>
+      <feComposite in="SourceAlpha" operator="arithmetic" k2="1" k3="-1"/>
+      <feComponentTransfer result="edge"><feFuncA type="table" tableValues="0 .5 .5"/></feComponentTransfer>
+      <feColorMatrix in="SourceGraphic" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  .3 .59 .11 0 0"/>
+      <feComposite in="edge" operator="arithmetic" k1="0.591" result="light"/>
+      <feFlood flood-color="#ffff72"/>
+      <feComposite in2="light" operator="in"/>
+      <feComposite in2="SourceAlpha" operator="in"/>
+      <feComposite in="SourceGraphic" operator="arithmetic" k2="1" k3="1"/>
+    </filter>
+    <!-- soft mint glow behind the whole mark -->
+    <filter id="glow" filterUnits="userSpaceOnUse" x="0" y="0" width="48" height="48" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="0.545" result="near"/>
+      <feGaussianBlur in="SourceAlpha" stdDeviation="1.665" result="far"/>
+      <feComposite in="near" in2="far" operator="arithmetic" k2="0.3" k3="0.235" result="halo"/>
+      <feFlood flood-color="#1dff80"/>
+      <feComposite in2="halo" operator="in"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <g filter="url(#glow)">
+    <!-- right arm: runs behind the left arm; teal shade where it folds under -->
+    <g filter="url(#edge-light)">
+      <path fill="url(#right-arm)" d="M21.93 29.54 L31.69 10 C32.45 8.48 34.16 7.6 35.53 7.47 C34.17 10.46 32.37 14.51 32.53 16.25 C32.67 17.89 33.66 18.6 35.17 18.39 L40.11 17.7 L31.76 34.77 L27.14 37.02 Z"/>
+      <path fill="url(#fold-shade)" d="M21.93 29.54 L26.75 19.89 L35.12 27.9 L31.76 34.77 L27.14 37.02 Z"/>
+    </g>
+    <!-- left arm and bowl, in front; the second copy deepens the middle of the bowl -->
+    <g filter="url(#edge-light)">
+      <g fill="url(#left-arm)"><path id="left-ribbon" d="M6.04 7.23 L10.69 7.23 C12.64 7.23 14.12 7.99 15.35 10.65 L20.02 20.8 C23.15 27.58 24.16 32.66 27.03 33.91 C30.26 35.31 32.1 33.2 33.66 30.9 L31.76 34.77 C29.41 39.59 27.14 41.52 22.94 41.58 C18.6 41.65 16.28 39.07 14.87 36.03 L3.24 10.97 C2.25 8.85 4.45 7.23 6.04 7.23 Z"/></g>
+      <use href="#left-ribbon" fill="url(#bowl-shade)"/>
+    </g>
+    <!-- speed bars -->
+    <g fill="url(#bars)">
+      <rect x="-4.59" y="-1.17" width="9.17" height="2.34" rx="1.17" transform="translate(40.41 8.05) rotate(-7.92) skewX(-12.07)"/>
+      <rect x="-4.41" y="-1.1" width="8.83" height="2.19" rx="1.1" transform="translate(38.87 12.08) rotate(-8.35) skewX(-10.37)"/>
+      <rect x="-3.32" y="-1.03" width="6.64" height="2.05" rx="1.03" transform="translate(36.77 15.92) rotate(-8.75) skewX(-7.93)"/>
+    </g>
+  </g>
+</svg>

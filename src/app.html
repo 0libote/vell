@@ -1,0 +1,1838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Voxden</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none';">
+  <script src="flow-motion.js"></script>
+  <script src="app-theme.js"></script>
+  <link rel="stylesheet" href="app.css" />
+  <link rel="stylesheet" href="refinement.css" />
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="billing.css" />
+  <link rel="stylesheet" href="onboarding.css" />
+  <link rel="stylesheet" href="signin.css" />
+  <link rel="stylesheet" href="writing-preview.css" />
+  <link rel="stylesheet" href="polish.css" />
+  <link rel="stylesheet" href="app-theme.css" />
+  <link rel="stylesheet" href="island-shell.css" />
+  <link rel="stylesheet" href="dictation-island.css" />
+  <link rel="stylesheet" href="app-toast.css" />
+</head>
+<body class="voxden-app">
+  <header class="titlebar">
+    <span class="brand-lockup" aria-label="Voxden">
+      <img class="logo" src="../assets/logo-mark.png" width="28" height="28" alt="" aria-hidden="true" />
+      <span class="brand">Voxden</span>
+    </span>
+
+    <nav class="island" id="island" aria-label="Sections">
+      <button type="button" class="island-link is-active" id="nav-dictation" data-view="dictation" aria-current="page" title="Dictation">
+        <svg class="island-icon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+          <rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.75"/>
+          <path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M5.75 11.5a6.25 6.25 0 0 0 12.5 0M12 17.75V21M9.25 21h5.5"/>
+        </svg>
+        <span class="island-label">Dictation</span>
+      </button>
+      <button type="button" class="island-link" id="nav-dictionary" data-view="dictionary" title="Dictionary">
+        <svg class="island-icon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+          <path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M5 4.75A2.75 2.75 0 0 1 7.75 2H19v17.5H7.75A2.75 2.75 0 0 0 5 22.25V4.75Z"/>
+          <path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M5 19.5a2.75 2.75 0 0 1 2.75-2.75H19M9 7h6M9 10.5h4.5"/>
+        </svg>
+        <span class="island-label">Dictionary</span>
+      </button>
+      <button type="button" class="island-link" id="nav-writing-style" data-view="writing-style" title="Writing style">
+        <svg class="island-icon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+          <path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="m4 20 4.25-1 10.2-10.2a2.12 2.12 0 0 0-3-3L5.25 16 4 20Zm10-12.75 3 3M8.25 19l-3-3"/>
+        </svg>
+        <span class="island-label">Writing style</span>
+      </button>
+      <button type="button" class="island-link" id="nav-polish" data-view="polish" title="Polish">
+        <svg class="island-icon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+          <path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" d="M10 3.5c.7 3.7 2.3 5.3 6 6-3.7.7-5.3 2.3-6 6-.7-3.7-2.3-5.3-6-6 3.7-.7 5.3-2.3 6-6Z"/>
+          <path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" d="M18 14.25c.35 1.75 1.05 2.45 2.75 2.75-1.7.35-2.4 1.05-2.75 2.75-.35-1.7-1.05-2.4-2.75-2.75 1.7-.3 2.4-1 2.75-2.75Z"/>
+        </svg>
+        <span class="island-label">Polish</span>
+        <span class="nav-pro" aria-label="Pro">PRO</span>
+      </button>
+      <button type="button" class="island-link" id="nav-insights" data-view="insights" title="Insights">
+        <svg class="island-icon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+          <path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M4 19V5m0 14h16M7.5 15l3.3-3.5 2.8 2.35L18.5 8"/>
+          <circle fill="currentColor" cx="18.5" cy="8" r="1.5"/>
+        </svg>
+        <span class="island-label">Insights</span>
+      </button>
+      <span class="island-rule" aria-hidden="true"></span>
+      <button type="button" class="island-cloud" id="island-credits" hidden title="Cloud credits">
+        <svg class="island-ring" viewBox="0 0 15 15" width="15" height="15" aria-hidden="true">
+          <circle class="island-ring-track" cx="7.5" cy="7.5" r="6.4"/>
+          <circle class="island-ring-arc" cx="7.5" cy="7.5" r="6.4"/>
+        </svg>
+        <span class="island-cloud-text"><strong id="island-credits-count">0 h</strong> <span id="island-credits-kicker">cloud</span></span>
+      </button>
+      <button type="button" class="island-pro" id="island-pro" hidden title="Upgrade to Pro">Go Pro</button>
+    </nav>
+
+    <div class="titlebar-end">
+      <button type="button" class="titlebar-btn" id="nav-settings" title="Settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+          <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.7"/>
+          <path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.57V21a2 2 0 0 1-4 0v-.07a1.7 1.7 0 0 0-1.04-1.57 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15 1.7 1.7 0 0 0 3.07 14H3a2 2 0 0 1 0-4h.07A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6 1.7 1.7 0 0 0 10 3.07V3a2 2 0 0 1 4 0v.07A1.7 1.7 0 0 0 15 4.6a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9 1.7 1.7 0 0 0 20.93 10H21a2 2 0 0 1 0 4h-.07A1.7 1.7 0 0 0 19.4 15Z"/>
+        </svg>
+      </button>
+      <button type="button" class="titlebar-btn" id="nav-help" data-view="help" title="Help" aria-label="Help" aria-haspopup="menu" aria-expanded="false" aria-controls="help-menu">
+        <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.7"/>
+          <path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" d="M9.4 9.2a2.7 2.7 0 0 1 5.2.9c0 1.8-2.6 2.3-2.6 3.9"/>
+          <path fill="currentColor" d="M12 16.4a1.05 1.05 0 1 1 0 2.1 1.05 1.05 0 0 1 0-2.1Z"/>
+        </svg>
+      </button>
+      <button type="button" class="notif-btn titlebar-btn" id="notif-btn" title="Notifications" aria-label="Notifications" aria-expanded="false" aria-controls="notif-panel">
+        <span class="notif-bell" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="17" height="17">
+            <path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" d="M18 9.5a6 6 0 1 0-12 0c0 4.1-1.4 5.3-1.9 5.9a.9.9 0 0 0 .7 1.5h14.4a.9.9 0 0 0 .7-1.5c-.5-.6-1.9-1.8-1.9-5.9Z"/>
+            <path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" d="M10.1 19.6a2.2 2.2 0 0 0 3.8 0"/>
+          </svg>
+        </span>
+        <span class="notif-badge" id="notif-badge" aria-hidden="true" hidden></span>
+      </button>
+      <button type="button" class="account-btn" id="account-btn" hidden aria-haspopup="menu" aria-expanded="false" aria-controls="account-menu" title="Your account">
+        <img class="account-btn-img" id="account-btn-img" alt="" hidden>
+        <span class="account-btn-initials" id="account-btn-initials">?</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Anchored to the window rather than to the bell: the title bar reserves
+       room on its right for the Windows caption buttons, so a panel aligned to
+       the bell would sit that whole gap away from the edge it belongs to. -->
+  <div class="notif-panel" id="notif-panel" role="dialog" aria-label="Notifications" hidden>
+    <div class="notif-head">
+      <h2 class="notif-title">Notifications</h2>
+      <button type="button" class="notif-clear" id="notif-clear" hidden>Clear all</button>
+    </div>
+    <div class="notif-scroll">
+      <ul class="notif-list" id="notif-list"></ul>
+      <div class="notif-empty" id="notif-empty" hidden>
+        <div class="notif-mascot" aria-hidden="true">
+          <span class="notif-mascot-glow"></span>
+          <span class="notif-mascot-face">
+            <i class="notif-mascot-band"></i>
+            <i class="notif-mascot-cup is-left"></i>
+            <i class="notif-mascot-cup is-right"></i>
+            <span class="notif-mascot-eye"><i></i></span>
+            <span class="notif-mascot-eye"><i></i></span>
+          </span>
+          <span class="notif-mascot-bars"><i></i><i></i><i></i></span>
+        </div>
+        <p class="notif-empty-title">You're all caught up</p>
+        <p class="notif-empty-copy">We'll ping you when something new lands — a new engine, a new language model, or an update worth having.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="shell">
+    <main>
+      <section id="view-dictation" class="pane" data-view="dictation">
+        <div class="pane-body dictation-page">
+          <div class="dictation-main">
+            <div class="dictation-top">
+              <div class="dictation-hello">
+                <h1 class="hero-greeting">
+                  <span class="greeting-icon" id="greeting-icon" aria-hidden="true"></span>
+                  <span class="hero-salute" id="greeting-salute" hidden>Good morning,</span>
+                  <span class="hero-name" id="greeting-name"></span>
+                </h1>
+                <button type="button" class="shortcut-launch" id="home-shortcut" title="View and change dictation shortcuts"><span id="home-shortcut-keys"></span><span>to dictate anywhere</span></button>
+              </div>
+              <!-- Always open: a pill, not a button that grows into a field. -->
+              <label class="dictation-search" id="dictation-search" for="search">
+                <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+                  <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/>
+                  <path d="M20 20l-3.6-3.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
+                <input id="search" class="dictation-search-input" type="search" placeholder="Search dictations" spellcheck="false" autocomplete="off" aria-label="Search dictations" />
+                <span class="dictation-search-count" id="search-count" role="status"></span>
+                <button type="button" class="dictation-search-clear" id="search-clear" title="Clear search" aria-label="Clear search" hidden>
+                  <svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>
+                </button>
+              </label>
+            </div>
+            <div class="engine-banner" id="engine-banner" role="status" hidden>
+              <span class="engine-banner-icon" aria-hidden="true">
+                <svg viewBox="0 0 16 16" width="14" height="14">
+                  <path d="M8 1.6l6.4 11.2H1.6z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+                  <path d="M8 6.3v3.1M8 11.3v.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+              </span>
+              <div class="engine-banner-body">
+                <span class="engine-banner-text" id="engine-banner-text"></span>
+                <div class="engine-banner-progress" id="engine-banner-progress" hidden>
+                  <div class="engine-banner-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                    <div class="engine-banner-fill" id="engine-banner-fill"></div>
+                  </div>
+                  <span class="engine-banner-pct" id="engine-banner-pct"></span>
+                </div>
+              </div>
+              <button type="button" class="engine-banner-btn" id="engine-banner-btn" hidden></button>
+            </div>
+            <!-- The only part of the page that scrolls. Day headers stick to its
+                 top, and the bottom edge fades out. -->
+            <section class="dictation-feed" id="dictation-feed" aria-label="Dictations">
+              <!-- Dictations that never became text. Above the feed because
+                   they are the only cards that need the user to act. -->
+              <div id="recoveries" class="recoveries" hidden></div>
+              <p id="empty" class="empty" hidden></p>
+              <div id="groups"></div>
+              <p class="feed-foot" id="feed-foot" hidden><span id="statNotes">0</span> dictations<span aria-hidden="true"> · </span><span id="statWords">0</span> words, all time</p>
+            </section>
+          </div>
+
+          <aside class="dictation-aside" aria-label="Your words">
+            <section class="words-card" aria-label="Words today and this week">
+              <div class="words-row">
+                <h2>Today</h2>
+                <span class="words-weekday" id="words-weekday"></span>
+              </div>
+              <div class="words-today">
+                <span class="words-num" id="words-today">0</span>
+                <span class="words-unit" id="words-today-unit">words</span>
+              </div>
+              <p class="words-sub" id="words-today-sub">Nothing dictated yet today</p>
+              <div class="words-rule" aria-hidden="true"></div>
+              <div class="words-row">
+                <h2>This week</h2>
+                <span class="words-week"><span id="statWeek">0</span> <span class="words-week-unit">words</span></span>
+              </div>
+              <div class="week-bars" id="week-bars" role="img" aria-label="Words per day this week"></div>
+              <p class="words-saved" id="words-saved"></p>
+            </section>
+            <div class="voice-card" id="voice-understanding" role="button" tabindex="0" aria-label="Voice profile. Open Your voice insights">
+              <span class="voice-ring" aria-hidden="true">
+                <svg viewBox="0 0 42 42">
+                  <circle class="voice-ring-track" cx="21" cy="21" r="19" />
+                  <circle class="voice-ring-progress" id="vu-ring-progress" cx="21" cy="21" r="19" />
+                </svg>
+                <strong class="voice-pct" id="vu-pct">0%</strong>
+              </span>
+              <span class="voice-copy">
+                <span class="voice-name" id="vu-profile">Learning</span>
+                <span class="voice-meta"><span id="vu-meta">2,500 words until Personalized</span><span class="voice-gain" id="vu-gain" hidden></span></span>
+              </span>
+              <svg class="voice-chev" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="m9.5 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section id="view-dictionary" class="pane" data-view="dictionary" hidden>
+        <div class="pane-body dict-pane">
+          <div class="dict-head">
+            <div class="premium-heading">
+              <p class="premium-kicker">Personal vocabulary</p>
+              <h1 class="premium-title">Dictionary</h1>
+              <p class="page-description">Your names, your words. Always spelled your way.</p>
+            </div>
+            <button type="button" class="btn-primary" id="dict-add-new"><span aria-hidden="true">＋</span> Add a word</button>
+          </div>
+
+          <div class="vocab-overview" aria-label="Vocabulary overview">
+            <div class="vocab-overview-copy"><h2>Always spelled your way.</h2><p id="vocab-overview-line">Fix a word once. Voxden remembers.</p></div>
+            <!-- A learned correction happening: the heard form is struck out and
+                 the corrected form slides in. app.js cycles the user's own. -->
+            <div class="vocab-fix is-fixed" id="vocab-fix" role="img" aria-label="vox den becomes Voxden">
+              <span class="vocab-fix-from" id="vocab-fix-from" aria-hidden="true">vox den</span>
+              <span class="vocab-fix-arrow" aria-hidden="true">→</span>
+              <span class="vocab-fix-to" id="vocab-fix-to" aria-hidden="true">Voxden</span>
+            </div>
+            <div class="vocab-count"><strong id="dict-total-count">0</strong><span>saved words</span></div>
+            <div class="vocab-count"><strong id="dict-learned-count">0</strong><span>learned from you</span></div>
+          </div>
+          <div class="dict-toolbar">
+            <div class="segmented dict-tabs" role="tablist" aria-label="Dictionary filter">
+              <button type="button" class="segmented-btn active" id="dict-tab-all" data-dict-tab="all" role="tab" aria-selected="true">All</button>
+              <button type="button" class="segmented-btn" id="dict-tab-added" data-dict-tab="added" role="tab" aria-selected="false">Added</button>
+              <button type="button" class="segmented-btn" id="dict-tab-learned" data-dict-tab="learned" role="tab" aria-selected="false">Learned</button>
+            </div>
+            <div class="round-search" id="dictionary-search">
+              <button type="button" class="round-search-toggle" id="dict-search-toggle" title="Search your words" aria-label="Search your words" aria-expanded="false" aria-controls="dict-search-field">
+                <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                  <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/>
+                  <path d="M20 20l-3.6-3.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </button>
+              <label class="round-search-field" id="dict-search-field" for="dict-search" hidden>
+                <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                  <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/>
+                  <path d="M20 20l-3.6-3.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                <input id="dict-search" class="round-search-input" type="search" placeholder="Search" spellcheck="false" aria-label="Search dictionary" />
+                <span class="round-search-count" id="dict-search-count" role="status"></span>
+                <button type="button" class="round-search-close" id="dict-search-close" title="Close search" aria-label="Close search">
+                  <svg viewBox="0 0 16 16" width="9" height="9" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                </button>
+              </label>
+            </div>
+          </div>
+
+          <section id="dict-pending" class="dict-pending" hidden aria-labelledby="dict-pending-title">
+            <div class="dict-pending-head">
+              <span class="dict-pending-title" id="dict-pending-title">Suggested corrections</span>
+              <span class="dict-pending-hint">From transcripts you edited. Each one becomes a permanent find-and-replace across every future dictation, so nothing is added until you accept it.</span>
+            </div>
+            <div id="dict-pending-list" class="dict-pending-list"></div>
+          </section>
+          <p id="dict-empty" class="empty dict-empty" hidden>No dictionary entries yet. Add a word you want Voxden to recognize.</p>
+          <p id="dict-no-match" class="empty dict-empty" hidden>No entries match this filter.</p>
+          <div id="dict-list" class="dict-list"></div>
+          <p class="list-caption" id="dict-result-count" role="status"></p>
+          <p id="dict-variants" class="dict-variants" hidden></p>
+        </div>
+      </section>
+
+      <section id="view-writing-style" class="pane" data-view="writing-style" hidden>
+        <div class="pane-body writing-style-pane">
+          <header class="premium-heading premium-heading-spaced">
+            <p class="premium-kicker">Tone and voice</p>
+            <h1 class="premium-title">Writing style</h1>
+            <p class="page-description">Sound like yourself. In every conversation.</p>
+          </header>
+          <section class="style-preview" aria-labelledby="style-preview-title" data-tone="casual">
+            <div class="writing-preview-toolbar">
+              <span class="writing-context-label">Writing for</span>
+              <div class="preview-categories" role="group" aria-label="Writing context">
+                <button type="button" data-preview-cat="personal" aria-pressed="false">Personal</button>
+                <button type="button" data-preview-cat="work" aria-pressed="true" class="is-active">Work</button>
+                <button type="button" data-preview-cat="email" aria-pressed="false">Email</button>
+                <button type="button" data-preview-cat="other" aria-pressed="false">Other</button>
+              </div>
+            </div>
+            <div class="writing-preview-body">
+              <div class="writing-tone-panel">
+                <span class="writing-eyebrow">THE SAME WORDS. A NEW FEEL.</span>
+                <h2 id="style-preview-title">A little more <em>you.</em></h2>
+                <p class="writing-preview-intro">From a thoughtful email to a quick hello. <br>Find the tone that feels right.</p>
+                <div class="preview-tones" role="group" aria-label="Writing tone for the selected context">
+                  <button type="button" data-preview-tone="formal" aria-pressed="false"><span class="writing-tone-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="2"/><path d="m5 7 7 6 7-6"/></svg></span><span class="writing-tone-copy"><span class="tone-name">Formal</span><span class="tone-description">Considered. Clear. Professional.</span></span><span class="writing-tone-check" aria-hidden="true"></span></button>
+                  <button type="button" data-preview-tone="casual" aria-pressed="true"><span class="writing-tone-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 18 4 21V7a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3Z"/><path d="M8 9h8M8 13h5"/></svg></span><span class="writing-tone-copy"><span class="tone-name">Casual</span><span class="tone-description">Warm, natural, and everyday.</span></span><span class="writing-tone-check" aria-hidden="true"></span></button>
+                  <button type="button" data-preview-tone="veryCasual" aria-pressed="false"><span class="writing-tone-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M8 14s1 3 4 3 4-3 4-3M8 9h.01M15 9l2 1-2 1"/></svg></span><span class="writing-tone-copy"><span class="tone-name">Very casual</span><span class="tone-description">Like a message to a friend.</span></span><span class="writing-tone-check" aria-hidden="true"></span></button>
+                </div>
+              </div>
+              <div class="writing-scene" id="writing-scene">
+                <svg class="writing-orbit" viewBox="0 0 420 340" fill="none" aria-hidden="true">
+                  <ellipse cx="211" cy="172" rx="186" ry="139" transform="rotate(-18 211 172)"/>
+                  <path class="writing-orbit-trail" d="M31 212c-27-45 6-82 31-65s-29 67-21 96 47 47 83 45M342 57c35-5 45 19 25 28s-37-6-24-26 37-20 49-6"/>
+                  <path class="writing-orbit-spark" d="M349 231v16m-8-8h16M84 65v10m-5-5h10"/>
+                  <circle cx="297" cy="31" r="3"/><circle cx="92" cy="285" r="3"/>
+                </svg>
+                <div class="writing-note-stack" aria-hidden="true"></div>
+                <div class="writing-note" id="writing-note">
+                  <div class="writing-note-head"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4M8 6v12M12 3v18M16 7v10M20 10v4"/></svg><span>Your voice, in words</span><span class="writing-note-dot"></span></div>
+                  <p id="style-preview-output" role="status" aria-live="polite" aria-atomic="true" tabindex="0"></p>
+                  <div class="writing-note-foot"><span id="style-preview-tone">Casual</span><span class="writing-note-signature" aria-hidden="true">yours, naturally</span></div>
+                </div>
+                <div class="writing-companion" aria-hidden="true">
+                  <svg viewBox="0 0 84 84"><path class="writing-companion-shape" d="M42 5c7 0 9 6 14 8s11 0 15 5 1 10 4 15 5 8 3 14-8 8-10 13-2 11-8 13-10-2-16-1-9 6-15 3-6-9-10-13-10-4-12-10 2-10 2-16-4-10 0-15 10-4 15-7S35 5 42 5Z"/><g class="writing-companion-face"><path class="writing-eye" d="M29 34v5M52 34v5"/><path class="writing-smile" d="M31 48q11 13 22-1"/><path class="writing-wink" d="m49 34 7 3-7 3"/><path class="writing-glasses" d="M22 32h16v11H22zm24 0h16v11H46zM38 36h8"/></g></svg>
+                </div>
+                <span class="writing-scene-caption" id="writing-scene-caption">A little warmth goes a long way.</span>
+              </div>
+            </div>
+          </section>
+          <div class="writing-section-heading"><h2>Your preferences</h2><span>Saved automatically</span></div>
+          <!-- One quiet list: a row per preference, hairlines between them. -->
+          <section class="prefs-list" id="writing-prefs" aria-label="Your preferences">
+            <div class="prefs-row">
+              <div class="setting-copy">
+                <span class="setting-label" id="verbatim-title">Verbatim mode</span>
+                <span class="setting-hint" id="verbatim-hint">Your exact words. No cleanup, commands or tone.</span>
+              </div>
+              <label class="toggle" title="Paste the exact words you said">
+                <input type="checkbox" id="set-verbatim" aria-labelledby="verbatim-title" aria-describedby="verbatim-hint" />
+                <span class="toggle-track" aria-hidden="true"></span>
+              </label>
+            </div>
+            <label class="verbatim-sub" id="verbatim-dict-row" hidden>
+              <input type="checkbox" id="set-verbatim-dictionary" />
+              <span class="verbatim-sub-copy">
+                <span class="verbatim-sub-label">Still apply my dictionary</span>
+                <span class="verbatim-sub-hint">Keeps fixes like “sea dance” → “Seedance”.</span>
+              </span>
+            </label>
+            <div class="prefs-row" id="auto-cleanup-card">
+              <div class="setting-copy">
+                <span class="setting-label" id="auto-cleanup-title">Auto cleanup</span>
+                <span class="setting-hint" id="auto-cleanup-hint">Fixes grammar and punctuation, keeps your wording.</span>
+                <span class="setting-hint" id="auto-cleanup-status" role="status"></span>
+              </div>
+              <label class="toggle" title="Automatically clean up common grammar and punctuation mistakes">
+                <input type="checkbox" id="set-auto-cleanup" aria-labelledby="auto-cleanup-title" aria-describedby="auto-cleanup-hint auto-cleanup-status" />
+                <span class="toggle-track" aria-hidden="true"></span>
+              </label>
+            </div>
+            <div class="prefs-row" id="spoken-corrections-card" hidden>
+              <div class="setting-copy">
+                <span class="setting-label" id="spoken-corrections-title">Spoken corrections</span>
+                <span class="setting-hint" id="spoken-corrections-hint">Change your mind mid-sentence. “At 3, no, 4” types “At 4”.</span>
+                <span class="setting-hint" id="spoken-corrections-status" role="status"></span>
+              </div>
+              <label class="toggle" title="Remove the words you take back with “no” or “sorry”">
+                <input type="checkbox" id="set-spoken-corrections" aria-labelledby="spoken-corrections-title" aria-describedby="spoken-corrections-hint spoken-corrections-status" />
+                <span class="toggle-track" aria-hidden="true"></span>
+              </label>
+            </div>
+            <div class="prefs-row">
+              <div class="setting-copy">
+                <span class="setting-label" id="numbers-title">Write numbers as digits</span>
+                <span class="setting-hint" id="numbers-hint">twenty five becomes 25.</span>
+              </div>
+              <label class="toggle" title="Write spoken numbers as figures">
+                <input type="checkbox" id="set-numbers-digits" aria-labelledby="numbers-title" aria-describedby="numbers-hint" />
+                <span class="toggle-track" aria-hidden="true"></span>
+              </label>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="view-polish" class="pane" data-view="polish" hidden>
+        <div class="pane-body polish-pane" id="polish-page">
+          <header class="polish-head">
+            <div class="polish-head-copy">
+              <p class="polish-kicker"><svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M10 3.5c.7 3.7 2.3 5.3 6 6-3.7.7-5.3 2.3-6 6-.7-3.7-2.3-5.3-6-6 3.7-.7 5.3-2.3 6-6Z"/></svg>PRO · WRITING</p>
+              <h1 class="polish-title">Polish</h1>
+              <p class="polish-desc">Say it however it comes out. Send it the way it should read.</p>
+            </div>
+            <p class="polish-credits" id="polish-balance" role="status" hidden>
+              <svg class="polish-ring" viewBox="0 0 15 15" width="16" height="16" aria-hidden="true">
+                <circle class="polish-ring-track" cx="7.5" cy="7.5" r="6.4" fill="none" stroke-width="2.2"/>
+                <circle class="polish-ring-fill" cx="7.5" cy="7.5" r="6.4" fill="none" stroke-width="2.2" stroke-linecap="round"/>
+              </svg>
+              <span><b id="polish-balance-num"></b> <span id="polish-balance-unit">credits</span></span>
+              <span class="polish-credits-rate" id="polish-rate"></span>
+            </p>
+          </header>
+          <section class="polish-studio" id="polish-studio" aria-label="Polish" data-state="idle">
+            <div class="polish-toolbar">
+              <span class="polish-toolbar-label">Start from</span>
+              <div class="polish-recents" id="polish-recents" role="group" aria-label="Recent dictations"></div>
+            </div>
+            <div class="polish-body">
+              <div class="polish-draft" id="polish-draft">
+                <label class="polish-card-label" for="polish-input">
+                  <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>As you said it
+                </label>
+                <textarea id="polish-input" class="polish-input" spellcheck="false"
+                  placeholder="Paste or type anything: a rough dictation, a quick message, notes to yourself…"></textarea>
+                <div class="polish-draft-foot">
+                  <span id="polish-words">0 words</span>
+                  <button type="button" class="polish-clear" id="polish-clear" hidden>Clear</button>
+                </div>
+              </div>
+              <span class="polish-bridge" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="17" height="17"><path d="M11 4c.8 4 2.6 5.8 6.6 6.6-4 .8-5.8 2.6-6.6 6.6-.8-4-2.6-5.8-6.6-6.6 4-.8 5.8-2.6 6.6-6.6Z" fill="currentColor"/></svg>
+              </span>
+              <div class="polish-note-wrap">
+                <div class="polish-note-stack" aria-hidden="true"></div>
+                <article class="polish-note" aria-labelledby="polish-note-title">
+                  <div class="polish-note-head">
+                    <svg class="polish-note-mark" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M10 3.5c.7 3.7 2.3 5.3 6 6-3.7.7-5.3 2.3-6 6-.7-3.7-2.3-5.3-6-6 3.7-.7 5.3-2.3 6-6Z"/></svg>
+                    <span class="polish-note-title" id="polish-note-title">Polished</span>
+                    <span class="polish-mode-chip" id="polish-mode-chip" hidden></span>
+                    <button type="button" class="polish-changes" id="polish-changes" aria-pressed="false" hidden>
+                      <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M4 7h10M4 12h16M4 17h7"/><path d="m15 15 2 2 4-4"/></svg>Show changes
+                    </button>
+                  </div>
+                  <div class="polish-output" id="polish-output" role="status" aria-live="polite" tabindex="0"
+                    data-idle="Type or pick a recent dictation, and the polished version appears here."></div>
+                  <div class="polish-note-foot">
+                    <span class="polish-status" id="polish-status"></span>
+                    <button type="button" class="polish-copy" id="polish-copy" hidden>
+                      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M15 9V6.5A2.5 2.5 0 0 0 12.5 4h-6A2.5 2.5 0 0 0 4 6.5v6A2.5 2.5 0 0 0 6.5 15H9"/></svg><span id="polish-copy-label">Copy</span>
+                    </button>
+                  </div>
+                </article>
+              </div>
+            </div>
+            <div class="polish-actions">
+              <button type="button" class="polish-run" id="polish-run" disabled>
+                <svg class="polish-run-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M10 3.5c.7 3.7 2.3 5.3 6 6-3.7.7-5.3 2.3-6 6-.7-3.7-2.3-5.3-6-6 3.7-.7 5.3-2.3 6-6Z"/><path d="M18 14.25c.35 1.75 1.05 2.45 2.75 2.75-1.7.35-2.4 1.05-2.75 2.75-.35-1.7-1.05-2.4-2.75-2.75 1.7-.3 2.4-1 2.75-2.75Z"/></svg>
+                <svg class="polish-run-spinner" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9"/></svg>
+                <span class="polish-run-label" id="polish-run-label">Polish</span>
+                <span class="polish-run-cost" id="polish-run-cost"></span>
+              </button>
+              <!-- The same text, two lighter touches, at the same price. -->
+              <button type="button" class="polish-mode" id="polish-grammar" data-mode="grammar" disabled>
+                <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M4 17.5 8.5 6l4.5 11.5M5.8 13.2h5.4"/><path d="m14.5 14.5 2.6 2.6 4.4-5.6"/></svg>
+                <span class="polish-mode-label">Grammar</span>
+              </button>
+              <button type="button" class="polish-mode" id="polish-tighten" data-mode="tighten" disabled>
+                <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M4 12h6m0 0-2.8-2.8M10 12l-2.8 2.8M20 12h-6m0 0 2.8-2.8M14 12l2.8 2.8"/></svg>
+                <span class="polish-mode-label">Tighten</span>
+              </button>
+              <span class="polish-shortcut" aria-hidden="true"><kbd id="polish-mod-key">Ctrl</kbd><span>+</span><kbd>Enter</kbd><span>to polish</span></span>
+            </div>
+            <p class="polish-error" id="polish-error" role="alert" hidden>
+              <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.01"/></svg>
+              <span id="polish-error-text"></span>
+            </p>
+            <p class="polish-fine"><strong>Polish</strong> clears the mess and smooths the flow. <strong>Grammar</strong> fixes only what is wrong and keeps your words. <strong>Tighten</strong> says it in fewer words. Each costs the same, and your meaning, names and numbers stay as you said them.</p>
+          </section>
+        </div>
+        <div class="polish-lock" id="polish-lock" hidden>
+          <div class="polish-lock-card" role="group" aria-labelledby="polish-lock-title">
+            <span class="polish-lock-tag"><svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true"><path d="M10 3.5c.7 3.7 2.3 5.3 6 6-3.7.7-5.3 2.3-6 6-.7-3.7-2.3-5.3-6-6 3.7-.7 5.3-2.3 6-6Z"/></svg>VOXDEN PRO</span>
+            <h2 id="polish-lock-title">Polish is part of Pro</h2>
+            <p id="polish-lock-copy">Turn any rough dictation into clean writing in a second, from the flow bar or right here. Each polish comes out of your cloud credits.</p>
+            <button type="button" class="polish-lock-action" id="polish-lock-action">Upgrade to Pro <span aria-hidden="true">↗</span></button>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-insights" class="pane" data-view="insights" hidden>
+        <div class="pane-body insights-pane">
+          <header class="ins-header">
+            <div class="ins-head-top">
+              <div class="premium-heading">
+                <p class="premium-kicker">Your progress</p>
+                <h1 class="premium-title">Insights</h1>
+                <p class="page-description">Small moments of flow. A little more time for you.</p>
+              </div>
+              <div class="ins-range" role="group" aria-label="Time range">
+                <button type="button" class="ins-range-btn" data-range="7d">7 days</button>
+                <button type="button" class="ins-range-btn" data-range="30d">30 days</button>
+                <button type="button" class="ins-range-btn is-active" data-range="all">All time</button>
+              </div>
+            </div>
+            <div class="ins-tabs" role="tablist" aria-label="Insights sections">
+              <button type="button" class="ins-tab is-active" data-tab="usage" role="tab" aria-selected="true" aria-controls="ins-tab-usage">Your usage</button>
+              <button type="button" class="ins-tab" data-tab="voice" role="tab" aria-selected="false" aria-controls="ins-tab-voice">Your voice</button>
+            </div>
+            <p class="ins-subtitle" id="ins-subtitle">No dictations yet</p>
+          </header>
+
+          <div class="ins-overview" aria-label="Usage for selected time range">
+            <div><span>Words dictated</span><strong id="ins-summary-words">0</strong></div>
+            <div><span>Dictations</span><strong id="ins-summary-sessions">0</strong></div>
+            <div><span>Current streak · all time</span><strong id="ins-summary-streak">0 <small>days</small></strong></div>
+          </div>
+          <div class="ins-grid" id="ins-tab-usage" role="tabpanel" aria-label="Your usage">
+            <article class="ins-card ins-span-12 ins-milestones-card" id="ins-milestones-card" tabindex="-1">
+              <!-- A shelf with one spine per milestone: filled once reached,
+                   dashed and leaning for the next one, pale for the rest. -->
+              <div class="ins-shelf" id="ins-shelf">
+                <div class="ins-shelf-books" id="ins-shelf-books" role="group" aria-label="Milestones this year, as books on a shelf"></div>
+                <span class="ins-shelf-board" aria-hidden="true"></span>
+                <p class="ins-shelf-caption" id="ins-shelf-caption"></p>
+              </div>
+              <div class="ins-ms-body">
+                <div class="ins-ms-head">
+                  <div class="ins-ms-title">
+                    <span class="ins-cap-label">Milestones</span>
+                    <h2 id="ins-ms-title">Your first milestone is a page away</h2>
+                    <p id="ins-ms-copy">Start dictating and Voxden keeps count.</p>
+                  </div>
+                  <div class="ins-range ins-years" id="ins-years" role="group" aria-label="Year" hidden></div>
+                </div>
+                <div class="ins-progress">
+                  <div class="ins-progress-track"><div class="ins-progress-fill" id="ins-ms-fill"></div></div>
+                  <span class="ins-progress-label" id="ins-ms-next"></span>
+                </div>
+                <ol class="ins-ms-strip" id="ins-ms-strip" aria-label="Milestones this year"></ol>
+              </div>
+            </article>
+
+            <article class="ins-card ins-span-4" id="ins-pace-card">
+              <div class="ins-card-head">
+                <span class="ins-big-num" id="ins-pace-num">&mdash;</span>
+                <span class="ins-cap-label">words per minute</span>
+              </div>
+              <div class="ins-gauge" aria-hidden="true">
+                <svg viewBox="0 0 140 82" width="100%" height="82" preserveAspectRatio="xMidYMax meet">
+                  <path class="ins-gauge-track" d="M14 72 A56 56 0 0 1 126 72" fill="none" stroke-width="13" stroke-linecap="round"/>
+                  <path class="ins-gauge-fill" id="ins-gauge-fill" d="M14 72 A56 56 0 0 1 126 72" fill="none" stroke-width="13" stroke-linecap="round"/>
+                </svg>
+                <div class="ins-gauge-inner">
+                  <span class="ins-gauge-top" id="ins-pace-mult">&mdash;</span>
+                  <span class="ins-gauge-sub">vs typing</span>
+                </div>
+              </div>
+              <p class="ins-foot" id="ins-pace-foot">Dictate with the overlay to measure your pace.</p>
+            </article>
+
+            <article class="ins-card ins-span-4" id="ins-saved-card">
+              <div class="ins-card-head">
+                <span class="ins-big-num" id="ins-saved-num">&mdash;</span>
+                <span class="ins-cap-label">saved vs typing</span>
+              </div>
+              <p class="ins-saved-line" id="ins-saved-line"></p>
+              <p class="ins-foot" id="ins-saved-foot">Compared with typing at 40 words per minute.</p>
+            </article>
+
+            <article class="ins-card ins-span-4">
+              <div class="ins-card-head">
+                <span class="ins-big-num" id="ins-fix-total">0</span>
+                <span class="ins-cap-label">fixes made by Voxden</span>
+              </div>
+              <ul class="ins-rows">
+                <li><i class="ins-dot is-style"></i><b id="ins-fix-style">0</b> words changed</li>
+                <li><i class="ins-dot is-dict"></i><b id="ins-fix-dict">0</b> dictionary fixes</li>
+              </ul>
+              <p class="ins-foot" id="ins-fix-foot">Words changed covers filler cleanup and your writing style.</p>
+            </article>
+
+            <article class="ins-card ins-span-6">
+              <div class="ins-section-head">
+                <h2>Where you dictate</h2>
+                <span class="ins-meta-label">APPS <i>|</i> <b id="ins-where-apps-total">0</b></span>
+              </div>
+              <ol class="ins-lb" id="ins-leaderboard" aria-label="Apps ranked by words dictated"></ol>
+              <p class="ins-empty" id="ins-where-empty" hidden>App breakdown appears after your next dictation.</p>
+            </article>
+
+            <article class="ins-card ins-span-6">
+              <div class="ins-section-head">
+                <h2><span id="ins-streak-current">0</span> day streak</h2>
+                <span class="ins-meta-label">LONGEST STREAK <i>|</i> <b id="ins-streak-longest">0</b> DAYS</span>
+              </div>
+              <div class="ins-heat">
+                <div class="ins-heat-days" id="ins-heat-days"></div>
+                <div class="ins-heat-cols">
+                  <div class="ins-heat-months" id="ins-heat-months"></div>
+                  <div class="ins-heat-grid" id="ins-heat-grid" role="img" aria-label="Dictation activity heatmap"></div>
+                </div>
+              </div>
+              <div class="ins-heat-legend">
+                <span>More</span>
+                <span class="ins-heat-swatch" data-level="4"></span>
+                <span class="ins-heat-swatch" data-level="3"></span>
+                <span class="ins-heat-swatch" data-level="2"></span>
+                <span class="ins-heat-swatch" data-level="1"></span>
+                <span>Less</span>
+                <span class="ins-legend-spacer"></span>
+                <span class="ins-heat-swatch is-streak"></span>
+                <span>Current streak</span>
+              </div>
+            </article>
+          </div>
+
+          <div class="ins-grid" id="ins-tab-voice" role="tabpanel" aria-label="Your voice" hidden>
+            <article class="ins-card ins-span-12 ins-voice-profile-card" id="ins-voice-profile-card" tabindex="-1">
+              <div class="ins-profile-head">
+                <div class="ins-profile-title">
+                  <span class="ins-cap-label">Your voice profile</span>
+                  <div class="ins-profile-name-row">
+                    <h2 id="ins-profile-name">Learning</h2>
+                    <span class="ins-profile-status">Current</span>
+                  </div>
+                  <p id="ins-profile-copy">Fix a misspelled word in a transcript. Voxden saves that spelling for next time.</p>
+                </div>
+                <div class="ins-profile-side">
+                  <div class="ins-profile-mascot" id="ins-profile-mascot" data-level="0" aria-hidden="true">
+                    <div class="notif-mascot">
+                      <span class="notif-mascot-glow"></span>
+                      <span class="notif-mascot-face">
+                        <i class="notif-mascot-band"></i>
+                        <i class="notif-mascot-cup is-left"></i>
+                        <i class="notif-mascot-cup is-right"></i>
+                        <span class="notif-mascot-eye"><i></i></span>
+                        <span class="notif-mascot-eye"><i></i></span>
+                      </span>
+                    </div>
+                  </div>
+                  <strong class="ins-profile-percent" id="ins-profile-percent">0%</strong>
+                </div>
+              </div>
+              <div class="ins-profile-progress" id="ins-profile-progress" role="progressbar" aria-label="Voice profile progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <div class="ins-profile-progress-track"><div class="ins-profile-progress-fill" id="ins-profile-progress-fill"></div></div>
+                <div class="ins-profile-progress-meta">
+                  <span id="ins-profile-progress-meta">2,500 words until Personalized</span>
+                  <span id="ins-profile-word-count">0 words analyzed</span>
+                </div>
+              </div>
+              <div class="ins-profile-ladder" id="ins-profile-ladder" aria-label="Voice profile milestones"></div>
+            </article>
+
+            <article class="ins-card ins-span-6">
+              <div class="ins-section-head">
+                <h2>Words you use most</h2>
+                <span class="ins-meta-label">TOP <i>|</i> <b id="ins-words-count">0</b></span>
+              </div>
+              <div class="ins-cloud" id="ins-cloud"></div>
+              <p class="ins-empty" id="ins-words-empty" hidden>Your most-used words show up here as you dictate.</p>
+            </article>
+
+            <article class="ins-card ins-span-6">
+              <div class="ins-section-head">
+                <h2>What you taught Voxden</h2>
+              </div>
+              <ul class="ins-stat-rows">
+                <li><span class="ins-stat-key">Dictionary entries</span><span class="ins-stat-val" id="ins-taught-dict">0</span></li>
+                <li><span class="ins-stat-key">Spellings you taught</span><span class="ins-stat-val" id="ins-taught-learned">0</span></li>
+                <li><span class="ins-stat-key">Transcripts you edited</span><span class="ins-stat-val" id="ins-taught-edited">0</span></li>
+              </ul>
+              <p class="ins-foot">Edit a transcript and Voxden learns that spelling for next time.</p>
+            </article>
+
+            <article class="ins-card ins-span-8">
+              <div class="ins-section-head">
+                <h2>When you speak</h2>
+                <span class="ins-meta-label" id="ins-clock-peak"></span>
+              </div>
+              <div class="ins-clock" id="ins-clock"></div>
+              <p class="ins-empty" id="ins-clock-empty" hidden>No dictations in this range.</p>
+            </article>
+
+            <article class="ins-card ins-span-4">
+              <div class="ins-section-head">
+                <h2>Dictation length</h2>
+              </div>
+              <ul class="ins-stat-rows">
+                <li><span class="ins-stat-key">Average</span><span class="ins-stat-val" id="ins-len-avg">0</span></li>
+                <li><span class="ins-stat-key">Longest</span><span class="ins-stat-val" id="ins-len-max">0</span></li>
+              </ul>
+              <p class="ins-foot">Words per dictation in this range.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-help" class="pane" data-view="help" hidden>
+        <div class="pane-body help-pane">
+          <header class="premium-heading premium-heading-spaced">
+            <p class="premium-kicker">Getting started</p>
+            <h1 class="premium-title">Help</h1>
+          </header>
+
+          <section class="help-section" aria-labelledby="help-start-title">
+            <div class="help-section-head">
+              <h2 class="help-section-title" id="help-start-title">Dictate in three steps</h2>
+              <p class="help-section-hint">Works in any app: email, chat, documents, the browser.</p>
+            </div>
+            <ol class="help-steps">
+              <li class="help-step">
+                <span class="help-step-num">1</span>
+                <span class="help-step-copy"><b>Click where you want the text</b><span>Any text box will do.</span></span>
+              </li>
+              <li class="help-step">
+                <span class="help-step-num">2</span>
+                <span class="help-step-copy"><b id="help-step-dictate">Press <kbd>Ctrl</kbd> + <kbd>Win</kbd> and talk</b><span id="help-step-finish">Press the same keys again when you are done.</span></span>
+              </li>
+              <li class="help-step">
+                <span class="help-step-num">3</span>
+                <span class="help-step-copy"><b>Your words appear where you clicked</b><span id="help-step-paste">Need them again? <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>V</kbd> pastes your last dictation.</span></span>
+              </li>
+            </ol>
+            <p class="help-note">You can change both shortcuts in Settings &rsaquo; General &rsaquo; Shortcuts.</p>
+          </section>
+
+          <section class="help-section" aria-labelledby="help-engines-title">
+            <div class="help-section-head">
+              <h2 class="help-section-title" id="help-engines-title">Which model should I download?</h2>
+              <p class="help-section-hint" id="help-engines-hint">Choose your model when you first open Voxden. Parakeet v3 is recommended for a small, fast start. <b>For names and accents, try Qwen3-ASR</b> under Settings &rsaquo; Speech engines. These models run on your PC.</p>
+            </div>
+            <div class="help-engines">
+              <article class="help-engine is-recommended">
+                <div class="help-engine-head">
+                  <h3 class="help-engine-name">Parakeet</h3>
+                  <span class="help-engine-size">670 MB</span>
+                </div>
+                <p class="help-engine-badge">Default, fastest</p>
+                <p class="help-engine-lead">Small and quick, even without a graphics card. Recommended at first setup.</p>
+              </article>
+
+              <article class="help-engine" id="help-engine-qwen">
+                <div class="help-engine-head">
+                  <h3 class="help-engine-name">Qwen3-ASR</h3>
+                  <span class="help-engine-size">4.7 GB</span>
+                </div>
+                <p class="help-engine-badge">Best with names</p>
+                <p class="help-engine-lead">Best at catching names and the words in your dictionary. One larger download, once.</p>
+              </article>
+
+              <article class="help-engine">
+                <div class="help-engine-head">
+                  <h3 class="help-engine-name">Whisper</h3>
+                  <span class="help-engine-size">3.1 GB</span>
+                </div>
+                <p class="help-engine-badge">Middle ground</p>
+                <p class="help-engine-lead" id="help-engine-whisper-lead">Uses the words in your dictionary, in a smaller download than Qwen. Much faster with an NVIDIA graphics card.</p>
+              </article>
+            </div>
+            <p class="help-note" id="help-engines-note">On this PC, dictation is in English whichever model you use. Hindi, Hinglish and other languages need Voxden Cloud on a Pro plan: pick up to three under Settings &rsaquo; General, and Voxden Cloud works out which one each dictation is in. Hinglish writes Hindi in English letters.</p>
+          </section>
+
+          <section class="help-section" id="help-gpu-section" aria-labelledby="help-gpu-title">
+            <div class="help-section-head">
+              <h2 class="help-section-title" id="help-gpu-title">Optional: make it faster with your graphics card</h2>
+              <p class="help-section-hint">You can skip this. Voxden works on any PC without it. If dictation feels slow, one extra download can speed up your model. Find these in Settings &rsaquo; Speech engines.</p>
+            </div>
+            <ul class="help-tradeoffs">
+              <li class="help-tradeoff">
+                <span class="help-tradeoff-tag">NVIDIA card + Whisper</span>
+                <span class="help-tradeoff-copy">Choose <b>Download 553 MB</b> under <b>Speed up with your GPU</b>.</span>
+              </li>
+              <li class="help-tradeoff">
+                <span class="help-tradeoff-tag">NVIDIA card + Qwen3-ASR</span>
+                <span class="help-tradeoff-copy">Choose <b>Download</b> under <b>Speed up with your GPU</b>.</span>
+              </li>
+              <li class="help-tradeoff">
+                <span class="help-tradeoff-tag">AMD card + Qwen3-ASR</span>
+                <span class="help-tradeoff-copy">Choose <b>Download</b> under <b>Speed up with your GPU</b>. Only some AMD cards support it.</span>
+              </li>
+              <li class="help-tradeoff">
+                <span class="help-tradeoff-tag">AMD or Intel card + Parakeet</span>
+                <span class="help-tradeoff-copy">Set <b>Processor</b> to <b>AMD or Intel GPU</b> under Settings &rsaquo; Speech engines &rsaquo; Advanced. This needs a separate 2.5 GB download.</span>
+              </li>
+              <li class="help-tradeoff">
+                <span class="help-tradeoff-tag">Anything else</span>
+                <span class="help-tradeoff-copy">Leave <b>Processor</b> (Settings &rsaquo; Speech engines &rsaquo; Advanced) on <b>Auto</b>. Voxden already picks the best option it can.</span>
+              </li>
+            </ul>
+            <p class="help-note">Each download speeds up one model only. Downloading a pack for a model you are not using changes nothing.</p>
+          </section>
+
+          <section class="help-section" aria-labelledby="help-privacy-title">
+            <div class="help-section-head">
+              <h2 class="help-section-title" id="help-privacy-title">Is my voice sent anywhere?</h2>
+            </div>
+            <p class="help-note" id="help-privacy-note">Only if you turn on Voxden Cloud, which needs a Pro plan. With it off, your audio stays on this PC and dictation works offline once your model is downloaded. With it on, your audio is sent to Voxden Cloud to be transcribed.</p>
+          </section>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <div id="settings-overlay" class="settings-overlay" hidden>
+    <div class="settings-dialog" role="dialog" aria-modal="true" aria-label="Settings">
+      <div class="settings-layout">
+          <nav class="settings-cats" aria-label="Settings categories">
+            <button type="button" class="settings-cat is-active" data-cat="general">
+              <span class="settings-cat-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" focusable="false">
+                  <path d="M4 7.5h3.5m5 0H20M4 16.5h7.5m5 0H20"/>
+                  <circle cx="10" cy="7.5" r="2.5" fill="currentColor" fill-opacity=".14"/>
+                  <circle cx="14" cy="16.5" r="2.5" fill="currentColor" fill-opacity=".14"/>
+                </svg>
+              </span>
+              <span class="settings-cat-label">General</span>
+            </button>
+            <button type="button" class="settings-cat" data-cat="account">
+              <span class="settings-cat-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" focusable="false">
+                  <circle cx="12" cy="8.5" r="3.5" fill="currentColor" fill-opacity=".1"/>
+                  <path d="M5 19.5c1.2-3.4 3.8-5 7-5s5.8 1.6 7 5"/>
+                </svg>
+              </span>
+              <span class="settings-cat-label">Account</span>
+            </button>
+            <button type="button" class="settings-cat" data-cat="billing">
+              <span class="settings-cat-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" focusable="false"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18M7 15h4"/></svg>
+              </span>
+              <span class="settings-cat-label">Plans &amp; billing</span>
+            </button>
+            <button type="button" class="settings-cat" data-cat="speech-engines">
+              <span class="settings-cat-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" focusable="false">
+                  <rect x="5.5" y="5.5" width="13" height="13" rx="3" fill="currentColor" fill-opacity=".1"/>
+                  <path d="M9 3v2.5M15 3v2.5M9 18.5V21M15 18.5V21M3 9h2.5M3 15h2.5M18.5 9H21M18.5 15H21"/>
+                  <path d="M9 11v2m3-4v6m3-4v2"/>
+                </svg>
+              </span>
+              <span class="settings-cat-label">Speech engines</span>
+            </button>
+            <button type="button" class="settings-cat" data-cat="system">
+              <span class="settings-cat-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" focusable="false">
+                  <rect x="3" y="4" width="18" height="12.5" rx="2.5" fill="currentColor" fill-opacity=".1"/>
+                  <path d="M9 20h6m-3-3.5V20"/>
+                  <path d="M7 13h10" opacity=".45"/>
+                </svg>
+              </span>
+              <span class="settings-cat-label">System</span>
+            </button>
+            <button type="button" class="settings-cat" data-cat="display">
+              <span class="settings-cat-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" focusable="false">
+                  <path d="M12 3a9 9 0 1 0 0 18h1.2a2.3 2.3 0 0 0 1.6-3.9 1.4 1.4 0 0 1 1-2.4H18a3 3 0 0 0 3-3A8.8 8.8 0 0 0 12 3Z"/>
+                  <circle cx="7.5" cy="11" r=".8" fill="currentColor"/><circle cx="10" cy="7.5" r=".8" fill="currentColor"/><circle cx="14.5" cy="7.5" r=".8" fill="currentColor"/>
+                </svg>
+              </span>
+              <span class="settings-cat-label">Display</span>
+            </button>
+            <button type="button" class="settings-cat" data-cat="sound">
+              <span class="settings-cat-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" focusable="false">
+                  <path d="M4.5 9H7l4.5-3.5v13L7 15H4.5A1.5 1.5 0 0 1 3 13.5v-3A1.5 1.5 0 0 1 4.5 9Z" fill="currentColor" fill-opacity=".14"/>
+                  <path d="M15 9a4.25 4.25 0 0 1 0 6"/>
+                  <path d="M18 6a8.5 8.5 0 0 1 0 12" opacity=".55"/>
+                </svg>
+              </span>
+              <span class="settings-cat-label">Sound</span>
+            </button>
+            <button type="button" class="settings-cat" data-cat="privacy">
+              <span class="settings-cat-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" focusable="false">
+                  <path d="m12 3 7 3v6c0 4.2-2.8 6.8-7 9-4.2-2.2-7-4.8-7-9V6l7-3Z" fill="currentColor" fill-opacity=".1"/>
+                  <path d="m9 11.5 2 2 4-4"/>
+                </svg>
+              </span>
+              <span class="settings-cat-label">Data and privacy</span>
+            </button>
+          </nav>
+
+          <div class="settings-detail">
+            <div class="settings-panel general-settings" data-cat="general">
+              <h2 class="settings-panel-title">General</h2>
+              <section class="settings-group" aria-labelledby="general-dictation-title">
+                <h3 class="settings-group-title" id="general-dictation-title">Dictation</h3>
+                <div class="setting-row">
+                  <div class="setting-copy">
+                    <span class="setting-label">Shortcuts</span>
+                    <span class="setting-hint">Dictation and paste.</span>
+                    <span class="setting-hint" id="shortcuts-status" role="status" hidden></span>
+                  </div>
+                  <div class="setting-control">
+                    <button type="button" class="btn-secondary" id="shortcuts-change" aria-label="Change shortcuts" aria-haspopup="dialog" aria-controls="shortcuts-dialog"><span id="general-shortcut-keys">Ctrl + Win</span><span class="general-shortcut-edit">Edit</span></button>
+                  </div>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-copy">
+                    <span class="setting-label">Dictation mode</span>
+                    <span class="setting-hint" id="dictation-mode-hint">Press once to start, again to stop.</span>
+                  </div>
+                  <div class="setting-control">
+                    <div class="segmented" role="radiogroup" aria-label="Dictation mode" aria-describedby="dictation-mode-hint">
+                      <button type="button" class="segmented-btn" id="mode-toggle" data-mode="toggle" role="radio" aria-checked="true">Toggle</button>
+                      <button type="button" class="segmented-btn" id="mode-ptt" data-mode="ptt" role="radio" aria-checked="false">Push to talk</button>
+                    </div>
+                  </div>
+                </div>
+              </section>
+              <section class="settings-group" aria-labelledby="general-input-title">
+                <h3 class="settings-group-title" id="general-input-title">Voice &amp; language</h3>
+                <div class="setting-row" data-settings-section="microphone" tabindex="-1">
+                  <div class="setting-copy">
+                    <label class="setting-label" for="mic-select">Microphone</label>
+                  </div>
+                  <div class="setting-control">
+                    <select class="setting-select setting-select-wide" id="mic-select">
+                      <option value="default">System default</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="setting-row" data-settings-section="dictation-language" tabindex="-1">
+                  <div class="setting-copy">
+                    <span class="setting-label">Dictation languages</span>
+                    <span class="setting-hint" id="dictation-lang-hint">English on this PC. More with Voxden Cloud on Pro.</span>
+                  </div>
+                  <div class="setting-control">
+                    <button type="button" class="btn-secondary lang-summary" id="dictation-lang-open" aria-haspopup="dialog">English</button>
+                  </div>
+                </div>
+              </section>
+              <details class="settings-more" id="general-more-options">
+                <summary>
+                  <span class="settings-more-copy">
+                    <span class="setting-label">More options</span>
+                    <span class="setting-hint">Speed, app language &amp; dictionary learning</span>
+                  </span>
+                  <svg class="settings-more-chevron" viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m7 4 6 6-6 6" /></svg>
+                </summary>
+                <div class="settings-more-body">
+                  <div class="setting-row">
+                    <div class="setting-copy">
+                      <span class="setting-label">Dictation speed</span>
+                      <span class="setting-hint">Auto balances speed and accuracy.</span>
+                    </div>
+                    <div class="setting-control">
+                      <div class="segmented" role="radiogroup" aria-label="Dictation speed">
+                        <button type="button" class="segmented-btn" id="quality-auto" data-quality="auto" role="radio" aria-checked="true">Auto</button>
+                        <button type="button" class="segmented-btn" id="quality-fast" data-quality="fast" role="radio" aria-checked="false">Fast</button>
+                        <button type="button" class="segmented-btn" id="quality-accurate" data-quality="accurate" role="radio" aria-checked="false">Accurate</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="setting-row" data-settings-section="app-language" tabindex="-1">
+                    <div class="setting-copy">
+                      <span class="setting-label">App language</span>
+                      <span class="setting-hint">English only for now.</span>
+                    </div>
+                    <div class="setting-control">
+                      <select class="setting-select" id="app-lang-select" disabled>
+                        <option value="en">English</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="setting-row">
+                    <div class="setting-copy">
+                      <label class="setting-label" for="set-auto-add-dictionary">Auto-add to dictionary</label>
+                      <span class="setting-hint" id="auto-add-dictionary-hint">Remember words you correct.</span>
+                      <span class="setting-hint" id="auto-add-dictionary-scope">Learns on this PC in supported apps. Undo from the flow bar.</span>
+                    </div>
+                    <div class="setting-control">
+                      <label class="toggle">
+                        <input type="checkbox" id="set-auto-add-dictionary" aria-describedby="auto-add-dictionary-hint auto-add-dictionary-scope" checked />
+                        <span class="toggle-track" aria-hidden="true"></span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </details>
+            </div>
+
+            <div class="settings-panel" data-cat="account" hidden>
+              <h2 class="settings-panel-title">Account</h2>
+              <div class="setting-row" id="account-signed-out" hidden>
+                <div class="setting-copy">
+                  <span class="setting-label">Sign in</span>
+                  <span class="setting-hint" id="account-signin-hint">A code goes to your email; no password to remember. Dictation works the same signed out.</span>
+                  <span class="setting-hint is-error" id="account-error" role="alert" hidden></span>
+                </div>
+                <div class="setting-control setting-control-shortcut">
+                  <input type="email" class="setting-input" id="account-email" placeholder="you@example.com" maxlength="254" spellcheck="false" autocomplete="email" />
+                  <button type="button" class="btn-secondary" id="account-send-code">Send code</button>
+                </div>
+              </div>
+              <div class="setting-row" id="account-pending" hidden>
+                <div class="setting-copy">
+                  <span class="setting-label">Enter the code</span>
+                  <span class="setting-hint" id="account-pending-hint"></span>
+                  <span class="setting-hint is-error" id="account-pending-error" role="alert" hidden></span>
+                </div>
+                <div class="setting-control setting-control-shortcut">
+                  <input type="text" class="setting-input" id="account-code" placeholder="6 digits" inputmode="numeric" maxlength="7" spellcheck="false" autocomplete="one-time-code" />
+                  <button type="button" class="btn-secondary" id="account-verify">Sign in</button>
+                  <button type="button" class="speech-setup-remove" id="account-pending-back">Use a different email</button>
+                </div>
+              </div>
+              <div class="account-profile" id="account-signed-in" hidden>
+                <div class="profile-card">
+                  <div class="profile-avatar-wrap" id="profile-avatar-wrap">
+                    <div class="profile-avatar" id="profile-avatar" aria-hidden="true">
+                      <img id="profile-avatar-img" alt="" hidden>
+                      <span class="profile-avatar-initials" id="profile-avatar-initials">?</span>
+                    </div>
+                    <span class="profile-badge" id="profile-badge" hidden>PRO</span>
+                  </div>
+                  <div class="profile-fields">
+                    <label class="profile-field"><span>First name</span><input type="text" id="profile-first" maxlength="40" spellcheck="false" autocomplete="given-name" placeholder="First name"></label>
+                    <label class="profile-field"><span>Last name</span><input type="text" id="profile-last" maxlength="40" spellcheck="false" autocomplete="family-name" placeholder="Last name"></label>
+                    <div class="profile-field profile-field-wide"><span>Email</span><div class="profile-value" id="profile-email"></div></div>
+                  </div>
+                  <p class="setting-hint profile-plan" id="account-plan-hint"></p>
+                  <p class="setting-hint profile-status" id="account-status-hint" role="status"></p>
+                </div>
+                <div class="profile-actions">
+                  <button type="button" class="btn-secondary" id="account-refresh">Refresh</button>
+                  <button type="button" class="btn-secondary" id="account-sign-out">Sign out</button>
+                  <button type="button" class="btn-secondary btn-danger" id="account-delete">Delete account</button>
+                </div>
+              </div>
+              <button type="button" class="btn-secondary" id="account-open-billing">View plans &amp; billing</button>
+            </div>
+            <div class="settings-panel billing-panel" data-cat="billing" hidden>
+              <h2 class="settings-panel-title">Plans &amp; billing</h2>
+              <p class="page-description">Your voice. Your apps. One simple monthly plan.</p>
+              <div class="billing-toolbar">
+                <span class="billing-period">Billed monthly</span>
+                <label class="billing-region-label">Region <select id="billing-region" class="setting-select"><option value="razorpay">India · INR</option></select></label>
+              </div>
+              <div class="billing-plans">
+                <section class="billing-card" id="billing-free-card" aria-labelledby="billing-free-title">
+                  <h3 id="billing-free-title">Free</h3>
+                  <p class="billing-description" id="billing-free-copy">Keep your dictation on this PC.</p>
+                  <p class="billing-price" id="billing-free-price">₹0</p>
+                  <p class="billing-caption">No subscription needed.</p>
+                  <ul class="billing-features"><li id="billing-free-words">3,000 words a week</li><li>On-device dictation</li><li>Your personal dictionary</li><li>Works offline after setup</li></ul>
+                  <p class="billing-caption" id="billing-free-usage" role="status"></p>
+                  <span class="billing-current">Your current plan</span>
+                </section>
+                <section class="billing-card billing-pro" id="account-upgrade" aria-labelledby="account-upgrade-title">
+                  <div class="billing-card-heading"><h3 id="account-upgrade-title">Voxden Pro</h3><span class="billing-badge" id="billing-plan-badge">FOR YOUR EVERYDAY</span></div>
+                  <p class="billing-description">Speak freely. Keep work moving.</p>
+                  <div id="billing-offer-price"><p class="billing-price"><span id="billing-price-amount">₹349</span><span class="billing-price-unit"> / month</span></p><p class="billing-caption" id="billing-price-caption">₹349 billed every month.</p></div>
+                  <div class="billing-welcome" id="billing-welcome" hidden>
+                    <span class="billing-welcome-tag"><svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true" focusable="false"><path fill="currentColor" d="M8 .6l1.8 5.6L15.4 8l-5.6 1.8L8 15.4 6.2 9.8.6 8l5.6-1.8z"/></svg>One-time welcome offer</span>
+                    <p class="billing-welcome-amount"><span class="billing-welcome-number" id="billing-welcome-credits">1,200</span><span class="billing-welcome-unit">cloud credits</span></p>
+                    <p class="billing-welcome-lead">in your first month</p>
+                    <p class="billing-welcome-detail" id="billing-welcome-detail">Up to 20 hours of cloud dictation, about 40 minutes a day.</p>
+                  </div>
+                  <ul class="billing-features">
+                    <li id="billing-cloud-benefit">Cloud dictation</li>
+                    <li id="billing-pro-no-limit">No weekly word limit on this PC</li>
+                    <li>No speech-model download for cloud</li>
+                    <li>Dictate in up to three languages at once</li>
+                    <li id="billing-cloud-languages">18 languages through the cloud, Hindi and Hinglish included</li>
+                    <li>Cloud accuracy on names, accents and noisy rooms</li>
+                    <li>Your dictionary. Automatic punctuation.</li>
+                  </ul>
+                  <p class="billing-caption" id="account-upgrade-hint" role="status"></p>
+                  <p class="setting-hint is-error" id="account-upgrade-error" role="alert" hidden></p>
+                  <div class="billing-actions" id="account-upgrade-options"></div>
+                  <div class="billing-actions" id="account-manage-actions" hidden><button type="button" class="btn-primary" id="account-manage-billing">Manage subscription</button></div>
+                </section>
+              </div>
+              <p class="billing-footnote">Cancel renewal anytime. Payments open securely in your browser.</p>
+              <div class="billing-faq">
+                <details><summary>Do I need to download a speech model?</summary><p id="billing-faq-model">Cloud dictation needs the Voxden app and an internet connection. The Free plan uses a speech model installed on your PC.</p></details>
+                <details><summary>What is the weekly word limit?</summary><p id="billing-faq-limit">The Free plan dictates 3,000 words in any seven days, on the speech model you chose for this PC. The week starts with your first dictation and the words come back seven days later. Voxden Pro has no weekly word limit and adds cloud dictation.</p></details>
+                <details id="billing-faq-welcome-item"><summary>What is the welcome offer?</summary><p id="billing-faq-welcome">Your first month of Voxden Pro comes with 1,200 cloud credits instead of 900. It runs from the day you subscribe until your first renewal, and each account gets it once. From your first renewal on, Pro includes 900 credits a month.</p></details>
+                <details><summary>How much dictation do cloud credits cover?</summary><p id="billing-faq-credits">One credit is one minute of audio sent to Voxden Cloud, so 1,200 credits cover up to 20 hours and 900 credits cover up to 15 hours. Audio is counted in whole seconds, phrase by phrase, and pauses inside a dictation count too, so the time you spend actually speaking comes in a little under those hours. Credits refresh on your billing date each month, and unused credits do not carry over.</p></details>
+                <details><summary>What happens when I cancel?</summary><p>Open Manage subscription and choose Cancel renewal. Your paid access continues through the end of the billing period you already paid for, and nothing more is charged.</p></details>
+              </div>
+            </div>
+            <div class="settings-panel" data-cat="speech-engines" hidden>
+              <h2 class="settings-panel-title">Speech engines</h2>
+
+              <div class="setting-row speech-section" id="speech-mode-section">
+                <span class="setting-label" id="speech-mode-label">How Voxden listens</span>
+                <div class="speech-mode-options" id="speech-mode-options" role="radiogroup" aria-labelledby="speech-mode-label">
+                  <button type="button" class="speech-mode-card" id="speech-mode-local" data-listen="local" role="radio" aria-checked="true" tabindex="0" aria-labelledby="speech-mode-local-name" aria-describedby="speech-mode-local-line">
+                    <span class="speech-mode-head"><span class="flow-style-name" id="speech-mode-local-name">On this PC</span></span>
+                    <span class="flow-style-description" id="speech-mode-local-line">Your audio stays on this PC.</span>
+                    <span class="flow-style-selected" aria-hidden="true"></span>
+                  </button>
+                  <button type="button" class="speech-mode-card" id="speech-mode-cloud" data-listen="cloud" role="radio" aria-checked="false" tabindex="-1" aria-labelledby="speech-mode-cloud-name" aria-describedby="speech-mode-cloud-badge speech-mode-cloud-line">
+                    <span class="speech-mode-head">
+                      <span class="flow-style-name" id="speech-mode-cloud-name">Voxden Cloud</span>
+                      <span class="model-choice-badge subtle speech-mode-badge" id="speech-mode-cloud-badge">Needs Pro</span>
+                    </span>
+                    <span class="flow-style-description" id="speech-mode-cloud-line">Your audio goes to Voxden Cloud, which knows more languages.</span>
+                    <span class="flow-style-description" id="speech-mode-cloud-credits" hidden></span>
+                    <span class="flow-style-description speech-mode-error" id="speech-mode-cloud-error" hidden></span>
+                    <span class="flow-style-selected" aria-hidden="true"></span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="setting-row speech-section" id="speech-model-section">
+                <div class="setting-copy">
+                  <span class="setting-label" id="speech-model-label">Model</span>
+                  <span class="sr-only" id="speech-model-announce" role="status"></span>
+                  <span class="setting-hint" id="speech-model-notice" hidden></span>
+                  <span class="setting-hint" id="speech-model-detail" hidden></span>
+                  <div class="speech-notice-actions" id="speech-model-notice-actions" hidden>
+                    <button type="button" class="btn-secondary" id="speech-model-repair" aria-disabled="false">Check and repair</button>
+                  </div>
+                </div>
+                <ul class="speech-model-list" id="speech-model-list" aria-labelledby="speech-model-label" tabindex="-1">
+                  <li class="speech-extra" data-engine="parakeet">
+                    <div class="speech-extra-copy">
+                      <span class="speech-extra-name" id="speech-model-parakeet-name">Parakeet v3</span>
+                      <span class="speech-extra-hint" data-role="line">Small and quick, even without a graphics card.</span>
+                      <div class="speech-setup-progress-row" data-role="progress-row" hidden>
+                        <div class="speech-setup-progress" data-role="progress" role="progressbar" aria-labelledby="speech-model-parakeet-name" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                          <div class="speech-setup-progress-fill" data-role="progress-fill"></div>
+                        </div>
+                        <span class="speech-setup-progress-label" data-role="progress-label"></span>
+                      </div>
+                      <span class="setting-hint" data-role="error" hidden></span>
+                    </div>
+                    <span class="speech-extra-state speech-model-size" data-role="size">670 MB</span>
+                    <div class="speech-model-action">
+                      <span class="speech-extra-state" data-role="state" hidden>In use</span>
+                      <button type="button" class="btn-secondary" data-role="action" data-action="install" aria-disabled="false" hidden>Download and use</button>
+                    </div>
+                  </li>
+                  <li class="speech-extra" data-engine="whisper-turbo">
+                    <div class="speech-extra-copy">
+                      <span class="speech-extra-name" id="speech-model-whisper-turbo-name">Whisper large-v3 turbo</span>
+                      <span class="speech-extra-hint" data-role="line">Mid-size, and uses your dictionary while it listens.</span>
+                      <div class="speech-setup-progress-row" data-role="progress-row" hidden>
+                        <div class="speech-setup-progress" data-role="progress" role="progressbar" aria-labelledby="speech-model-whisper-turbo-name" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                          <div class="speech-setup-progress-fill" data-role="progress-fill"></div>
+                        </div>
+                        <span class="speech-setup-progress-label" data-role="progress-label"></span>
+                      </div>
+                      <span class="setting-hint" data-role="error" hidden></span>
+                    </div>
+                    <span class="speech-extra-state speech-model-size" data-role="size">1.6 GB</span>
+                    <div class="speech-model-action">
+                      <span class="speech-extra-state" data-role="state" hidden>In use</span>
+                      <button type="button" class="btn-secondary" data-role="action" data-action="install" aria-disabled="false" hidden>Download and use</button>
+                    </div>
+                  </li>
+                  <li class="speech-extra" data-engine="qwen3-asr">
+                    <div class="speech-extra-copy">
+                      <span class="speech-extra-name" id="speech-model-qwen3-asr-name">Qwen3-ASR 1.7B</span>
+                      <span class="speech-extra-hint" data-role="line">Best with names and accents.</span>
+                      <div class="speech-setup-progress-row" data-role="progress-row" hidden>
+                        <div class="speech-setup-progress" data-role="progress" role="progressbar" aria-labelledby="speech-model-qwen3-asr-name" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                          <div class="speech-setup-progress-fill" data-role="progress-fill"></div>
+                        </div>
+                        <span class="speech-setup-progress-label" data-role="progress-label"></span>
+                      </div>
+                      <span class="setting-hint" data-role="error" hidden></span>
+                    </div>
+                    <span class="speech-extra-state speech-model-size" data-role="size">4.7 GB</span>
+                    <div class="speech-model-action">
+                      <span class="speech-extra-state" data-role="state" hidden>In use</span>
+                      <button type="button" class="btn-secondary" data-role="action" data-action="install" aria-disabled="false" hidden>Download and use</button>
+                    </div>
+                  </li>
+                  <li class="speech-extra" data-engine="whisper">
+                    <div class="speech-extra-copy">
+                      <span class="speech-extra-name" id="speech-model-whisper-name">Whisper large-v3</span>
+                      <span class="speech-extra-hint" data-role="line">Full-size, and the only one that can use a model trained on your voice.</span>
+                      <div class="speech-setup-progress-row" data-role="progress-row" hidden>
+                        <div class="speech-setup-progress" data-role="progress" role="progressbar" aria-labelledby="speech-model-whisper-name" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                          <div class="speech-setup-progress-fill" data-role="progress-fill"></div>
+                        </div>
+                        <span class="speech-setup-progress-label" data-role="progress-label"></span>
+                      </div>
+                      <span class="setting-hint" data-role="error" hidden></span>
+                    </div>
+                    <span class="speech-extra-state speech-model-size" data-role="size">3.1 GB</span>
+                    <div class="speech-model-action">
+                      <span class="speech-extra-state" data-role="state" hidden>In use</span>
+                      <button type="button" class="btn-secondary" data-role="action" data-action="install" aria-disabled="false" hidden>Download and use</button>
+                    </div>
+                  </li>
+                </ul>
+              </div>
+
+              <div class="setting-row" id="speech-gpu-row" hidden>
+                <div class="setting-copy">
+                  <span class="setting-label" id="speech-gpu-label">Speed up with your GPU</span>
+                  <span class="setting-hint" id="speech-gpu-hint"></span>
+                  <div class="speech-setup-progress-row speech-gpu-progress-row" id="speech-gpu-progress-row" hidden>
+                    <div class="speech-setup-progress" id="speech-gpu-progress" role="progressbar" aria-labelledby="speech-gpu-label" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                      <div class="speech-setup-progress-fill" id="speech-gpu-progress-fill"></div>
+                    </div>
+                    <span class="speech-setup-progress-label" id="speech-gpu-progress-label"></span>
+                  </div>
+                  <span class="setting-hint" id="speech-gpu-note" hidden></span>
+                  <span class="setting-hint" id="speech-gpu-error" hidden></span>
+                </div>
+                <div class="setting-control">
+                  <button type="button" class="btn-secondary" id="speech-gpu-action" data-action="" data-kind="" aria-disabled="false" hidden></button>
+                </div>
+              </div>
+
+              <details class="speech-advanced" id="speech-advanced">
+                <summary>Advanced</summary>
+                <div class="speech-advanced-body">
+                  <div class="setting-row" id="speech-processor-row">
+                    <div class="setting-copy">
+                      <span class="setting-label" id="speech-processor-label">Processor</span>
+                      <span class="setting-hint" id="speech-processor-hint">Auto uses your graphics card whenever the model in use can.</span>
+                    </div>
+                    <div class="setting-control">
+                      <select class="setting-select" id="asr-device-select" aria-labelledby="speech-processor-label">
+                        <option value="auto">Auto</option>
+                        <option value="cuda">NVIDIA GPU</option>
+                        <option value="directml">AMD or Intel GPU</option>
+                        <option value="cpu">CPU only</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="setting-row" id="tuned-row" hidden>
+                    <div class="setting-copy">
+                      <span class="setting-label">Use your tuned model</span>
+                      <span class="setting-hint" id="tuned-hint">Transcribe with the model trained on your own voice.</span>
+                    </div>
+                    <div class="setting-control">
+                      <label class="toggle">
+                        <input type="checkbox" id="set-tuned-model" />
+                        <span class="toggle-track" aria-hidden="true"></span>
+                      </label>
+                    </div>
+                  </div>
+                  <div class="setting-row speech-section" id="speech-downloads-row" hidden>
+                    <span class="setting-label" id="speech-downloads-label">Downloaded models</span>
+                    <ul class="speech-model-list" id="speech-downloads-list" aria-labelledby="speech-downloads-label"></ul>
+                    <span class="setting-hint is-error" id="speech-downloads-error" hidden></span>
+                  </div>
+                  <div class="setting-row" id="speech-repair-row">
+                    <div class="setting-copy">
+                      <span class="setting-label">Check and repair</span>
+                      <span class="setting-hint">Checks the speech engine and downloads anything the model in use is missing.</span>
+                    </div>
+                    <div class="setting-control">
+                      <button type="button" class="btn-secondary" id="speech-repair" aria-disabled="false">Check and repair</button>
+                    </div>
+                  </div>
+                  <div class="setting-row" id="speech-remove-all-row" hidden>
+                    <div class="setting-copy">
+                      <span class="setting-label">Remove everything</span>
+                      <span class="setting-hint" id="speech-remove-all-hint">Removes every downloaded model from this PC.</span>
+                      <span class="setting-hint is-error" id="speech-remove-all-error" hidden></span>
+                    </div>
+                    <div class="setting-control">
+                      <button type="button" class="btn-secondary" id="speech-remove-all" aria-disabled="false">Remove everything</button>
+                    </div>
+                  </div>
+                </div>
+              </details>
+            </div>
+
+            <div class="settings-panel organized-settings" data-cat="system" hidden>
+              <h2 class="settings-panel-title">System</h2>
+              <section class="settings-group" aria-labelledby="system-startup-title">
+                <h3 class="settings-group-title" id="system-startup-title">Startup &amp; window</h3>
+                <div class="setting-row">
+                  <div class="setting-copy">
+                    <label class="setting-label" for="set-launch-login">Launch at login</label>
+                    <span class="setting-hint" id="launch-login-hint">Start Voxden when you sign in to Windows.</span>
+                  </div>
+                  <div class="setting-control">
+                    <label class="toggle">
+                      <input type="checkbox" id="set-launch-login" />
+                      <span class="toggle-track" aria-hidden="true"></span>
+                    </label>
+                  </div>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-copy">
+                    <label class="setting-label" for="set-taskbar" id="taskbar-label">Show app in taskbar</label>
+                    <span class="setting-hint" id="taskbar-hint">Keep Voxden in the taskbar when the window is closed.</span>
+                  </div>
+                  <div class="setting-control">
+                    <label class="toggle">
+                      <input type="checkbox" id="set-taskbar" />
+                      <span class="toggle-track" aria-hidden="true"></span>
+                    </label>
+                  </div>
+                </div>
+                <div class="setting-row" id="run-as-admin-row">
+                  <div class="setting-copy">
+                    <span class="setting-label">Run as administrator</span>
+                    <span class="setting-hint" id="run-as-admin-hint">Only needed for games and apps that run as administrator. Windows asks first; it lasts until Voxden restarts.</span>
+                    <span class="setting-hint is-error" id="run-as-admin-error" role="alert" hidden></span>
+                  </div>
+                  <div class="setting-control">
+                    <button type="button" class="btn-secondary" id="run-as-admin-btn">Restart as administrator</button>
+                  </div>
+                </div>
+              </section>
+              <section class="settings-group" aria-labelledby="system-updates-title">
+                <h3 class="settings-group-title" id="system-updates-title">Updates</h3>
+                <div class="setting-row">
+                  <div class="setting-copy">
+                    <span class="setting-label">App version</span>
+                    <span class="setting-hint" id="update-status-hint">Checking for updates…</span>
+                  </div>
+                  <div class="setting-control setting-control-shortcut">
+                    <span id="app-version-display" class="shortcut-display">—</span>
+                    <button type="button" class="btn-primary" id="update-restart-btn" hidden>Restart now</button>
+                    <button type="button" class="btn-secondary" id="update-check-btn">Check now</button>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <div class="settings-panel organized-settings display-settings" data-cat="display" hidden>
+              <h2 class="settings-panel-title">Display</h2>
+              <section class="settings-group" aria-labelledby="display-theme-title">
+                <h3 class="settings-group-title" id="display-theme-title">App theme</h3>
+                <div class="app-theme-options" role="radiogroup" aria-labelledby="display-theme-title" aria-describedby="app-theme-status">
+                  <button type="button" class="app-theme-card" data-app-theme="voxden" role="radio" aria-checked="true" tabindex="0" aria-label="Voxden theme">
+                    <span class="app-theme-preview preview-voxden" aria-hidden="true"><i class="theme-mini-nav"></i><i class="theme-mini-heading"></i><i class="theme-mini-card"></i><i class="theme-mini-accent"></i></span>
+                    <span class="app-theme-name">Voxden<span class="app-theme-check" aria-hidden="true">✓</span></span>
+                    <span class="app-theme-description">Charcoal &amp; mint</span>
+                  </button>
+                  <button type="button" class="app-theme-card" data-app-theme="white" role="radio" aria-checked="false" tabindex="-1" aria-label="White theme">
+                    <span class="app-theme-preview preview-white" aria-hidden="true"><i class="theme-mini-nav"></i><i class="theme-mini-heading"></i><i class="theme-mini-card"></i><i class="theme-mini-accent"></i></span>
+                    <span class="app-theme-name">White<span class="app-theme-check" aria-hidden="true">✓</span></span>
+                    <span class="app-theme-description">Soft white &amp; mint</span>
+                  </button>
+                </div>
+                <p class="app-theme-status" id="app-theme-status" role="status" hidden></p>
+              </section>
+              <div class="setting-row flow-style-setting">
+                <div class="setting-copy">
+                  <span class="setting-label" id="flow-style-label">Flow bar style</span>
+                  <span class="setting-hint">Choose how your voice appears.</span>
+                </div>
+                <div class="flow-style-options" id="flow-style-options" role="radiogroup" aria-labelledby="flow-style-label" aria-describedby="flow-style-hint">
+                  <button type="button" class="flow-style-card" data-flow-style="island" role="radio" aria-checked="true" tabindex="0" aria-labelledby="flow-style-island-name" aria-describedby="flow-style-island-description">
+                    <span class="flow-style-preview flow-preview-island" aria-hidden="true">
+                      <span class="flow-preview-island-cap">
+                        <span class="flow-preview-island-key"><svg viewBox="0 0 16 16" width="10" height="10"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" /></svg></span>
+                        <svg class="flow-preview-island-wave" viewBox="0 0 42 12" width="42" height="12"><path d="M1 5v2M5 4v4M9 2v8M13 3v6M17 1v10M21 2v8M25 1v10M29 4v4M33 2v8M37 4v4M41 5v2" /></svg>
+                        <span class="flow-preview-island-key flow-preview-island-stop"></span>
+                      </span>
+                    </span>
+                    <span class="flow-style-name" id="flow-style-island-name">Island</span>
+                    <span class="flow-style-description" id="flow-style-island-description">One black shape. Fluid motion.</span>
+                    <span class="flow-style-selected" aria-hidden="true"></span>
+                  </button>
+                  <button type="button" class="flow-style-card" data-flow-style="orb" role="radio" aria-checked="false" tabindex="-1" aria-labelledby="flow-style-orb-name" aria-describedby="flow-style-orb-description">
+                    <span class="flow-style-preview flow-preview-orb" aria-hidden="true">
+                      <span class="flow-preview-orb-shell"><canvas class="flow-preview-orb-canvas" id="flow-preview-energy-orb" width="44" height="44"></canvas></span>
+                    </span>
+                    <span class="flow-style-name" id="flow-style-orb-name">Orb</span>
+                    <span class="flow-style-description" id="flow-style-orb-description">A glowing voice sphere.</span>
+                    <span class="flow-style-selected" aria-hidden="true"></span>
+                  </button>
+                </div>
+                <p class="flow-style-hint" id="flow-style-hint">Hover to preview. Style changes apply after dictation.</p>
+                <p class="flow-style-status" id="flow-style-status" role="status" hidden></p>
+              </div>
+              <details class="settings-more" id="display-more-options">
+                <summary>
+                  <span class="settings-more-copy"><span class="setting-label">Behavior &amp; motion</span><span class="setting-hint">Visibility, animations &amp; position</span></span>
+                  <svg class="settings-more-chevron" viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m7 4 6 6-6 6" /></svg>
+                </summary>
+                <div class="settings-more-body">
+                  <div class="setting-row">
+                    <div class="setting-copy">
+                      <label class="setting-label" for="set-always-flow">Always show flow bar</label>
+                      <span class="setting-hint">Keep it visible between dictations.</span>
+                    </div>
+                    <div class="setting-control">
+                      <label class="toggle">
+                        <input type="checkbox" id="set-always-flow" />
+                        <span class="toggle-track" aria-hidden="true"></span>
+                      </label>
+                    </div>
+                  </div>
+                  <div class="setting-row" id="flow-motion-row">
+                    <div class="setting-copy">
+                      <label class="setting-label" for="flow-motion-select">Flow bar animations</label>
+                      <span class="setting-hint" id="flow-motion-hint">Follows Windows animation effects.</span>
+                    </div>
+                    <div class="setting-control">
+                      <select class="setting-select" id="flow-motion-select" aria-describedby="flow-motion-hint flow-motion-status">
+                        <option value="system" id="flow-motion-system-option">Follow Windows</option>
+                        <option value="full">On</option>
+                        <option value="reduced">Reduced</option>
+                      </select>
+                    </div>
+                  </div>
+                  <p class="flow-style-status" id="flow-motion-status" role="status" hidden></p>
+                  <div class="setting-row" id="flow-bar-position-row" hidden>
+                    <div class="setting-copy">
+                      <span class="setting-label">Flow bar position</span>
+                      <span class="setting-hint">Put it back at the bottom of your main screen.</span>
+                    </div>
+                    <div class="setting-control">
+                      <button type="button" class="btn-secondary" id="flow-bar-reset">Reset position</button>
+                    </div>
+                  </div>
+                </div>
+              </details>
+            </div>
+
+            <div class="settings-panel" data-cat="sound" hidden>
+              <h2 class="settings-panel-title">Sound</h2>
+              <div class="setting-row">
+                <div class="setting-copy">
+                  <span class="setting-label">Dictation and notification sounds</span>
+                  <span class="setting-hint">Play short cues when dictation starts, finishes, or fails.</span>
+                </div>
+                <div class="setting-control">
+                  <label class="toggle">
+                    <input type="checkbox" id="set-sounds" checked />
+                    <span class="toggle-track" aria-hidden="true"></span>
+                  </label>
+                </div>
+              </div>
+              <div class="setting-row">
+                <div class="setting-copy">
+                  <span class="setting-label">Mute other audio while dictating</span>
+                  <span class="setting-hint">Pauses music and silences calls, videos, and other playback while your microphone is open.</span>
+                </div>
+                <div class="setting-control">
+                  <label class="toggle">
+                    <input type="checkbox" id="set-mute-music" checked />
+                    <span class="toggle-track" aria-hidden="true"></span>
+                  </label>
+                </div>
+              </div>
+              <div class="setting-row">
+                <div class="setting-copy">
+                  <span class="setting-label">Suggestions</span>
+                  <span class="setting-hint">Show helpful tips inside Voxden.</span>
+                </div>
+                <div class="setting-control">
+                  <label class="toggle">
+                    <input type="checkbox" id="set-suggestions" checked />
+                    <span class="toggle-track" aria-hidden="true"></span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-panel" data-cat="privacy" hidden>
+              <h2 class="settings-panel-title">Data and privacy</h2>
+              <div class="setting-row">
+                <div class="setting-copy">
+                  <span class="setting-label" id="privacy-store-label">Store data on this PC</span>
+                  <span class="setting-hint">Dictations and corrections stay in your local data folder.</span>
+                </div>
+                <div class="setting-control">
+                  <label class="toggle">
+                    <input type="checkbox" id="set-local-storage" checked disabled />
+                    <span class="toggle-track" aria-hidden="true"></span>
+                  </label>
+                </div>
+              </div>
+              <div class="setting-row">
+                <div class="setting-copy">
+                  <span class="setting-label">Keep recordings</span>
+                  <span class="setting-hint" id="recordings-hint">Keeps the audio behind each dictation for 14 days (up to 500 MB) so you can replay, save, or retry it, and recover the ones that failed to transcribe.</span>
+                  <span class="setting-hint" id="recordings-clear-status" role="status" hidden></span>
+                </div>
+                <div class="setting-control setting-control-shortcut">
+                  <button type="button" class="btn-secondary" id="recordings-clear" aria-label="Delete saved recordings" disabled>Delete</button>
+                  <label class="toggle">
+                    <input type="checkbox" id="set-keep-recordings" checked />
+                    <span class="toggle-track" aria-hidden="true"></span>
+                  </label>
+                </div>
+              </div>
+              <div class="setting-row">
+                <div class="setting-copy">
+                  <span class="setting-label">Keep audio for training</span>
+                  <span class="setting-hint" id="privacy-training-hint">Keeps audio behind corrected dictations to train on your voice. Stays on this PC, off by default.</span>
+                </div>
+                <div class="setting-control">
+                  <label class="toggle">
+                    <input type="checkbox" id="set-training-audio" />
+                    <span class="toggle-track" aria-hidden="true"></span>
+                  </label>
+                </div>
+              </div>
+              <div class="setting-row" id="training-row" hidden>
+                <div class="setting-copy">
+                  <span class="setting-label">Training clips</span>
+                  <span class="setting-hint" id="training-stats">Nothing collected yet.</span>
+                </div>
+                <div class="setting-control">
+                  <button type="button" class="btn-secondary" id="training-clear">Delete recordings</button>
+                </div>
+              </div>
+              <div class="setting-row">
+                <div class="setting-copy">
+                  <span class="setting-label">Where your prices come from</span>
+                  <span class="setting-hint">Your plan is priced for the country you first signed in from, worked out from that sign-in's IP address. IP Geolocation by <a href="https://db-ip.com" target="_blank" rel="noopener noreferrer" title="Open db-ip.com in your browser">DB-IP</a>, used under CC BY 4.0.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      <button type="button" class="settings-close" id="settings-close" aria-label="Close settings">×</button>
+    </div>
+  </div>
+
+  <dialog id="dictation-lang-dialog" class="shortcuts-dialog lang-dialog" aria-labelledby="dictation-lang-title">
+    <h2 class="settings-panel-title" id="dictation-lang-title">Dictation languages</h2>
+    <p class="setting-hint lang-dialog-lead">Pick up to three for Voxden Cloud. The first you pick is the main one; with more than one, Voxden Cloud tells them apart on its own. Hinglish writes Hindi in English letters.</p>
+    <input type="search" class="lang-search" id="dictation-lang-search" placeholder="Search languages" autocomplete="off" aria-label="Search languages">
+    <div class="lang-dialog-body">
+      <div class="lang-grid" id="dictation-lang-grid" role="group" aria-label="Languages"></div>
+      <aside class="lang-selected" aria-labelledby="dictation-lang-selected-title">
+        <h3 class="lang-selected-title" id="dictation-lang-selected-title">Selected</h3>
+        <ul id="dictation-lang-selected"></ul>
+      </aside>
+    </div>
+    <p class="setting-hint is-error" id="dictation-lang-error" role="alert" hidden></p>
+    <div class="speech-setup-actions lang-dialog-actions">
+      <button type="button" class="btn-secondary" id="dictation-lang-cancel">Cancel</button>
+      <button type="button" class="btn-primary" id="dictation-lang-save">Save and close</button>
+    </div>
+  </dialog>
+  <div class="account-menu" id="account-menu" role="menu" aria-label="Your account" hidden>
+    <div class="account-menu-banner" id="account-menu-banner">
+      <span class="account-menu-avatar" id="account-menu-avatar" aria-hidden="true"><img id="account-menu-img" alt="" hidden><span id="account-menu-initials">?</span></span>
+      <span class="account-menu-who">
+        <span class="account-menu-name" id="account-menu-name"></span>
+        <span class="account-menu-email" id="account-menu-email"></span>
+      </span>
+      <span class="account-menu-plan" id="account-menu-plan"></span>
+    </div>
+    <button type="button" class="help-menu-item" id="account-menu-manage" role="menuitem">
+      <span class="help-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16"><circle cx="12" cy="8.5" r="3.6" fill="none" stroke="currentColor" stroke-width="1.75"/><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M5 19.5c1.2-3.3 3.6-5 7-5s5.8 1.7 7 5"/></svg></span>
+      <span class="help-menu-text">Manage account</span>
+    </button>
+    <button type="button" class="help-menu-item" id="account-menu-billing" role="menuitem">
+      <span class="help-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16"><rect x="3" y="6" width="18" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.75"/><path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M3 10.5h18M7 14.5h3"/></svg></span>
+      <span class="help-menu-text">Plans &amp; billing</span>
+    </button>
+    <button type="button" class="help-menu-item" id="account-menu-signout" role="menuitem">
+      <span class="help-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M10 4H6.5A1.5 1.5 0 0 0 5 5.5v13A1.5 1.5 0 0 0 6.5 20H10M15 8l4 4-4 4M19 12H9"/></svg></span>
+      <span class="help-menu-text">Sign out</span>
+    </button>
+  </div>
+  <div class="help-menu" id="help-menu" role="menu" aria-label="Help" hidden>
+    <p class="help-menu-heading">Latest</p>
+    <a class="help-menu-item" id="help-whats-new" role="menuitem" href="https://voxden.app/changelog" target="_blank" rel="noopener noreferrer" title="Open the Voxden changelog in your browser">
+      <span class="help-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M12 3.5l1.9 4.6 4.6 1.9-4.6 1.9L12 16.5l-1.9-4.6L5.5 10l4.6-1.9L12 3.5ZM5 17l.8 1.7L7.5 19.5l-1.7.8L5 22l-.8-1.7-1.7-.8 1.7-.8L5 17Z"/></svg></span>
+      <span class="help-menu-text">What's new</span>
+    </a>
+    <p class="help-menu-heading">Quick checks</p>
+    <button type="button" class="help-menu-item" id="help-shortcuts" role="menuitem">
+      <span class="help-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16"><rect x="3" y="6" width="18" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.75"/><path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M7 10h.01M11 10h.01M15 10h.01M7 14h10"/></svg></span>
+      <span class="help-menu-text">Shortcuts</span>
+    </button>
+    <button type="button" class="help-menu-item" id="help-microphone" role="menuitem">
+      <span class="help-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16"><rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.75"/><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3"/></svg></span>
+      <span class="help-menu-text">Microphone check</span>
+    </button>
+    <button type="button" class="help-menu-item" id="help-languages" role="menuitem">
+      <span class="help-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.75"/><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M3.5 12h17M12 3.5c2.5 2.6 2.5 14.4 0 17M12 3.5c-2.5 2.6-2.5 14.4 0 17"/></svg></span>
+      <span class="help-menu-text">Dictation languages</span>
+    </button>
+    <p class="help-menu-heading">Learn</p>
+    <button type="button" class="help-menu-item" id="help-guide" role="menuitem">
+      <span class="help-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5v-15ZM4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5M9 8h6"/></svg></span>
+      <span class="help-menu-text">Setup guide</span>
+    </button>
+    <p class="help-menu-heading">Tell us</p>
+    <button type="button" class="help-menu-item" id="help-feedback" role="menuitem">
+      <span class="help-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H9l-4.5 4v-4A1.5 1.5 0 0 1 4 14.5v-9ZM8 8.5h8M8 11.5h5"/></svg></span>
+      <span class="help-menu-text">Feedback or bug report</span>
+    </button>
+  </div>
+  <dialog id="subscription-dialog" class="shortcuts-dialog subscription-dialog" aria-labelledby="subscription-title">
+    <h2 class="settings-panel-title" id="subscription-title">Your subscription</h2>
+    <p class="setting-hint lang-dialog-lead" id="subscription-lead">Voxden Pro, billed monthly.</p>
+    <dl class="subscription-facts">
+      <div class="subscription-fact"><dt>Price</dt><dd id="subscription-price">—</dd></div>
+      <div class="subscription-fact"><dt>Paid through</dt><dd id="subscription-through">—</dd></div>
+      <div class="subscription-fact"><dt>Renewal</dt><dd id="subscription-renewal">—</dd></div>
+      <div class="subscription-fact"><dt>Cloud credits</dt><dd id="subscription-credits">—</dd></div>
+      <div class="subscription-fact"><dt>Billed by</dt><dd id="subscription-provider">—</dd></div>
+      <div class="subscription-fact"><dt>Account</dt><dd id="subscription-email">—</dd></div>
+    </dl>
+    <p class="setting-hint subscription-note" id="subscription-note"></p>
+    <p class="setting-hint is-error" id="subscription-error" role="alert" hidden></p>
+    <div class="speech-setup-actions lang-dialog-actions">
+      <button type="button" class="btn-secondary btn-danger" id="subscription-cancel">Cancel renewal</button>
+      <button type="button" class="btn-secondary" id="subscription-portal" hidden>Payment details</button>
+      <button type="button" class="btn-primary" id="subscription-close">Close</button>
+    </div>
+  </dialog>
+  <dialog id="mic-dialog" class="shortcuts-dialog mic-dialog" aria-labelledby="mic-dialog-title">
+    <h2 class="settings-panel-title" id="mic-dialog-title">Microphone check</h2>
+    <p class="setting-hint lang-dialog-lead">Say something. Each bar moves with the microphone it belongs to, so you can see which one hears you. Pick the one Voxden should listen to.</p>
+    <ul class="mic-list" id="mic-list" role="radiogroup" aria-label="Microphones"></ul>
+    <p class="setting-hint" id="mic-dialog-status" role="status" hidden></p>
+    <div class="speech-setup-actions lang-dialog-actions">
+      <button type="button" class="btn-primary" id="mic-dialog-close">Done</button>
+    </div>
+  </dialog>
+  <dialog id="feedback-dialog" class="shortcuts-dialog feedback-dialog" aria-labelledby="feedback-title">
+    <div class="feedback-head">
+      <div class="feedback-head-copy">
+        <h2 class="settings-panel-title feedback-title" id="feedback-title">Tell us what happened</h2>
+        <p class="feedback-lead">It goes straight to the people who build Voxden.</p>
+      </div>
+      <button type="button" class="feedback-close" id="feedback-close" aria-label="Close">
+        <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+      </button>
+    </div>
+    <div class="feedback-kind" id="feedback-kind" role="radiogroup" aria-label="What is this about">
+      <button type="button" class="feedback-kind-btn is-active" data-kind="bug" role="radio" aria-checked="true">
+        <svg class="feedback-kind-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="8" height="11" rx="4"/><path d="M9.5 8a2.5 2.5 0 0 1 5 0M12 12v7M8 11H4.5M8 15H4.5M16 11h3.5M16 15h3.5M9 6L7.5 4M15 6l1.5-2"/></svg>Bug
+      </button>
+      <button type="button" class="feedback-kind-btn" data-kind="idea" role="radio" aria-checked="false">
+        <svg class="feedback-kind-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 17.5h6M10 20.5h4M8.2 14.5a6 6 0 1 1 7.6 0c-.6.5-.8 1.2-.8 2v1H9v-1c0-.8-.2-1.5-.8-2z"/></svg>Idea
+      </button>
+      <button type="button" class="feedback-kind-btn" data-kind="other" role="radio" aria-checked="false">
+        <svg class="feedback-kind-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 5.5h15v10.5H10l-4 3.5v-3.5H4.5z"/><path d="M8.5 10.8h.01M12 10.8h.01M15.5 10.8h.01"/></svg>Something else
+      </button>
+    </div>
+    <textarea class="feedback-text" id="feedback-text" rows="6" maxlength="4000" placeholder="What were you doing, and what did Voxden do instead?" aria-label="Your message"></textarea>
+    <label class="feedback-email-row" id="feedback-email-row">
+      <span class="setting-label">Email, if you want a reply</span>
+      <input type="email" class="setting-input feedback-email" id="feedback-email" placeholder="you@example.com" autocomplete="off" spellcheck="false">
+    </label>
+    <p class="setting-hint" id="feedback-status" role="status" hidden></p>
+    <div class="feedback-foot">
+      <label class="feedback-details">
+        <input type="checkbox" id="feedback-details" checked>
+        <span class="feedback-details-label">Sent with it:</span>
+        <span class="feedback-chips" id="feedback-details-summary"></span>
+      </label>
+      <div class="feedback-actions">
+        <button type="button" class="btn-secondary" id="feedback-github" hidden>Open on GitHub instead</button>
+        <button type="button" class="feedback-send" id="feedback-send">
+          <span class="feedback-send-chip" aria-hidden="true">
+            <svg class="feedback-plane" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3L10.5 13.5M21 3l-6.5 18-4-7.5L3 9.5z"/></svg>
+            <svg class="feedback-tick" viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>
+          </span>
+          <span class="feedback-send-label" id="feedback-send-label">Send</span>
+        </button>
+      </div>
+    </div>
+  </dialog>
+  <dialog id="confirm-dialog" class="shortcuts-dialog confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-body">
+    <h2 class="settings-panel-title" id="confirm-title"></h2>
+    <p class="setting-hint confirm-body" id="confirm-body"></p>
+    <div class="speech-setup-actions lang-dialog-actions">
+      <button type="button" class="btn-secondary" id="confirm-cancel">Cancel</button>
+      <button type="button" class="btn-primary" id="confirm-ok">OK</button>
+    </div>
+  </dialog>
+  <dialog id="shortcuts-dialog" class="shortcuts-dialog" aria-labelledby="shortcuts-title">
+    <h2 class="settings-panel-title" id="shortcuts-title">Shortcuts</h2>
+    <div class="setting-row">
+      <div class="setting-copy">
+        <span class="setting-label">Dictation shortcut</span>
+        <span class="setting-hint">Global shortcut to start and finish dictation.</span>
+      </div>
+      <div class="setting-control setting-control-shortcut">
+        <span id="shortcut-display" class="shortcut-display"><kbd>Ctrl</kbd>+<kbd>Win</kbd></span>
+        <button type="button" class="btn-secondary" id="shortcut-change" aria-label="Change dictation shortcut" autofocus>Change</button>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-copy">
+        <span class="setting-label">Paste last dictation</span>
+        <span class="setting-hint">Pastes your most recent transcript at the cursor.</span>
+      </div>
+      <div class="setting-control setting-control-shortcut">
+        <span id="paste-last-shortcut-display" class="shortcut-display"><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>V</kbd></span>
+        <button type="button" class="btn-secondary" id="paste-last-shortcut-change" aria-label="Change paste last dictation shortcut">Change</button>
+      </div>
+    </div>
+    <div class="setting-row" id="game-shortcut-row">
+      <div class="setting-copy">
+        <label class="setting-label" for="set-game-shortcut">Game shortcut</label>
+        <span class="setting-hint" id="game-shortcut-hint">Dictate into a game’s chat without leaving the game. While on, its key works only for Voxden.</span>
+      </div>
+      <div class="setting-control setting-control-shortcut">
+        <span id="game-shortcut-display" class="shortcut-display" hidden><kbd>F8</kbd></span>
+        <button type="button" class="btn-secondary" id="game-shortcut-change" aria-label="Change game shortcut" hidden>Change</button>
+        <label class="toggle">
+          <input type="checkbox" id="set-game-shortcut" aria-describedby="game-shortcut-hint" />
+          <span class="toggle-track" aria-hidden="true"></span>
+        </label>
+      </div>
+    </div>
+    <p id="shortcut-capture-hint" class="shortcut-capture-hint" role="status" hidden>Press a new shortcut. Escape to cancel.</p>
+    <button type="button" class="settings-close" id="shortcuts-close" aria-label="Close shortcuts">×</button>
+  </dialog>
+
+  <div id="dict-vocab-overlay" class="vocab-overlay" hidden>
+    <div class="vocab-dialog" role="dialog" aria-modal="true" aria-labelledby="vocab-title">
+      <h2 id="vocab-title">Add to vocabulary</h2>
+      <label class="vocab-option">
+        <span>Correct a misspelling</span>
+        <span class="toggle">
+          <input type="checkbox" id="vocab-misspell" />
+          <span class="toggle-track" aria-hidden="true"></span>
+        </span>
+      </label>
+      <form id="dict-form" class="vocab-form" autocomplete="off">
+        <label class="vocab-field" id="vocab-word-field">
+          <input type="text" id="dict-to" class="setting-input dict-input" placeholder="Add a new word" spellcheck="false" autocomplete="off" />
+        </label>
+        <div class="vocab-mapping" id="vocab-mapping-fields" hidden>
+          <label class="vocab-field">
+            <span class="dict-label">If Voxden writes</span>
+            <input type="text" id="dict-from" class="setting-input dict-input" placeholder="vox don" spellcheck="false" autocomplete="off" />
+          </label>
+          <label class="vocab-field">
+            <span class="dict-label">Use this spelling</span>
+            <input type="text" id="dict-to-map" class="setting-input dict-input" placeholder="Voxden" spellcheck="false" autocomplete="off" />
+          </label>
+        </div>
+        <p id="dict-error" class="dict-error" hidden></p>
+        <div class="vocab-actions">
+          <button type="button" class="btn-secondary" id="vocab-cancel">Cancel</button>
+          <button type="submit" class="btn-primary" id="dict-submit">Add word</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <dialog id="signin-gate" class="signin-gate" aria-labelledby="signin-title">
+    <aside class="signin-brand">
+      <span class="signin-mark"><img src="../assets/logo-mark.png" alt="" aria-hidden="true">Voxden</span>
+      <span class="signin-kicker" id="signin-kicker">DICTATION FOR WINDOWS</span>
+      <h2 class="signin-headline">Speak.<br>It's <em>written.</em></h2>
+      <p class="signin-tagline">Your voice becomes clean text in any app, with one shortcut and none of the typing.</p>
+      <ul class="signin-points">
+        <li id="signin-point-local"><i></i>Stays on this PC until you choose the cloud</li>
+        <li><i></i>Learns your names, words and phrasing</li>
+        <li><i></i>Your dictionary and plan, on every install</li>
+      </ul>
+    </aside>
+    <section class="signin-panel">
+      <div class="signin-view" id="signin-view-out">
+        <h1 class="signin-title" id="signin-title">Sign in to begin</h1>
+        <p class="signin-sub">One account keeps your dictionary, your history and your plan together.</p>
+        <button type="button" class="signin-google" id="signin-google">
+          <span class="signin-google-mark" aria-hidden="true"><svg viewBox="0 0 48 48" width="18" height="18"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg></span>
+          <span>Continue with Google</span>
+        </button>
+        <div class="signin-divider"><span>or use your email</span></div>
+        <label class="signin-field"><span>Email</span><input type="email" id="signin-email" placeholder="you@example.com" maxlength="254" spellcheck="false" autocomplete="email"></label>
+        <button type="button" class="btn-primary signin-primary" id="signin-send">Send me a code</button>
+        <p class="signin-error" id="signin-error" role="alert" hidden></p>
+        <p class="signin-foot" id="signin-foot">No password to remember. A six-digit code arrives by email.</p>
+      </div>
+      <div class="signin-view" id="signin-view-code" hidden>
+        <h2 class="signin-title">Check your email</h2>
+        <p class="signin-sub" id="signin-code-hint"></p>
+        <label class="signin-field"><span>Six-digit code</span><input type="text" id="signin-code" inputmode="numeric" maxlength="7" spellcheck="false" autocomplete="one-time-code" placeholder="000000"></label>
+        <button type="button" class="btn-primary signin-primary" id="signin-verify">Sign in</button>
+        <p class="signin-error" id="signin-code-error" role="alert" hidden></p>
+        <button type="button" class="signin-link" id="signin-back">Use a different email</button>
+      </div>
+      <div class="signin-view" id="signin-view-google" hidden>
+        <div class="signin-wait" aria-hidden="true"><span class="signin-spinner"></span></div>
+        <h2 class="signin-title">Finish in your browser</h2>
+        <p class="signin-sub">Google opened in a new tab. Choose your account there and Voxden picks up from here.</p>
+        <button type="button" class="signin-link" id="signin-google-cancel">Cancel</button>
+      </div>
+    </section>
+  </dialog>
+  <dialog id="model-welcome" class="model-welcome" aria-labelledby="model-welcome-title" aria-describedby="model-welcome-description">
+    <div class="model-welcome-heading">
+      <span class="model-welcome-kicker">WELCOME TO VOXDEN</span>
+      <h2 id="model-welcome-title">Make yourself heard.</h2>
+      <p id="model-welcome-description">Choose a free speech model to get started. It runs on this PC, in English.</p>
+    </div>
+    <fieldset id="model-welcome-choices">
+      <legend>Choose your local model</legend>
+      <label class="model-choice" data-model="parakeet">
+        <input type="radio" name="welcome-model" value="parakeet" checked />
+        <span class="model-choice-body"><span class="model-choice-title">Parakeet v3 <span class="model-choice-badge">RECOMMENDED</span></span><span class="model-choice-description">A small download for fast everyday dictation.</span><span class="model-choice-detail">Fastest · Runs well without a graphics card</span></span>
+        <span class="model-choice-size" data-model-size="parakeet">~670 MB</span>
+      </label>
+      <label class="model-choice" data-model="whisper-turbo">
+        <input type="radio" name="welcome-model" value="whisper-turbo" />
+        <span class="model-choice-body"><span class="model-choice-title">Whisper large-v3 turbo</span><span class="model-choice-description">Whisper at half the download.</span><span class="model-choice-detail">Uses your dictionary · Lighter than large-v3 on a CPU</span></span>
+        <span class="model-choice-size" data-model-size="whisper-turbo">~1.6 GB</span>
+      </label>
+      <label class="model-choice" data-model="qwen3-asr">
+        <input type="radio" name="welcome-model" value="qwen3-asr" />
+        <span class="model-choice-body"><span class="model-choice-title">Qwen3-ASR <span class="model-choice-badge subtle">BEST WITH NAMES</span></span><span class="model-choice-description">For names and the words in your dictionary.</span><span class="model-choice-detail" id="model-welcome-qwen-detail">Largest download · Works best with a supported GPU</span></span>
+        <span class="model-choice-size" data-model-size="qwen3-asr">~4.7 GB</span>
+      </label>
+      <label class="model-choice" data-model="whisper">
+        <input type="radio" name="welcome-model" value="whisper" />
+        <span class="model-choice-body"><span class="model-choice-title">Whisper large-v3</span><span class="model-choice-description">The full Whisper model.</span><span class="model-choice-detail">Works with your tuned model · Slower on a CPU</span></span>
+        <span class="model-choice-size" data-model-size="whisper">~3.1 GB</span>
+      </label>
+    </fieldset>
+    <div class="model-welcome-progress" id="model-welcome-progress" hidden><progress id="model-welcome-meter" max="100" value="0" aria-label="Model installation"></progress></div>
+    <p id="model-welcome-status" role="status">Only your selected model will download. You can switch in Settings later.</p>
+    <div class="model-welcome-footer"><button type="button" id="model-welcome-later" class="btn-secondary">Choose later</button><button type="button" id="model-welcome-start" class="btn-primary">Download Parakeet v3</button></div>
+  </dialog>
+  <div id="learn-toast" class="learn-toast" hidden role="status"></div>
+  <div class="app-toast-region" role="status" aria-live="polite">
+    <div class="app-toast" id="app-toast" hidden>
+      <span class="app-toast-check" aria-hidden="true"><svg viewBox="0 0 24 24" width="13" height="13"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      <span class="app-toast-text"></span>
+    </div>
+  </div>
+
+  <script src="metrics.js"></script>
+  <script src="insights.js"></script>
+  <script src="suggestions.js"></script>
+  <script src="energy-orb.js"></script>
+  <script src="energy-orb-preview.js"></script>
+  <script src="signin.js"></script>
+  <script src="onboarding.js"></script>
+  <script src="app-theme-ui.js"></script>
+  <script src="app-toast.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

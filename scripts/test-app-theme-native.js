@@ -1,0 +1,80 @@
+'use strict';
+// Real Electron main/preload/renderers with a disposable profile. The overlay's
+// recording HUD is simulated; this test never requests a real microphone.
+const { app, BrowserWindow, session, globalShortcut, safeStorage } = require('electron');
+const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'voxden-theme-native-'));
+app.setPath('userData', profile);
+// The OS keychain is not isolated by userData. A test Electron identity must
+// not create Voxden's key before the separately signed packaged app starts.
+safeStorage.isEncryptionAvailable = () => false;
+app.disableHardwareAcceleration();
+Object.defineProperty(app, 'isPackaged', { value: true });
+app.getVersion = () => require('../package.json').version;
+const file = path.join(profile, 'data/settings.json');
+fs.mkdirSync(path.dirname(file), { recursive: true });
+fs.writeFileSync(file, JSON.stringify({ appTheme: 'white', launchAtLogin: false, alwaysShowFlowBar: false, soundsEnabled: false }));
+app.setLoginItemSettings = () => {};
+globalShortcut.register = () => true;
+globalShortcut.unregister = () => {};
+globalShortcut.unregisterAll = () => {};
+require('../src/updater').startUpdater = () => {};
+BrowserWindow.prototype.show = function () {};
+BrowserWindow.prototype.showInactive = function () {};
+BrowserWindow.prototype.focus = function () {};
+const captions = [];
+const nativeCaption = BrowserWindow.prototype.setTitleBarOverlay;
+BrowserWindow.prototype.setTitleBarOverlay = function (colors) { captions.push(colors); return nativeCaption.call(this, colors); };
+app.whenReady().then(() => {
+  session.defaultSession.setPermissionCheckHandler(() => false);
+  session.defaultSession.setPermissionRequestHandler((_w,_p,cb) => cb(false));
+});
+require('../src/main');
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+const deadline = setTimeout(() => { console.error('Native theme test timed out'); app.exit(1); }, 25000);
+const until = async fn => { for(let i=0;i<150;i++){if(await fn())return;await pause(40);}assert.fail('Native windows did not become ready'); };
+app.whenReady().then(async () => {
+  let dashboard, overlay;
+  await until(() => {
+    dashboard=BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/app.html'));
+    overlay=BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/overlay.html'));
+    return dashboard&&overlay&&!dashboard.webContents.isLoading()&&!overlay.webContents.isLoading();
+  });
+  const run = code => dashboard.webContents.executeJavaScript(code);
+  const bar = code => overlay.webContents.executeJavaScript(code);
+  await until(()=>run('!!window.VoxdenThemeSettings'));
+  assert.strictEqual(await run('window.voxden.initialAppTheme'), 'white');
+  assert.strictEqual(await run('document.documentElement.dataset.appTheme'), 'white');
+  // White keeps the dark frame, so the window behind the page is the frame colour.
+  assert.strictEqual(dashboard.getBackgroundColor().toLowerCase(), '#0b0d0e');
+  await run(`openSettingsTarget('display'); true`);
+  // Finish any running transition before reading a colour: the CI runner reports reduced motion,
+  // which turns every style change into a .01ms transition a hidden window may not have ended yet.
+  for(const style of ['island','orb']) {
+    await bar(`alwaysShowFlowBar=true; soundsEnabled=false; setHud('idle'); applyFlowBarStyle('${style}'); setHud('recording'); true`);
+    await pause(450);
+    const before=await bar(`(pill.getAnimations({subtree:true}).forEach(a=>a.finish()),{mode:hudMode,generation:captureGen,style:flowBarStyle,color:getComputedStyle(pill).backgroundColor})`);
+    for(const value of ['voxden','white']) {
+      await run(`document.querySelector('.app-theme-card[data-app-theme="${value}"]').click(); true`);
+      await until(async()=>JSON.parse(fs.readFileSync(file,'utf8')).appTheme===value
+        && await run(`document.documentElement.dataset.appTheme === '${value}'
+          && document.querySelector('.app-theme-card[data-app-theme="${value}"]').getAttribute('aria-checked') === 'true'
+          && document.getElementById('app-theme-status').hidden`));
+      assert.strictEqual(dashboard.getBackgroundColor().toLowerCase(),value==='white'?'#0b0d0e':'#101113');
+      if (process.platform === 'darwin') assert.strictEqual(captions.length,0,'Mac theme saves do not call the Windows/Linux caption API');
+      else assert.strictEqual(captions.at(-1).symbolColor,value==='white'?'#A9B5AE':'#a3ada6');
+      assert.deepStrictEqual(await bar(`(pill.getAnimations({subtree:true}).forEach(a=>a.finish()),{mode:hudMode,generation:captureGen,style:flowBarStyle,color:getComputedStyle(pill).backgroundColor})`),before,'theme preserves '+style+' recording HUD');
+      assert.strictEqual(await bar(`document.documentElement.hasAttribute('data-app-theme')`),false,'app theme does not reach the floating window');
+    }
+  }
+  const reloaded = new Promise(resolve=>dashboard.webContents.once('did-finish-load',resolve));
+  dashboard.webContents.reload(); await reloaded;
+  assert.strictEqual(await run('window.voxden.initialAppTheme'), 'white','fresh preload reads the confirmed saved theme');
+  const capture=fs.readFileSync(path.join(__dirname,'../src/capture.html'),'utf8');
+  assert.ok(!capture.includes('app-theme.'),'capture overlays retain their existing theme');
+  console.log('Native theme: saved White startup, live platform chrome, confirmed theme selection, reload and both simulated recording HUDs passed.');
+  clearTimeout(deadline);app.quit();
+}).catch(error=>{console.error(error);clearTimeout(deadline);app.exit(1);});

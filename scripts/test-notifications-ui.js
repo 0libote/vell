@@ -1,0 +1,449 @@
+'use strict';
+
+// Drives the real app renderer for the bell. The rules live in
+// src/announcements.js and are tested there; what cannot be checked from
+// source is the part made of live layout and IPC -- that the bell lands left
+// of the Windows caption buttons instead of underneath them, that opening the
+// panel is what clears the badge, and that clearing the last notification
+// leaves the empty state behind rather than a blank box.
+
+const { app, BrowserWindow, ipcMain } = require('electron');
+const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+const mainSource = fs.readFileSync(path.join(__dirname, '../src/main.js'), 'utf8');
+const cssSource = fs.readFileSync(path.join(__dirname, '../src/theme.css'), 'utf8');
+const appTheme = require('../src/app-theme');
+
+// The caption controls are native, so they are not part of capturePage(). Pin
+// their constructor values to the renderer's title-bar surface instead. If
+// these drift apart Windows draws an opaque box around the three buttons.
+const titlebarColor = /--titlebar-bg:\s*(#[0-9a-f]{6})/i.exec(cssSource);
+const historyWindowOptions = /function createHistoryWindow\(\)[\s\S]*?titleBarOverlay:\s*\{([\s\S]*?)\n\s*\},/m.exec(mainSource);
+assert.ok(titlebarColor, 'the shared theme must declare a solid --titlebar-bg');
+assert.ok(historyWindowOptions, 'the history window must declare a title-bar overlay');
+assert.strictEqual(appTheme.chrome('voxden').background.toLowerCase(), titlebarColor[1].toLowerCase(),
+  'the default native caption background must match --titlebar-bg');
+assert.ok(/color:\s*colors\.background/.test(historyWindowOptions[1]),
+  'the native caption background follows the saved theme');
+const mutedColor = /--muted:\s*(#[0-9a-f]{6})/i.exec(cssSource);
+const chromeText = /--chrome-text:\s*(#[0-9a-f]{6})/i.exec(cssSource);
+assert.ok(mutedColor && chromeText && mutedColor[1].toLowerCase() === chromeText[1].toLowerCase()
+  && appTheme.chrome('voxden').symbols.toLowerCase() === chromeText[1].toLowerCase(),
+  'Voxden caption symbols should use the UI muted color, published as --chrome-text');
+assert.ok(/symbolColor:\s*colors\.symbols/.test(historyWindowOptions[1]),
+  'native caption symbols follow the saved theme');
+assert.ok(/height:\s*60\b/.test(historyWindowOptions[1]),
+  'the native caption overlay must match the 60px renderer title bar');
+
+app.setPath('userData', fs.mkdtempSync(path.join(os.tmpdir(), 'voxden-notif-ui-')));
+app.disableHardwareAcceleration();
+const deadline = setTimeout(() => { console.error('Notification UI test timed out'); app.exit(1); }, 25000);
+
+// The window the app actually opens. The caption buttons are drawn by Windows
+// into the right-hand end of a title bar this wide, so the bell has to fit in
+// what is left of it.
+const WIDTH = 1120;
+const HEIGHT = 760;
+// Widest the Windows caption overlay gets: three buttons at 46px.
+const CAPTION_WIDTH = 138;
+
+function notification(id, title, body, extra) {
+  return Object.assign({ id, kind: 'feature', title, body, ts: Date.now(), unread: true }, extra || {});
+}
+
+let store = [
+  notification('one', 'A new engine', 'Something to try.', { kind: 'engine', action: { settings: 'speech-engines' } }),
+  notification('two', 'A new voice model', 'Something else to try.', { kind: 'model' }),
+];
+
+// What updater.getUpdateStatus() contributes to the snapshot. Empty until the
+// update section of the test, which then drives it through the same fields
+// the real main process sends.
+let update = {};
+
+function payload() {
+  return Object.assign({
+    entries: [],
+    phrases: [],
+    pendingPhrases: [],
+    notifications: store,
+    notificationsUnread: store.filter((n) => n.unread).length,
+  }, update);
+}
+
+app.whenReady().then(async () => {
+  const win = new BrowserWindow({
+    show: false,
+    width: WIDTH,
+    height: HEIGHT,
+    useContentSize: true,
+    webPreferences: {
+      preload: path.join(__dirname, '../src/preload.js'),
+      contextIsolation: true,
+      sandbox: false,
+      backgroundThrottling: false,
+    },
+  });
+
+  const errors = [];
+  win.webContents.on('console-message', (event, level, message) => {
+    const lvl = event && event.level !== undefined ? event.level : level;
+    const text = event && event.message !== undefined ? event.message : message;
+    const bad = lvl === 'error' || Number(lvl) >= 3;
+    if (bad && !/Content-Security-Policy/.test(String(text))) errors.push(String(text));
+  });
+
+  // Stand in for the main process. The store is the thing under test as far as
+  // the renderer is concerned: read and clear have to come back through IPC or
+  // the badge is only being told what it already believed.
+  ipcMain.handle('app-load', async () => payload());
+  ipcMain.handle('notifications-read', async () => {
+    store = store.map((n) => Object.assign({}, n, { unread: false }));
+    return payload();
+  });
+  ipcMain.handle('notifications-dismiss', async (_e, id) => {
+    store = store.filter((n) => n.id !== id);
+    return payload();
+  });
+  ipcMain.handle('notifications-clear', async () => {
+    store = [];
+    return payload();
+  });
+  // The restart button. What main answers is scripted below: first a refusal
+  // with a reason, then a restart that is under way.
+  let installCalls = 0;
+  let installAnswer = () => ({ ok: false, reason: 'Finish the dictation first, then restart.' });
+  ipcMain.handle('update-install', async () => {
+    installCalls += 1;
+    return Object.assign(installAnswer(), update);
+  });
+
+  await win.loadFile(path.join(__dirname, '../src/app.html'));
+  const evaluate = (code) => win.webContents.executeJavaScript(code);
+  await evaluate(`navigator.mediaDevices.getUserMedia = async () => { throw new Error('No test microphone'); };
+    navigator.mediaDevices.enumerateDevices = async () => []; true`);
+  const settle = () => evaluate(
+    'new Promise(r => { requestAnimationFrame(() => requestAnimationFrame(() => r(1))); setTimeout(() => r(1), 140); })'
+  );
+  const click = (id) => evaluate(`(() => {
+    const el = document.getElementById('${id}');
+    el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    el.click();
+    return true;
+  })()`);
+  const box = (selector) => evaluate(`(() => {
+    const el = document.querySelector('${selector}');
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
+  })()`);
+  const hidden = (id) => evaluate(`document.getElementById('${id}').hidden`);
+  const text = (selector) => evaluate(`(() => {
+    const el = document.querySelector('${selector}');
+    return el ? el.textContent.trim() : null;
+  })()`);
+  const count = (selector) => evaluate(`document.querySelectorAll('${selector}').length`);
+
+  await settle();
+  await settle();
+
+  for (const theme of ['white', 'voxden']) {
+    await evaluate(`window.VoxdenAppTheme.apply('${theme}'); true`);
+    // Under reduced motion every property carries a .01ms transition
+    // (refinement.css), and a hidden window can go a long while without the
+    // frame that ends it, so the bar would still report the previous theme.
+    // CI runners report reduced motion. Finish it and read where it settles.
+    await evaluate(`document.querySelector('.titlebar').getAnimations().forEach(a => a.finish()); true`);
+    // White keeps the dark frame, so its caption symbols follow the text ON
+    // the title bar (--chrome-text, and --muted as the title bar scopes it),
+    // not the light panel's --muted.
+    const tokens = await evaluate(`({
+      background: getComputedStyle(document.documentElement).getPropertyValue('--titlebar-bg').trim(),
+      symbols: getComputedStyle(document.documentElement).getPropertyValue('--chrome-text').trim(),
+      painted: getComputedStyle(document.querySelector('.titlebar')).backgroundColor,
+      barMuted: getComputedStyle(document.querySelector('.titlebar')).getPropertyValue('--muted').trim()
+    })`);
+    assert.strictEqual(tokens.background.toLowerCase(), appTheme.chrome(theme).background.toLowerCase());
+    assert.strictEqual(tokens.symbols.toLowerCase(), appTheme.chrome(theme).symbols.toLowerCase());
+    assert.strictEqual(tokens.barMuted.toLowerCase(), appTheme.chrome(theme).symbols.toLowerCase(), theme + ' title bar text matches the caption symbols');
+    const hex = appTheme.chrome(theme).background.replace('#', '').match(/../g).map(v => parseInt(v, 16)).join(', ');
+    assert.strictEqual(tokens.painted, 'rgb(' + hex + ')', theme + ' title bar is painted in the native caption colour');
+  }
+
+  // --- The bell keeps out of the caption buttons -----------------------------
+
+  // The size above is what the window asked for, not necessarily what it got:
+  // a build agent with a small virtual display hands back a narrower one. The
+  // geometry is measured against the page rather than against the request, so
+  // a clamped window reads as a narrower title bar instead of a failure.
+  const viewport = await evaluate('window.innerWidth');
+  assert.ok(viewport > CAPTION_WIDTH * 2, 'the window is too narrow to test a title bar in');
+
+  const bell = await box('#notif-btn');
+  const bar = await box('.titlebar');
+  assert.strictEqual(Math.round(bar.height), Number(/height:\s*(\d+)\b/.exec(historyWindowOptions[1])[1]),
+    'the renderer title bar is as tall as the native caption overlay');
+  assert.ok(bell && bell.width > 0, 'the bell has to be laid out');
+  assert.ok(bell.right <= viewport - CAPTION_WIDTH,
+    'the bell overlaps the Windows caption buttons: right edge ' + bell.right + ' of ' + viewport);
+  assert.ok(bell.top >= bar.top && bell.bottom <= bar.bottom, 'the bell has to sit inside the title bar');
+  // Far enough right to read as part of the window controls rather than as
+  // part of the branding on the left.
+  assert.ok(bell.left > viewport / 2, 'the bell belongs at the right-hand end of the title bar');
+
+  // A title bar is a drag region; a button inside one is only clickable if it
+  // opts out.
+  assert.strictEqual(
+    await evaluate("getComputedStyle(document.getElementById('notif-btn')).webkitAppRegion"),
+    'no-drag',
+    'the bell would drag the window instead of opening the panel');
+
+  // --- The badge counts what has not been read -------------------------------
+
+  assert.strictEqual(await hidden('notif-badge'), false, 'two unread notifications have to show a badge');
+  assert.strictEqual(await text('#notif-badge'), '2');
+  assert.strictEqual(
+    await evaluate("document.getElementById('notif-btn').getAttribute('aria-label')"),
+    'Notifications, 2 unread',
+    'the count has to reach a screen reader too');
+
+  const badge = await box('#notif-badge');
+  assert.ok(badge.bottom > bell.top + bell.height / 2, 'the count belongs under the bell, not over it');
+
+  // --- Opening reads them ----------------------------------------------------
+
+  assert.strictEqual(await hidden('notif-panel'), true, 'the panel starts closed');
+  await click('notif-btn');
+  await settle();
+  await settle();
+  assert.strictEqual(await hidden('notif-panel'), false, 'the bell has to open the panel');
+  assert.strictEqual(await hidden('notif-badge'), true, 'opening the panel clears the badge');
+  assert.strictEqual(await count('.notif-item'), 2, 'both notifications have to be drawn');
+  assert.strictEqual(await hidden('notif-empty'), true, 'the empty state must not show over a full list');
+
+  // Read, but still marked as new while the user is looking at them -- the
+  // badge has already gone, and nothing else says which ones were unread.
+  assert.strictEqual(await count('.notif-item.is-new'), 2,
+    'opening the panel must not erase which notifications were new');
+
+  // An action only appears where a settings pane exists to open.
+  assert.strictEqual(await count('.notif-item[data-id="one"] .notif-open'), 1);
+  assert.strictEqual(await count('.notif-item[data-id="two"] .notif-open'), 0);
+
+  // The panel has to clear the caption buttons as well, or Windows takes the
+  // clicks meant for its top-right corner.
+  const panel = await box('#notif-panel');
+  assert.ok(panel.top >= bar.bottom, 'the panel has to hang below the title bar');
+  assert.ok(panel.right <= viewport, 'the panel runs off the right edge of the window');
+
+  await evaluate(`document.querySelector('.notif-item[data-id="one"] .notif-open').click(); true`);
+  await settle();
+  assert.strictEqual(await hidden('settings-overlay'), false, 'engine notifications open settings');
+  assert.strictEqual(await evaluate('settingsCat'), 'speech-engines', 'engine notifications open Speech engines');
+  assert.strictEqual(await hidden('notif-panel'), true, 'following the engine link closes notifications');
+  await click('settings-close');
+  await click('notif-btn');
+  await settle();
+
+  // --- Dismissing one, then clearing the rest --------------------------------
+
+  await evaluate(`document.querySelector('.notif-item[data-id="two"] .notif-dismiss').click(); true`);
+  await settle();
+  await settle();
+  assert.strictEqual(await count('.notif-item'), 1, 'dismissing has to remove that row');
+  assert.strictEqual(await hidden('notif-empty'), true);
+
+  await click('notif-clear');
+  await settle();
+  await settle();
+  assert.strictEqual(await count('.notif-item'), 0, 'clear all empties the list');
+  assert.strictEqual(await hidden('notif-empty'), false, 'an empty list has to show the empty state');
+  assert.strictEqual(await hidden('notif-clear'), true, 'there is nothing left to clear');
+  assert.ok(/all caught up/i.test(await text('#notif-empty')), 'the empty state has to say so');
+
+  // The illustration is the flow bar face: a headband, two earcups, two eyes.
+  // Scoped to the panel: the Insights page wears the same face twice.
+  assert.strictEqual(await count('#notif-empty .notif-mascot-band'), 1);
+  assert.strictEqual(await count('#notif-empty .notif-mascot-cup'), 2);
+  assert.strictEqual(await count('#notif-empty .notif-mascot-eye'), 2);
+  const face = await box('#notif-empty .notif-mascot-face');
+  assert.ok(face && face.width > 0 && face.height > 0, 'the illustration has to have a size');
+  assert.ok(face.bottom <= panel.bottom, 'the illustration has to fit inside the panel');
+
+  // --- Closing ---------------------------------------------------------------
+
+  await evaluate(`document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); true`);
+  await settle();
+  assert.strictEqual(await hidden('notif-panel'), true, 'a click outside has to close the panel');
+  assert.strictEqual(
+    await evaluate("document.getElementById('notif-btn').getAttribute('aria-expanded')"),
+    'false');
+
+  await click('notif-btn');
+  await settle();
+  assert.strictEqual(await hidden('notif-panel'), false);
+  await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); true`);
+  await settle();
+  assert.strictEqual(await hidden('notif-panel'), true, 'Escape has to close the panel');
+
+  // Settings dims the app content and paints over the panel, so it has to
+  // take the panel with it -- a panel nobody can see is a panel nobody can
+  // close.
+  await click('notif-btn');
+  await settle();
+  assert.strictEqual(await hidden('notif-panel'), false);
+  await evaluate("document.getElementById('nav-settings').click(); true");
+  await settle();
+  assert.strictEqual(await hidden('settings-overlay'), false, 'settings has to open');
+  assert.strictEqual(await hidden('notif-panel'), true, 'opening settings has to close the panel');
+
+  // --- An update on its way is a live row; one downloaded offers a restart ---
+
+  await click('settings-close');
+  await settle();
+  assert.strictEqual(await hidden('settings-overlay'), true, 'settings has to close again');
+
+  const send = () => { win.webContents.send('history-updated', payload()); };
+  const inRow = (id, selector) => count('.notif-item[data-id="' + id + '"] ' + selector);
+  const rowText = (id, selector) => text('.notif-item[data-id="' + id + '"] ' + selector);
+
+  // Two finished downloads in the store: the one waiting now, and one from a
+  // release before it that was never installed.
+  store = [
+    notification('update-ready:1.0.22', 'Voxden 1.0.22 is ready', 'The update is downloaded.',
+      { kind: 'update', action: { settings: 'system' } }),
+    notification('update-ready:1.0.21', 'Voxden 1.0.21 is ready', 'The update is downloaded.',
+      { kind: 'update', action: { settings: 'system' }, ts: Date.now() - 86400000 }),
+  ];
+  update = { packaged: true, status: 'downloading', availableVersion: '1.0.22', progress: 43 };
+  send();
+  await settle();
+  await click('notif-btn');
+  await settle();
+  await settle();
+  assert.strictEqual(await hidden('notif-panel'), false);
+  assert.strictEqual(await count('.notif-item'), 3, 'the download is a row of its own');
+  assert.strictEqual(
+    await evaluate("document.querySelector('.notif-item').dataset.id"),
+    'update-download',
+    'the download belongs at the top');
+  assert.strictEqual(await inRow('update-download', '.notif-progress'), 1, 'the download row has a bar');
+  assert.strictEqual(
+    await evaluate("document.querySelector('.notif-item[data-id=\"update-download\"] .notif-progress-bar').style.width"),
+    '43%');
+  assert.strictEqual(await rowText('update-download', '.notif-progress-pct'), '43%');
+  assert.ok(/1\.0\.22/.test(await rowText('update-download', '.notif-item-title')),
+    'the download row has to name the version');
+  assert.strictEqual(await inRow('update-download', '.notif-dismiss'), 0, 'a live row cannot be dismissed');
+  assert.strictEqual(await count('.notif-item.is-new'), 2, 'a download is not news');
+  assert.strictEqual(await count('.notif-restart'), 0, 'nothing to restart into while it downloads');
+
+  // The number moves in place: the same element, a new width, no rebuild.
+  await evaluate("window.__liveRow = document.querySelector('.notif-item[data-id=\"update-download\"]'); true");
+  update = Object.assign({}, update, { progress: 80 });
+  send();
+  await settle();
+  assert.strictEqual(
+    await evaluate("document.querySelector('.notif-item[data-id=\"update-download\"]') === window.__liveRow"),
+    true,
+    'a progress tick must not rebuild the list');
+  assert.strictEqual(await rowText('update-download', '.notif-progress-pct'), '80%');
+  assert.strictEqual(
+    await evaluate("document.querySelector('.notif-item[data-id=\"update-download\"] .notif-progress-bar').style.width"),
+    '80%');
+
+  // Downloaded: the live row goes, and the stored row for that version -- and
+  // only that version -- gets the button.
+  update = { packaged: true, status: 'ready', availableVersion: '1.0.22', progress: 100 };
+  send();
+  await settle();
+  await settle();
+  assert.strictEqual(await count('.notif-item'), 2, 'the download row goes when the download ends');
+  assert.strictEqual(await inRow('update-ready:1.0.22', '.notif-restart'), 1, 'the waiting update offers a restart');
+  assert.strictEqual(await inRow('update-ready:1.0.22', '.notif-open'), 1,
+    'the restart replaces the settings link rather than sitting next to it');
+  assert.strictEqual(await inRow('update-ready:1.0.21', '.notif-restart'), 0,
+    'a superseded download must not offer to restart into itself');
+  assert.strictEqual(await inRow('update-ready:1.0.21', '.notif-open'), 1);
+  assert.strictEqual(await rowText('update-ready:1.0.22', '.notif-restart'), 'Restart now');
+  assert.strictEqual(await hidden('update-restart-btn'), false, 'System offers the same restart');
+  assert.strictEqual(await text('#update-restart-btn'), 'Restart now');
+  assert.strictEqual(await evaluate("document.getElementById('update-restart-btn').disabled"), false);
+  assert.ok(/1\.0\.22 is ready/.test(await text('#update-status-hint')), 'System names the waiting version');
+
+  // A refusal says why, in the row, in place of its copy.
+  await evaluate(`document.querySelector('.notif-item[data-id="update-ready:1.0.22"] .notif-restart').click(); true`);
+  await settle();
+  await settle();
+  assert.strictEqual(installCalls, 1, 'the button has to ask main to install');
+  assert.strictEqual(await rowText('update-ready:1.0.22', '.notif-item-body'),
+    'Finish the dictation first, then restart.');
+  assert.strictEqual(await evaluate("document.querySelector('.notif-item[data-id=\"update-ready:1.0.22\"] .notif-restart').disabled"),
+    false, 'a refused restart has to be offered again');
+  assert.strictEqual(await text('#update-status-hint'), 'Finish the dictation first, then restart.');
+
+  // Accepted: everything that could start a second installer goes quiet.
+  installAnswer = () => {
+    update = { packaged: true, status: 'installing', availableVersion: '1.0.22', progress: 100 };
+    send();
+    return { ok: true, reason: '' };
+  };
+  await evaluate(`document.querySelector('.notif-item[data-id="update-ready:1.0.22"] .notif-restart').click(); true`);
+  await settle();
+  await settle();
+  assert.strictEqual(installCalls, 2);
+  assert.strictEqual(await rowText('update-ready:1.0.22', '.notif-restart'), 'Restarting…');
+  assert.strictEqual(await evaluate("document.querySelector('.notif-item[data-id=\"update-ready:1.0.22\"] .notif-restart').disabled"), true);
+  assert.strictEqual(await evaluate("document.getElementById('update-restart-btn').disabled"), true);
+  assert.strictEqual(await text('#update-restart-btn'), 'Restarting…');
+  assert.strictEqual(await evaluate("document.getElementById('update-check-btn').disabled"), true,
+    'no checking for updates while one is installing');
+
+  // Nothing waiting: the button goes, and the panel is back to plain rows.
+  update = { packaged: true, status: 'idle', availableVersion: null, progress: null };
+  send();
+  await settle();
+  assert.strictEqual(await hidden('update-restart-btn'), true);
+  assert.strictEqual(await count('.notif-restart'), 0);
+  assert.strictEqual(await count('.notif-item[data-id="update-ready:1.0.22"] .notif-open'), 1,
+    'the settings link comes back once there is nothing to restart into');
+
+  // The actual shipped catalog must reach the bell after an older local
+  // build has already recorded this same version, not just in fake fixtures.
+  const announcements = require('../src/announcements');
+  const version = require('../package.json').version;
+  store = announcements.list(announcements.deliver({ seenVersion: version, items: {} }, { version }).state);
+  update = { packaged: true, status: 'idle', version };
+  await evaluate('closeSettings(); closeNotifications(); true');
+  send();
+  await settle();
+  assert.ok(store.length > 0, 'the release has real highlights');
+  assert.strictEqual(await hidden('notif-badge'), false, 'release highlights light up the bell');
+  await click('notif-btn');
+  await settle();
+  assert.strictEqual(await count('.notif-item'), store.length, 'every release highlight is rendered');
+  for (const row of store) {
+    assert.strictEqual(await rowText(row.id, '.notif-item-title'), row.title);
+    assert.strictEqual(await rowText(row.id, '.notif-item-body'), row.body);
+    if (row.action) assert.strictEqual(await inRow(row.id, '.notif-open'), 1, 'release action resolves: ' + row.id);
+  }
+  assert.strictEqual(await hidden('notif-badge'), true, 'opening the release notes clears the unread badge');
+  assert.strictEqual(await hidden('notif-panel'), false, 'release highlights are visible in the open panel');
+  if (process.argv.includes('--screenshots')) {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const folder = path.join(__dirname, '../temp/ui-review');
+    fs.mkdirSync(folder, { recursive: true });
+    fs.writeFileSync(path.join(folder, 'notifications-2.1.0.png'), (await win.webContents.capturePage()).toPNG());
+  }
+  assert.deepStrictEqual(errors, [], 'the renderer logged errors');
+
+  clearTimeout(deadline);
+  console.log('all notification UI checks passed');
+  app.exit(0);
+}).catch((err) => {
+  console.error(err && err.stack ? err.stack : err);
+  app.exit(1);
+});

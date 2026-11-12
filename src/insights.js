@@ -1,0 +1,825 @@
+'use strict';
+
+// metrics is a hard dependency: it owns the one countWords implementation this
+// file counts with. Both load paths guarantee it -- require under Node, and
+// app.html loading metrics.js first in the browser, which scripts/test-globals.js
+// now keeps from breaking quietly. The older `metrics && ...` guards further
+// down are vestigial rather than a second opinion; they date from when this file
+// carried its own copy of the counter.
+let metrics;
+if (typeof require !== 'undefined') {
+  try {
+    metrics = require('./metrics');
+  } catch (_) {}
+}
+if (!metrics && typeof globalThis !== 'undefined') {
+  metrics = globalThis.voxdenMetrics;
+}
+
+const STOP_WORDS = new Set([
+  'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of',
+  'is', 'it', 'i', 'you', 'we', 'that', 'this', 'with', 'was', 'are', 'be',
+  'have', 'had', 'not', 'so', 'if', 'as', 'my', 'your', 'can', 'do', 'just',
+]);
+
+// Keep each entry's first-occurrence order: frequentTerms uses stable sorting
+// for equal counts, so replacing text with a histogram must preserve ties.
+function entryTermCounts(entry) {
+  if (entry && entry.statsOnly === true) return entry.termCounts || [];
+  const counts = new Map();
+  const words = String((entry && entry.text) || '').toLowerCase().match(/[a-z0-9']+/g) || [];
+  for (const w of words) {
+    if (w.length < 3 || STOP_WORDS.has(w)) continue;
+    counts.set(w, (counts.get(w) || 0) + 1);
+  }
+  return [...counts.entries()];
+}
+
+function termCountsFor(entries) {
+  const counts = new Map();
+  for (const entry of entries || []) {
+    for (const [word, count] of entryTermCounts(entry)) {
+      counts.set(word, (counts.get(word) || 0) + count);
+    }
+  }
+  return counts;
+}
+
+function frequentTerms(entries, limit) {
+  const max = limit || 24;
+  const counts = termCountsFor(entries);
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, max)
+    .map(([w]) => w);
+}
+
+const HEATMAP_WEEKS = 17;
+const MIN_HEATMAP_WEEKS = 6;
+const DIFF_MAX_WORDS = 600;
+const DISPLAY_BUCKETS = ['ai', 'work', 'email', 'personal', 'other'];
+
+const AI_TITLE_HINTS = [
+  'chatgpt', 'openai', 'claude', 'anthropic', 'copilot', 'gemini', 'bard',
+  'perplexity', 'poe.com', 'character.ai', 'midjourney', 'cursor', 'github copilot',
+  'chat.openai', 'aistudio.google', 'labs.google', 'huggingface', 'replicate',
+];
+
+const AI_EXE_HINTS = [
+  'cursor.exe', 'code.exe', 'cod.exe', 'devenv.exe', 'windsurf.exe',
+];
+
+// A process name identifies the host, not always the destination. Browser tabs
+// and desktop shells can surface as Chrome or PowerShell while their window
+// title still tells us the user dictated into ChatGPT, Claude, or another AI
+// tool. Keep this ordered from specific to broad so "ChatGPT - OpenAI" remains
+// ChatGPT rather than collapsing into the generic OpenAI label.
+const AI_TARGETS = [
+  { id: 'chatgpt', label: 'ChatGPT', titles: ['chatgpt', 'chat.openai'] },
+  { id: 'claude', label: 'Claude', titles: ['claude'] },
+  { id: 'github-copilot', label: 'GitHub Copilot', titles: ['github copilot'] },
+  { id: 'copilot', label: 'Copilot', titles: ['copilot'] },
+  { id: 'gemini', label: 'Gemini', titles: ['gemini', 'bard'] },
+  { id: 'perplexity', label: 'Perplexity', titles: ['perplexity'] },
+  { id: 'poe', label: 'Poe', titles: ['poe.com'] },
+  { id: 'character-ai', label: 'Character.AI', titles: ['character.ai'] },
+  { id: 'midjourney', label: 'Midjourney', titles: ['midjourney'] },
+  { id: 'google-ai-studio', label: 'Google AI Studio', titles: ['aistudio.google', 'labs.google'] },
+  { id: 'hugging-face', label: 'Hugging Face', titles: ['huggingface'] },
+  { id: 'replicate', label: 'Replicate', titles: ['replicate'] },
+  { id: 'anthropic', label: 'Anthropic', titles: ['anthropic'] },
+  { id: 'openai', label: 'OpenAI', titles: ['openai'] },
+  { id: 'cursor', label: 'Cursor', titles: ['cursor'], exes: ['cursor.exe'] },
+  { id: 'windsurf', label: 'Windsurf', titles: ['windsurf'], exes: ['windsurf.exe'] },
+  { id: 'vscode', label: 'VS Code', exes: ['code.exe'] },
+  { id: 'visual-studio', label: 'Visual Studio', exes: ['devenv.exe'] },
+  { id: 'codex', label: 'Codex', exes: ['cod.exe'] },
+];
+
+const BUCKET_LABELS = {
+  ai: 'AI prompts',
+  work: 'Work messages',
+  email: 'Emails',
+  personal: 'Personal messages',
+  other: 'Other tasks',
+};
+
+const MILESTONES = [
+  { words: 250, label: 'a full page' },
+  { words: 750, label: 'a blog post' },
+  { words: 1500, label: 'a long essay' },
+  { words: 5000, label: 'a short story' },
+  { words: 10000, label: 'a book chapter' },
+  { words: 25000, label: 'a novella' },
+  { words: 50000, label: 'a novel' },
+  { words: 100000, label: 'an epic novel' },
+];
+
+const PACE_WPM_CEILING = 200;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function startOfDay(ts) {
+  const d = new Date(ts);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
+// Calendar-day arithmetic, so DST transitions never shift a cell.
+function addDays(ts, n) {
+  const d = new Date(ts);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n).getTime();
+}
+
+function tokenizeWords(s) {
+  return String(s || '').trim().toLowerCase().match(/\S+/g) || [];
+}
+
+function multisetDiff(a, b) {
+  const counts = new Map();
+  for (const w of a) counts.set(w, (counts.get(w) || 0) + 1);
+  let extraB = 0;
+  for (const w of b) {
+    const c = counts.get(w) || 0;
+    if (c > 0) counts.set(w, c - 1);
+    else extraB += 1;
+  }
+  let extraA = 0;
+  for (const c of counts.values()) extraA += c;
+  return Math.max(extraA, extraB);
+}
+
+// Number of words that changed between two versions of the same transcript.
+// Substitutions count once; pure insertions and deletions count once each.
+function wordDiffCount(a, b) {
+  const A = tokenizeWords(a);
+  const B = tokenizeWords(b);
+  if (!A.length && !B.length) return 0;
+  if (!A.length) return B.length;
+  if (!B.length) return A.length;
+  if (A.length > DIFF_MAX_WORDS || B.length > DIFF_MAX_WORDS) return multisetDiff(A, B);
+
+  let prev = new Array(B.length + 1).fill(0);
+  let row = new Array(B.length + 1).fill(0);
+  for (let i = 1; i <= A.length; i++) {
+    row[0] = 0;
+    for (let j = 1; j <= B.length; j++) {
+      row[j] = A[i - 1] === B[j - 1]
+        ? prev[j - 1] + 1
+        : Math.max(prev[j], row[j - 1]);
+    }
+    const swap = prev;
+    prev = row;
+    row = swap;
+  }
+  return Math.max(A.length, B.length) - prev[B.length];
+}
+
+function isAiContext(exe, title) {
+  const ex = String(exe || '').toLowerCase();
+  const ti = String(title || '').toLowerCase();
+  if (AI_EXE_HINTS.some((h) => ex === h || ex.endsWith('\\' + h))) return true;
+  return AI_TITLE_HINTS.some((h) => ti.includes(h));
+}
+
+function aiTarget(exe, title) {
+  const ex = String(exe || '').toLowerCase().split(/[/\\]/).pop() || '';
+  const ti = String(title || '').toLowerCase();
+  for (const target of AI_TARGETS) {
+    if ((target.titles || []).some((hint) => ti.includes(hint))) return target;
+    if ((target.exes || []).includes(ex)) return target;
+  }
+  return null;
+}
+
+function displayBucket(entry) {
+  if (entry.statsOnly === true) return entry.bucket;
+  if (isAiContext(entry.exe, entry.title)) return 'ai';
+  const cat = String(entry.category || 'other').toLowerCase();
+  if (DISPLAY_BUCKETS.includes(cat) && cat !== 'ai') return cat;
+  return 'other';
+}
+
+function friendlyExe(exe) {
+  const base = String(exe || '').split(/[/\\]/).pop() || '';
+  if (!base) return 'Unknown app';
+  return base.replace(/\.exe$/i, '').replace(/[-_]+/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function appIdentity(entry) {
+  const e = entry || {};
+  if (e.statsOnly === true) return { key: e.appKey, label: e.appLabel };
+  const target = aiTarget(e.exe, e.title);
+  if (target) return { key: 'ai:' + target.id, label: target.label };
+  const exe = String(e.exe || '');
+  return { key: 'exe:' + exe.toLowerCase(), label: friendlyExe(exe) };
+}
+
+function hasEntryTarget(entry) {
+  if (!entry) return false;
+  return entry.statsOnly === true
+    ? !!entry.hasTarget
+    : !!(entry.exe || entry.title || entry.category);
+}
+
+// A timestamped analytics fact preserves exact rolling windows, calendar
+// dates and lifetime figures after the full transcript is removed. Explicitly
+// select fields so transcript text, originals and pipeline data cannot leak
+// into the analytics archive. App/window classification is resolved here;
+// only exe remains because the existing top-apps result exposes its spelling.
+function toAnalyticsEntry(entry) {
+  const e = entry || {};
+  const identity = appIdentity(e);
+  const duration = Number(e.durationMs);
+  const fact = {
+    statsOnly: true,
+    id: e.id,
+    ts: e.ts,
+    wordCount: metrics.entryWordCount(e),
+    durationMs: e.durationMs != null && Number.isFinite(duration) ? duration : null,
+    exe: e.exe,
+    appKey: identity.key,
+    appLabel: identity.label,
+    bucket: displayBucket(e),
+    hasTarget: hasEntryTarget(e),
+    termCounts: entryTermCounts(e).map(([word, count]) => [word, count]),
+    learnedPairCount: e.statsOnly === true
+      ? e.learnedPairCount || 0 : (Array.isArray(e.learnedPairs) ? e.learnedPairs.length : 0),
+    edited: e.statsOnly === true
+      ? !!e.edited : String(e.text || '') !== String(e.original || ''),
+  };
+  if (typeof e.dictionaryHits === 'number') fact.dictionaryHits = e.dictionaryHits;
+  if (typeof e.styleFixes === 'number') fact.styleFixes = e.styleFixes;
+  return fact;
+}
+
+const INSIGHTS_ANALYTICS_FIELDS = new Set([
+  'statsOnly', 'id', 'ts', 'wordCount', 'durationMs', 'exe', 'appKey', 'appLabel',
+  'bucket', 'hasTarget', 'termCounts', 'learnedPairCount', 'edited', 'dictionaryHits', 'styleFixes',
+]);
+
+// The store uses the same contract as the projector before accepting an
+// archive. Reject sentence-bearing or unknown fields as well as corrupt
+// counters, rather than silently dropping historical usage on the next save.
+function isAnalyticsEntry(entry) {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry) || entry.statsOnly !== true) return false;
+  if (!Object.keys(entry).every(key => INSIGHTS_ANALYTICS_FIELDS.has(key))) return false;
+  if (!Number.isSafeInteger(entry.wordCount) || entry.wordCount < 0) return false;
+  if (!Number.isSafeInteger(entry.learnedPairCount) || entry.learnedPairCount < 0) return false;
+  if (entry.durationMs != null && !Number.isFinite(entry.durationMs)) return false;
+  if (entry.id != null && typeof entry.id !== 'string' && !Number.isFinite(entry.id)) return false;
+  if (entry.ts != null && typeof entry.ts !== 'string' && !Number.isFinite(entry.ts)) return false;
+  if (entry.exe != null && typeof entry.exe !== 'string') return false;
+  if (typeof entry.appKey !== 'string' || typeof entry.appLabel !== 'string') return false;
+  if (!DISPLAY_BUCKETS.includes(entry.bucket)) return false;
+  if (typeof entry.hasTarget !== 'boolean' || typeof entry.edited !== 'boolean') return false;
+  for (const field of ['dictionaryHits', 'styleFixes']) {
+    if (field in entry && !Number.isFinite(entry[field])) return false;
+  }
+  if (!Array.isArray(entry.termCounts)) return false;
+  const seen = new Set();
+  for (const term of entry.termCounts) {
+    if (!Array.isArray(term) || term.length !== 2) return false;
+    const [word, count] = term;
+    if (typeof word !== 'string' || word.length < 3 || !/^[a-z0-9']+$/.test(word) || STOP_WORDS.has(word)) return false;
+    if (!Number.isSafeInteger(count) || count <= 0 || seen.has(word)) return false;
+    seen.add(word);
+  }
+  return true;
+}
+
+function filterByRange(entries, range, now) {
+  const all = entries || [];
+  if (range === 'all') return all.slice();
+  const days = range === '7d' ? 7 : 30;
+  const cutoff = (now || Date.now()) - days * DAY_MS;
+  return all.filter((e) => (e && e.ts) >= cutoff);
+}
+
+function computeStreaks(entries, now) {
+  const daySet = new Set();
+  for (const e of entries || []) {
+    if (!e || !e.ts) continue;
+    daySet.add(startOfDay(e.ts));
+  }
+  const days = [...daySet].sort((a, b) => a - b);
+  if (!days.length) return { currentStreak: 0, longestStreak: 0, currentDays: new Set() };
+
+  let longest = 1;
+  let run = 1;
+  for (let i = 1; i < days.length; i++) {
+    if (addDays(days[i - 1], 1) === days[i]) run += 1;
+    else {
+      if (run > longest) longest = run;
+      run = 1;
+    }
+  }
+  if (run > longest) longest = run;
+
+  const today = startOfDay(now || Date.now());
+  const yesterday = addDays(today, -1);
+  const currentDays = new Set();
+  let current = 0;
+  if (daySet.has(today) || daySet.has(yesterday)) {
+    let cursor = daySet.has(today) ? today : yesterday;
+    while (daySet.has(cursor)) {
+      current += 1;
+      currentDays.add(cursor);
+      cursor = addDays(cursor, -1);
+    }
+  }
+
+  return { currentStreak: current, longestStreak: longest, currentDays };
+}
+
+// Sunday-first grid ending today, one column per week. The window grows with
+// your history instead of always spanning HEATMAP_WEEKS: a fixed window makes
+// a new account look like months of missed days rather than a short history.
+function computeHeatmap(entries, now, currentDays) {
+  const end = startOfDay(now || Date.now());
+  const endDow = new Date(end).getDay();
+
+  let firstDay = null;
+  for (const e of entries || []) {
+    if (!e || !e.ts) continue;
+    const d = startOfDay(e.ts);
+    if (firstDay === null || d < firstDay) firstDay = d;
+  }
+  // Days before the first dictation are not-applicable rather than idle, so
+  // they are excluded from the window and drawn like future days.
+  const spanDays = firstDay === null
+    ? 0
+    : Math.round((end - firstDay) / DAY_MS) + endDow + 1;
+  const weeks = Math.max(
+    MIN_HEATMAP_WEEKS,
+    Math.min(HEATMAP_WEEKS, Math.ceil(spanDays / 7))
+  );
+  const columns = [];
+  const wordsByDay = new Map();
+  for (const e of entries || []) {
+    if (!e || !e.ts) continue;
+    const d = startOfDay(e.ts);
+    wordsByDay.set(d, (wordsByDay.get(d) || 0) + metrics.entryWordCount(e));
+  }
+
+  const gridStart = addDays(end, -(endDow + (weeks - 1) * 7));
+  let maxWords = 0;
+  for (let w = 0; w < weeks; w++) {
+    const col = [];
+    for (let row = 0; row < 7; row++) {
+      const ts = addDays(gridStart, w * 7 + row);
+      const future = ts > end;
+      const beforeStart = firstDay !== null && ts < firstDay;
+      const words = future ? 0 : (wordsByDay.get(ts) || 0);
+      if (words > maxWords) maxWords = words;
+      col.push({
+        ts,
+        words,
+        level: 0,
+        future,
+        beforeStart,
+        outOfRange: future || beforeStart,
+        inStreak: !!(currentDays && currentDays.has(ts)),
+      });
+    }
+    columns.push(col);
+  }
+
+  for (const col of columns) {
+    for (const cell of col) {
+      if (cell.future || cell.words <= 0 || maxWords <= 0) { cell.level = 0; continue; }
+      const ratio = cell.words / maxWords;
+      if (ratio >= 0.66) cell.level = 4;
+      else if (ratio >= 0.33) cell.level = 3;
+      else if (ratio >= 0.1) cell.level = 2;
+      else cell.level = 1;
+    }
+  }
+
+  const months = [];
+  let lastMonth = -1;
+  for (let w = 0; w < weeks; w++) {
+    const m = new Date(columns[w][0].ts).getMonth();
+    if (m !== lastMonth) {
+      months.push({ column: w, label: MONTH_NAMES[m] });
+      lastMonth = m;
+    }
+  }
+
+  return { columns, weeks, months, maxWords, startTs: gridStart, endTs: end };
+}
+
+function computeVolumeDelta(entries, range, now) {
+  const ts = now || Date.now();
+  if (range === '7d') {
+    const curStart = ts - 7 * DAY_MS;
+    const prevStart = ts - 14 * DAY_MS;
+    return wordDelta(entries, curStart, ts, prevStart, curStart, 'vs last week');
+  }
+  if (range === '30d') {
+    const curStart = ts - 30 * DAY_MS;
+    const prevStart = ts - 60 * DAY_MS;
+    return wordDelta(entries, curStart, ts, prevStart, curStart, 'vs last month');
+  }
+  const d = new Date(ts);
+  const thisMonthStart = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+  const lastMonthStart = new Date(d.getFullYear(), d.getMonth() - 1, 1).getTime();
+  return wordDelta(entries, thisMonthStart, ts, lastMonthStart, thisMonthStart, 'this month');
+}
+
+function wordDelta(entries, curStart, curEnd, prevStart, prevEnd, suffix) {
+  let cur = 0;
+  let prev = 0;
+  for (const e of entries || []) {
+    if (!e || !e.ts) continue;
+    const w = metrics.entryWordCount(e);
+    if (e.ts >= curStart && e.ts <= curEnd) cur += w;
+    else if (e.ts >= prevStart && e.ts < prevEnd) prev += w;
+  }
+  if (prev <= 0 && cur <= 0) return null;
+  if (prev <= 0) return { direction: 'up', percent: null, label: 'new activity ' + suffix };
+  const change = Math.round(((cur - prev) / prev) * 100);
+  if (change === 0) return null;
+  return {
+    direction: change > 0 ? 'up' : 'down',
+    percent: Math.abs(change),
+    label: Math.abs(change) + '% ' + suffix,
+  };
+}
+
+// Nearest milestone already cleared, plus progress toward the next one.
+function computeMilestone(totalWords) {
+  let reached = null;
+  let next = MILESTONES[0];
+  for (const m of MILESTONES) {
+    if (totalWords >= m.words) { reached = m; next = null; }
+    else { next = m; break; }
+  }
+  const reachedWords = reached ? reached.words : 0;
+  const percent = next
+    ? Math.max(2, Math.min(100, Math.round(((totalWords - reachedWords) / (next.words - reachedWords)) * 100)))
+    : 100;
+  return {
+    text: reached ? "You've written " + reached.label + '!' : null,
+    next: next ? next.label : null,
+    nextWords: next ? next.words - totalWords : 0,
+    percent,
+  };
+}
+
+// --- Year by year ---------------------------------------------------------------
+//
+// The milestone ladder used to be an all-time figure, and an all-time figure
+// only ever moves one way and never resets, so after the first few months it
+// stopped saying anything. Read within a calendar year it becomes a story
+// with dates: when each rung was cleared, and how far the next one is.
+
+function yearOf(ts) {
+  return new Date(ts).getFullYear();
+}
+
+// Every year with a dictation in it, oldest first, plus the current one so the
+// switcher always has a "this year" even on day one.
+function availableYears(entries, now) {
+  const years = new Set([yearOf(now || Date.now())]);
+  for (const e of entries || []) {
+    if (e && e.ts) years.add(yearOf(e.ts));
+  }
+  return [...years].sort((a, b) => a - b);
+}
+
+// The milestones cleared within one calendar year, each stamped with the day
+// it was cleared, plus how far along the next one is. Words are counted in
+// the order they were spoken, so the date is the dictation that tipped it.
+function computeMilestoneTimeline(entries, year, now) {
+  const y = Number(year) || yearOf(now || Date.now());
+  const inYear = (entries || [])
+    .filter((e) => e && e.ts && yearOf(e.ts) === y)
+    .sort((a, b) => a.ts - b.ts);
+  let total = 0;
+  let idx = 0;
+  const reachedAt = [];
+  for (const e of inYear) {
+    total += metrics.entryWordCount(e);
+    while (idx < MILESTONES.length && total >= MILESTONES[idx].words) {
+      reachedAt.push(e.ts);
+      idx += 1;
+    }
+  }
+  const reachedCount = reachedAt.length;
+  const next = reachedCount < MILESTONES.length ? MILESTONES[reachedCount] : null;
+  const floor = reachedCount ? MILESTONES[reachedCount - 1].words : 0;
+  const percent = next
+    ? Math.max(0, Math.min(100, Math.round(((total - floor) / (next.words - floor)) * 100)))
+    : 100;
+  return {
+    year: y,
+    words: total,
+    dictations: inYear.length,
+    milestones: MILESTONES.map((m, i) => ({
+      label: m.label,
+      words: m.words,
+      reachedAt: i < reachedCount ? reachedAt[i] : null,
+      state: i < reachedCount ? 'reached' : (i === reachedCount ? 'next' : 'locked'),
+    })),
+    reachedCount,
+    latest: reachedCount ? { label: MILESTONES[reachedCount - 1].label, reachedAt: reachedAt[reachedCount - 1] } : null,
+    next: next ? { label: next.label, words: next.words, remaining: next.words - total, percent } : null,
+  };
+}
+
+// The apps you dictate into, ranked by words, with a direction against the
+// period before. The ranking follows the selected range; the direction always
+// compares two equal rolling windows -- the last week against the one before
+// it, or the last 30 days against the 30 before -- because an all-time total
+// has nothing to move against. Rolling rather than calendar months: on the
+// third of the month a calendar comparison marks every app as falling.
+function appLeaderboard(entries, range, now, limit) {
+  const ts = now || Date.now();
+  const window = range === '7d' ? 7 * DAY_MS : 30 * DAY_MS;
+  const curStart = ts - window;
+  const prevStart = ts - 2 * window;
+  const rankFrom = range === 'all' ? -Infinity : curStart;
+  const apps = new Map();
+  let totalWords = 0;
+  for (const e of entries || []) {
+    if (!e || !e.exe || !e.ts) continue;
+    const identity = appIdentity(e);
+    let row = apps.get(identity.key);
+    if (!row) {
+      row = { key: identity.key, label: identity.label, words: 0, count: 0, cur: 0, prev: 0, buckets: {} };
+      apps.set(identity.key, row);
+    }
+    const w = metrics.entryWordCount(e);
+    if (e.ts >= rankFrom && e.ts <= ts) {
+      row.words += w;
+      row.count += 1;
+      totalWords += w;
+      const bucket = displayBucket(e);
+      row.buckets[bucket] = (row.buckets[bucket] || 0) + 1;
+    }
+    if (e.ts >= curStart && e.ts <= ts) row.cur += w;
+    else if (e.ts >= prevStart && e.ts < curStart) row.prev += w;
+  }
+  const ranked = [...apps.values()]
+    .filter((r) => r.count > 0)
+    .sort((a, b) => b.words - a.words || a.label.localeCompare(b.label));
+  const rows = ranked.slice(0, limit || 6).map((r, i) => {
+    let trend = 'none';
+    if (r.prev <= 0 && r.cur > 0) trend = 'new';
+    else if (r.prev > 0) {
+      const change = (r.cur - r.prev) / r.prev;
+      trend = change > 0.05 ? 'up' : (change < -0.05 ? 'down' : 'flat');
+    }
+    const bucket = Object.keys(r.buckets).sort((a, b) => r.buckets[b] - r.buckets[a])[0] || 'other';
+    return {
+      rank: i + 1,
+      key: r.key,
+      label: r.label,
+      words: r.words,
+      count: r.count,
+      share: totalWords > 0 ? Math.round((r.words / totalWords) * 100) : 0,
+      bucket,
+      bucketLabel: BUCKET_LABELS[bucket],
+      trend,
+    };
+  });
+  return { rows, total: ranked.length, totalWords };
+}
+
+// The most-used words with how often, so the cloud can size each one by its
+// own count rather than by its position in the list.
+function wordCloud(entries, limit) {
+  const counts = termCountsFor(entries);
+  const top = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, limit || 18);
+  const max = top.length ? top[0][1] : 0;
+  return top.map(([word, count]) => ({
+    word,
+    count,
+    weight: max > 0 ? Math.round((count / max) * 100) : 0,
+  }));
+}
+
+function countLearnedPairs(entries) {
+  let n = 0;
+  for (const e of entries || []) {
+    if (!e) continue;
+    if (e.statsOnly === true) n += e.learnedPairCount || 0;
+    else if (Array.isArray(e.learnedPairs)) n += e.learnedPairs.length;
+  }
+  return n;
+}
+
+function countEdited(entries) {
+  let n = 0;
+  for (const e of entries || []) {
+    if (!e) continue;
+    if (e.statsOnly === true ? e.edited : String(e.text || '') !== String(e.original || '')) n += 1;
+  }
+  return n;
+}
+
+// Fixes Voxden made on the way from raw speech to pasted text.
+function computeFixes(entries) {
+  let dictionary = 0;
+  let style = 0;
+  let hasData = false;
+  for (const e of entries || []) {
+    if (!e) continue;
+    if (typeof e.dictionaryHits === 'number') { dictionary += e.dictionaryHits; hasData = true; }
+    if (typeof e.styleFixes === 'number') { style += e.styleFixes; hasData = true; }
+  }
+  return { dictionary, style, total: dictionary + style, hasData };
+}
+
+function computeCategoryMix(entries) {
+  const counts = { ai: 0, work: 0, email: 0, personal: 0, other: 0 };
+  let withTarget = 0;
+  let tracked = 0;
+  for (const e of entries || []) {
+    if (!hasEntryTarget(e)) continue;
+    withTarget += 1;
+    counts[displayBucket(e)] += 1;
+    tracked += 1;
+  }
+  const rows = DISPLAY_BUCKETS.map((id) => ({
+    id,
+    label: BUCKET_LABELS[id],
+    count: counts[id],
+    percent: tracked > 0 ? Math.round((counts[id] / tracked) * 100) : 0,
+  })).sort((a, b) => b.count - a.count);
+  return { rows, tracked, withTarget };
+}
+
+function topApps(entries, limit) {
+  const counts = new Map();
+  for (const e of entries || []) {
+    if (!e || !e.exe) continue;
+    const identity = appIdentity(e);
+    const prev = counts.get(identity.key);
+    counts.set(identity.key, {
+      exe: e.exe,
+      label: identity.label,
+      words: (prev ? prev.words : 0) + metrics.entryWordCount(e),
+      count: (prev ? prev.count : 0) + 1,
+    });
+  }
+  const all = [...counts.values()].sort((a, b) => b.words - a.words);
+  return { list: all.slice(0, limit || 5), total: all.length };
+}
+
+// Dictations per hour of day, for the "when you speak" histogram.
+function computeClock(entries) {
+  const hours = new Array(24).fill(0);
+  let total = 0;
+  for (const e of entries || []) {
+    if (!e || !e.ts) continue;
+    hours[new Date(e.ts).getHours()] += 1;
+    total += 1;
+  }
+  let peak = 0;
+  for (let h = 1; h < 24; h++) if (hours[h] > hours[peak]) peak = h;
+  const max = hours[peak] || 0;
+  return {
+    hours: hours.map((count, hour) => ({
+      hour,
+      count,
+      percent: max > 0 ? Math.round((count / max) * 100) : 0,
+    })),
+    peakHour: total > 0 ? peak : null,
+    total,
+  };
+}
+
+function computeLength(entries) {
+  let longest = 0;
+  let words = 0;
+  let n = 0;
+  for (const e of entries || []) {
+    if (!e) continue;
+    const w = metrics.entryWordCount(e);
+    if (w > longest) longest = w;
+    words += w;
+    n += 1;
+  }
+  return {
+    average: n > 0 ? Math.round(words / n) : 0,
+    longest,
+  };
+}
+
+function rangeSubtitle(filtered, range) {
+  const n = filtered.length;
+  const label = range === '7d' ? 'in the last 7 days' : range === '30d' ? 'in the last 30 days' : 'all time';
+  if (!n) return 'No dictations ' + label;
+  const words = filtered.reduce((s, e) => s + metrics.entryWordCount(e), 0);
+  return n.toLocaleString() + ' dictations · ' + words.toLocaleString() + ' words ' + label;
+}
+
+function computeInsights(entries, phrases, range, now, opts) {
+  const all = entries || [];
+  const filtered = filterByRange(all, range || 'all', now);
+  const years = availableYears(all, now);
+  const wantYear = opts && Number(opts.year);
+  const year = years.includes(wantYear) ? wantYear : years[years.length - 1];
+  const m = metrics && metrics.computeMetrics
+    ? metrics.computeMetrics(filtered)
+    : { avgWpm: null, timeSavedMs: null, timedWords: 0, totalDurationMs: 0 };
+  const typingBaseline = (metrics && metrics.TYPING_WPM_BASELINE) || 40;
+  const totalWords = filtered.reduce((s, e) => s + metrics.entryWordCount(e), 0);
+  const pacePercent = m.avgWpm != null
+    ? Math.min(100, Math.round((m.avgWpm / PACE_WPM_CEILING) * 100))
+    : null;
+  let paceMultiplier = null;
+  if (m.avgWpm != null && m.avgWpm > 0) {
+    paceMultiplier = (m.avgWpm / typingBaseline).toFixed(1);
+  }
+  const delta = computeVolumeDelta(all, range || 'all', now);
+  const streaks = computeStreaks(all, now);
+  const heatmap = computeHeatmap(all, now, streaks.currentDays);
+  const mix = computeCategoryMix(filtered);
+  const apps = topApps(filtered, 5);
+  const fixes = computeFixes(filtered);
+
+  return {
+    range: range || 'all',
+    subtitle: rangeSubtitle(filtered, range || 'all'),
+    pace: {
+      avgWpm: m.avgWpm,
+      percent: pacePercent,
+      multiplier: paceMultiplier,
+      typingBaseline,
+      timeSavedMs: m.timeSavedMs,
+      timedWords: m.timedWords || 0,
+      hasTimed: m.timedWords > 0,
+    },
+    fixes,
+    volume: {
+      words: totalWords,
+      dictations: filtered.length,
+      delta,
+      milestone: computeMilestone(totalWords),
+    },
+    taught: {
+      dictionarySize: (phrases || []).length,
+      learnedPairs: countLearnedPairs(all),
+      editedTranscripts: countEdited(filtered),
+    },
+    where: {
+      rows: mix.rows,
+      tracked: mix.tracked,
+      withTarget: mix.withTarget,
+      apps: apps.list,
+      totalApps: apps.total,
+      leaderboard: appLeaderboard(all, range || 'all', now, 6),
+    },
+    rhythm: {
+      currentStreak: streaks.currentStreak,
+      longestStreak: streaks.longestStreak,
+      heatmap,
+    },
+    years,
+    milestones: computeMilestoneTimeline(all, year, now),
+    words: frequentTerms(filtered, 18),
+    wordCloud: wordCloud(filtered, 18),
+    clock: computeClock(filtered),
+    length: computeLength(filtered),
+  };
+}
+
+const insightsApi = {
+  PACE_WPM_CEILING,
+  HEATMAP_WEEKS,
+  MIN_HEATMAP_WEEKS,
+  MILESTONES,
+  DISPLAY_BUCKETS,
+  BUCKET_LABELS,
+  isAiContext,
+  displayBucket,
+  friendlyExe,
+  appIdentity,
+  toAnalyticsEntry,
+  isAnalyticsEntry,
+  filterByRange,
+  wordDiffCount,
+  computeInsights,
+  computeStreaks,
+  computeHeatmap,
+  computeFixes,
+  computeMilestone,
+  computeMilestoneTimeline,
+  availableYears,
+  appLeaderboard,
+  wordCloud,
+  computeClock,
+  computeLength,
+};
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = insightsApi;
+}
+if (typeof globalThis !== 'undefined') {
+  globalThis.voxdenInsights = insightsApi;
+}

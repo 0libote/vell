@@ -1,0 +1,358 @@
+'use strict';
+
+// Guards two bugs that were invisible from the UI:
+//
+//   1. The settings capture folded the Windows key into CommandOrControl, so no
+//      Win-key accelerator could ever be produced or displayed.
+//   2. Push-to-talk polled VK_SPACE no matter what the hotkey was, so
+//      hold-to-dictate never released on a chord that did not end in Space.
+
+const fs = require('fs');
+const path = require('path');
+const {
+  defaultShortcut,
+  formatShortcutLabel,
+  trayMenuLabel,
+  shortcutFailureReason,
+  isModifierOnly,
+  isLoneKey,
+  segmentVks,
+  acceleratorVkGroups,
+  segmentMacKeys,
+  acceleratorMacKeyGroups,
+  encodeChordFor,
+  encodeVkGroups,
+} = require('../src/hotkeys');
+
+let failed = 0;
+function check(name, got, expected) {
+  const g = JSON.stringify(got);
+  const e = JSON.stringify(expected);
+  if (g !== e) {
+    failed += 1;
+    console.error('FAIL', name, '\n  expected', e, '\n  got     ', g);
+  } else {
+    console.log('ok', name);
+  }
+}
+
+// The platform is explicit here: the label is what the user reads, and it must
+// not depend on the machine the suite happens to run on.
+check('label ctrl+shift+space', formatShortcutLabel('CommandOrControl+Shift+Space', 'win32'), 'Ctrl+Shift+Space');
+check('label super', formatShortcutLabel('CommandOrControl+Super+Space', 'win32'), 'Ctrl+Win+Space');
+check('label super only', formatShortcutLabel('Super+Alt+D', 'win32'), 'Win+Alt+D');
+check('label falls back to the default', formatShortcutLabel('', 'win32'), 'Ctrl+Win');
+check('tray puts the settings label after a tab', trayMenuLabel('Start dictation', 'CommandOrControl+Super', 'win32'), 'Start dictation\tCtrl+Win');
+check('tray paste matches settings', trayMenuLabel('Paste last dictation', 'CommandOrControl+Alt+V', 'win32'), 'Paste last dictation\tCtrl+Alt+V');
+check('tray omits a blank chord', trayMenuLabel('Paste last dictation', '', 'win32'), 'Paste last dictation');
+
+// On a Mac the same accelerators name Mac keys: CommandOrControl resolves to
+// Command, the key in the Super position is Command, and Alt is Option.
+check('mac label default', formatShortcutLabel('CommandOrControl+Shift+Space', 'darwin'), 'Cmd+Shift+Space');
+check('mac label super is command', formatShortcutLabel('Super+Alt+D', 'darwin'), 'Cmd+Option+D');
+check('mac label paste', formatShortcutLabel('CommandOrControl+Alt+V', 'darwin'), 'Cmd+Option+V');
+check('mac label keeps a real control', formatShortcutLabel('Control+Shift+Space', 'darwin'), 'Ctrl+Shift+Space');
+check('mac label cmdorctrl', formatShortcutLabel('CmdOrCtrl+J', 'darwin'), 'Cmd+J');
+check('mac label command stays command', formatShortcutLabel('Command+Option+K', 'darwin'), 'Cmd+Option+K');
+check('mac label falls back', formatShortcutLabel('', 'darwin'), 'Cmd+Shift+Space');
+check('mac tray label', trayMenuLabel('Start dictation', 'CommandOrControl+Shift+Space', 'darwin'), 'Start dictation\tCmd+Shift+Space');
+check('mac tray omits a blank chord', trayMenuLabel('Paste last dictation', '', 'darwin'), 'Paste last dictation');
+// No platform argument at all keeps the process's own, so main.js needs no change.
+check('label without a platform follows the process', formatShortcutLabel('CommandOrControl+Shift+Space'),
+  process.platform === 'darwin' ? 'Cmd+Shift+Space' : 'Ctrl+Shift+Space');
+
+// A rejected chord has to name itself and say why; "Shortcut unavailable" made
+// an OS-reserved combination look like an app bug.
+check(
+  'reason names the win chord',
+  shortcutFailureReason('CommandOrControl+Super+Space', false, 'win32'),
+  'Ctrl+Win+Space is reserved by Windows. Most Windows key combinations are — try another key.'
+);
+check(
+  'reason for a taken chord',
+  shortcutFailureReason('CommandOrControl+Alt+V', false, 'win32'),
+  'Ctrl+Alt+V is already taken by Windows or another app.'
+);
+check(
+  'reason on a mac names macOS',
+  shortcutFailureReason('CommandOrControl+Alt+V', false, 'darwin'),
+  'Cmd+Option+V is already taken by macOS or another app.'
+);
+check(
+  'reason for an unparseable chord',
+  shortcutFailureReason('CommandOrControl+Shift+Period', true, 'win32'),
+  'Ctrl+Shift+Period is not a combination Voxden can use.'
+);
+// Super has to be a whole segment, not a substring of some other key name.
+check('reason ignores super substring', /reserved by Windows/.test(shortcutFailureReason('CommandOrControl+Superb', false, 'win32')), false);
+
+check('vk letter', segmentVks('V'), [0x56]);
+check('vk letter lowercase', segmentVks('v'), [0x56]);
+check('vk digit', segmentVks('7'), [0x37]);
+check('vk space', segmentVks('Space'), [0x20]);
+check('vk f-key', segmentVks('F9'), [0x78]);
+check('vk f24', segmentVks('F24'), [0x87]);
+check('vk arrow', segmentVks('Up'), [0x26]);
+check('vk period word', segmentVks('Period'), [0xBE]);
+check('vk period char', segmentVks('.'), [0xBE]);
+check('vk numpad', segmentVks('num3'), [0x63]);
+// The row 3 and the numpad 3 are different physical keys.
+check('vk numpad differs from digit', segmentVks('num3')[0] === segmentVks('3')[0], false);
+check('vk ctrl', segmentVks('CommandOrControl'), [0x11]);
+check('vk shift', segmentVks('Shift'), [0x10]);
+check('vk alt', segmentVks('Alt'), [0x12]);
+// Windows has no combined left/right virtual key, so Super needs both.
+check('vk super both winkeys', segmentVks('Super'), [0x5B, 0x5C]);
+check('vk meta same as super', segmentVks('Meta'), [0x5B, 0x5C]);
+check('vk unknown', segmentVks('MediaPlayPause'), []);
+
+check('groups default hotkey', acceleratorVkGroups('CommandOrControl+Shift+Space'), [[0x11], [0x10], [0x20]]);
+// The old poller would have watched Space here and never fired.
+check('groups paste hotkey', acceleratorVkGroups('CommandOrControl+Alt+V'), [[0x11], [0x12], [0x56]]);
+check('groups with super', acceleratorVkGroups('CommandOrControl+Super+Space'), [[0x11], [0x5B, 0x5C], [0x20]]);
+check('groups drop unknown segment', acceleratorVkGroups('CommandOrControl+MediaStop+D'), [[0x11], [0x44]]);
+check('groups dedupe', acceleratorVkGroups('Ctrl+Control+D'), [[0x11], [0x44]]);
+check('groups empty', acceleratorVkGroups(''), []);
+
+check('encode', encodeVkGroups(acceleratorVkGroups('CommandOrControl+Super+Space')), '17,91|92,32');
+check('encode empty', encodeVkGroups([]), '');
+
+// The wire format above is parsed by scripts/win32.ps1; the JS suite never runs
+// PowerShell, so pin the contract by source text the way test-win32.js does.
+const psSrc = fs.readFileSync(path.join(__dirname, 'win32.ps1'), 'utf8');
+check('ps1 parses the chord in compiled code', /static int\[\]\[\] ParseGroups\(string spec\)/.test(psSrc), true);
+check('ps1 declares Vks param', /\[string\]\$Vks\s*=/.test(psSrc), true);
+check('ps1 splits groups on comma', psSrc.includes(".Split(',')"), true);
+check('ps1 splits alternatives on pipe', psSrc.includes("t.Split('|')"), true);
+// The hardcoded Space poll is what this change removes.
+check('ps1 no space-down action', psSrc.includes('"space-down"'), false);
+check('ps1 no hardcoded space poll', /GetAsyncKeyState\(0x20\)/.test(psSrc), false);
+
+// Verified against Electron 36: "Period" and "Comma" throw on conversion, the
+// literal characters register. The fallback hotkey used the word, so a failed
+// paste-shortcut registration left the app with no paste hotkey at all.
+const mainSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'main.js'), 'utf8');
+check('no word-spelled Period accelerator', /\+Period'/.test(mainSrc), false);
+check('no word-spelled Comma accelerator', /\+Comma'/.test(mainSrc), false);
+
+// The capture runs in the browser, but it is a pure function of the key event,
+// so lift it out of app.js and put real events through it. Source scanning was
+// enough to prove the Windows key reached the accelerator; it was not enough to
+// notice that eight ordinary keys were being dropped on the floor.
+const appSrcForLift = fs.readFileSync(path.join(__dirname, '..', 'src', 'app.js'), 'utf8');
+
+// Lifts a top-level `const NAME = <literal>;` or `function NAME(...) {...}` by
+// balancing whichever bracket opens the body -- objects, arrays and function
+// bodies all appear here.
+const PAIRS = { '{': '}', '[': ']' };
+function liftFromApp(decl) {
+  const start = appSrcForLift.indexOf(decl);
+  if (start < 0) throw new Error('app.js no longer declares: ' + decl);
+  let from;
+  if (decl.startsWith('function ')) {
+    from = appSrcForLift.indexOf('{', appSrcForLift.indexOf(')', start));
+  } else {
+    for (let k = start + decl.length; k < appSrcForLift.length; k++) {
+      if (PAIRS[appSrcForLift[k]]) { from = k; break; }
+    }
+    if (from === undefined) throw new Error('no literal after: ' + decl);
+  }
+  const open = appSrcForLift[from];
+  const close = PAIRS[open];
+  let depth = 0;
+  for (let k = from; k < appSrcForLift.length; k++) {
+    if (appSrcForLift[k] === open) depth += 1;
+    else if (appSrcForLift[k] === close) {
+      depth -= 1;
+      if (!depth) return appSrcForLift.slice(start, k + 1) + ';\n';
+    }
+  }
+  throw new Error('unbalanced ' + open + ' in: ' + decl);
+}
+const capture = new Function(
+  'let uiPlatform = "win32";\n'
+  + liftFromApp('function isMacUi(')
+  + liftFromApp('const CAPTURE_KEY_NAMES =')
+  + liftFromApp('const CAPTURE_MODIFIER_KEYS =')
+  + liftFromApp('function modifierPartsOf(')
+  + liftFromApp('function keyEventToAccelerator(')
+  + liftFromApp('function shortcutCaptureProblem(')
+  + 'return { keyEventToAccelerator, shortcutCaptureProblem, setPlatform: (p) => { uiPlatform = p; } };'
+)();
+
+function press(over) {
+  return Object.assign({ key: '', ctrlKey: false, metaKey: false, altKey: false, shiftKey: false }, over);
+}
+const accelOf = (over) => capture.keyEventToAccelerator(press(over));
+
+check('ctrl letter', accelOf({ key: 'j', ctrlKey: true }), 'CommandOrControl+J');
+check('ctrl win letter', accelOf({ key: 'j', ctrlKey: true, metaKey: true }), 'CommandOrControl+Super+J');
+check('ctrl win space', accelOf({ key: ' ', ctrlKey: true, metaKey: true }), 'CommandOrControl+Super+Space');
+check('win alt letter', accelOf({ key: 'k', metaKey: true, altKey: true }), 'Super+Alt+K');
+check('ctrl punctuation', accelOf({ key: ';', ctrlKey: true }), 'CommandOrControl+;');
+check('ctrl digit', accelOf({ key: '1', ctrlKey: true }), 'CommandOrControl+1');
+check('ctrl arrow', accelOf({ key: 'ArrowRight', ctrlKey: true }), 'CommandOrControl+Right');
+// On a Mac, CommandOrControl is Command: the Control key must be recorded as
+// Control, or a Ctrl chord would be registered and watched as a Cmd chord.
+capture.setPlatform('darwin');
+check('mac ctrl letter stays Control', accelOf({ key: 'j', ctrlKey: true }), 'Control+J');
+check('mac cmd letter is Command', accelOf({ key: 'j', metaKey: true }), 'Super+J');
+check('mac ctrl chord is watched on the Control keys', encodeChordFor('darwin', accelOf({ key: 'j', ctrlKey: true, shiftKey: true })), '59|62,56|60,38');
+capture.setPlatform('win32');
+
+// These eight all returned null before: the mapper only knew single characters,
+// function keys and arrows, so the capture sat on "Listening…" and the user had
+// no way to tell the difference between an unsupported key and a broken setting.
+for (const [key, want] of [
+  ['Home', 'Home'], ['End', 'End'], ['PageUp', 'PageUp'], ['PageDown', 'PageDown'],
+  ['Delete', 'Delete'], ['Backspace', 'Backspace'], ['Insert', 'Insert'],
+  ['Tab', 'Tab'], ['Enter', 'Return'],
+]) {
+  check('ctrl ' + key, accelOf({ key, ctrlKey: true }), 'CommandOrControl+' + want);
+}
+
+// Verified against Electron 36: every name above registers under Ctrl+Shift.
+check('F-keys stop at F24', accelOf({ key: 'F24', ctrlKey: true }), 'CommandOrControl+F24');
+check('F25 is not a key', accelOf({ key: 'F25', ctrlKey: true }), null);
+
+// A modifier on its own is the user mid-chord, not a mistake, so it must stay
+// silent -- an error on every Ctrl press would make the capture unusable.
+for (const key of ['Control', 'Shift', 'Alt', 'Meta', 'OS', 'AltGraph']) {
+  check('holding ' + key + ' yields nothing', accelOf({ key, ctrlKey: true }), null);
+  check('holding ' + key + ' says nothing', capture.shortcutCaptureProblem(press({ key, ctrlKey: true })), null);
+}
+check('escape stays silent', capture.shortcutCaptureProblem(press({ key: 'Escape' })), null);
+
+check('a bare key is rejected', accelOf({ key: 'j' }), null);
+check('a bare key says what is missing', capture.shortcutCaptureProblem(press({ key: 'j' })),
+  'Hold Ctrl, Alt, Shift or the Windows key as well, or use an F key on its own.');
+// A gamer's shortcut: one key, reachable mid-match, that typing never presses.
+check('an F key alone is a shortcut', accelOf({ key: 'F8' }), 'F8');
+check('F24 alone is a shortcut', accelOf({ key: 'F24' }), 'F24');
+check('a lone space is still typing', accelOf({ key: ' ' }), null);
+check('a lone enter is still typing', accelOf({ key: 'Enter' }), null);
+check('a lone digit is still typing', accelOf({ key: '1' }), null);
+check('an unusable key names itself', capture.shortcutCaptureProblem(press({ key: 'F13x', ctrlKey: true })),
+  'F13x can’t be part of a shortcut. Try another key.');
+check('the handler reports the problem instead of ignoring it',
+  /if \(!accel\) \{[\s\S]{0,200}setShortcutHint\(problem, 'error'\)/.test(appSrcForLift), true);
+
+// The renderer is loaded in a browser, not by Node, so pin its capture rules by
+// source text too.
+const appSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'app.js'), 'utf8');
+check('capture emits Super', appSrc.includes("if (e.metaKey) parts.push('Super')"), true);
+// The bug was specifically pushing CommandOrControl for a Windows-key press.
+// A bare "e.ctrlKey || e.metaKey" is fine elsewhere -- shortcutCaptureProblem
+// uses it to ask whether any modifier at all is held.
+check('capture no longer folds meta into ctrl',
+  /e\.ctrlKey \|\| e\.metaKey\) parts\.push\('CommandOrControl'\)/.test(appSrc), false);
+
+// A launch-time fallback used to swap the user's hotkey out with nothing shown.
+check('main sends a hotkey notice', /hotkeyNotice,/.test(mainSrc), true);
+check('registerHotkeys records the reason', mainSrc.includes('hotkeyNotice = notices.join'), true);
+check('a working change clears the notice', mainSrc.includes("hotkeyNotice = '';"), true);
+check('renderer reads the notice', appSrc.includes('data.hotkeyNotice'), true);
+check('renderer styles failures as errors', appSrc.includes("setShortcutHint(data.shortcutError, 'error')"), true);
+// The hint must fall back to the standing notice, not to blank, or a launch
+// failure disappears the first time a capture is opened and cancelled.
+check('hint restores rather than blanks', appSrc.includes('restoreShortcutHint()'), true);
+check('no bare hide left in capture teardown', /shortcutCaptureHint\.hidden = true/.test(appSrc), false);
+
+const cssSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'app.css'), 'utf8');
+check('error hint has its own style', cssSrc.includes('.shortcut-capture-hint.is-error'), true);
+
+// A chord of modifiers alone cannot go through RegisterHotKey, so main.js has to
+// recognise it and watch the key state instead. Two modifiers is the floor: one
+// would fire on every Ctrl press, which is typing, not a shortcut.
+check('ctrl+win is modifier only', isModifierOnly('CommandOrControl+Super'), true);
+check('win+alt is modifier only', isModifierOnly('Super+Alt'), true);
+check('three modifiers still count', isModifierOnly('CommandOrControl+Alt+Shift'), true);
+check('a real key disqualifies it', isModifierOnly('CommandOrControl+Super+J'), false);
+check('ctrl+shift+space is not modifier only', isModifierOnly('CommandOrControl+Shift+Space'), false);
+check('one modifier is not a chord', isModifierOnly('CommandOrControl'), false);
+check('a lone win key is not a chord', isModifierOnly('Super'), false);
+check('nothing is not a chord', isModifierOnly(''), false);
+check('F8 is a lone key', isLoneKey('F8'), true);
+check('a lone modifier is not a lone key', isLoneKey('Super'), false);
+check('ctrl+win is not a lone key', isLoneKey('CommandOrControl+Super'), false);
+check('ctrl+F8 is not a lone key', isLoneKey('CommandOrControl+F8'), false);
+check('nothing is not a lone key', isLoneKey(''), false);
+check('ctrl+win maps to the watchable keys', encodeVkGroups(acceleratorVkGroups('CommandOrControl+Super')), '17,91|92');
+
+// Windows defaults to Ctrl+Win, a chord the watcher carries. A Mac cannot: both
+// halves of that accelerator are Command there, so it would collapse into one
+// key and fire on every Command press. It keeps Cmd+Shift+Space, as does a
+// platform with no watcher to hear modifiers alone.
+check('windows default is ctrl+win', defaultShortcut('win32'), 'CommandOrControl+Super');
+check('windows default is watched, not registered', isModifierOnly(defaultShortcut('win32')), true);
+check('windows default reads ctrl+win', formatShortcutLabel(defaultShortcut('win32'), 'win32'), 'Ctrl+Win');
+check('mac default keeps cmd+shift+space', defaultShortcut('darwin'), 'CommandOrControl+Shift+Space');
+check('ctrl+win would collapse on a mac', acceleratorMacKeyGroups('CommandOrControl+Super'), [[55, 54]]);
+check('mac default keeps three groups', acceleratorMacKeyGroups(defaultShortcut('darwin')).length, 3);
+check('linux default is registrable', defaultShortcut('linux'), 'CommandOrControl+Shift+Space');
+check('default without a platform follows the process', defaultShortcut(),
+  process.platform === 'win32' ? 'CommandOrControl+Super' : 'CommandOrControl+Shift+Space');
+
+// The capture has no key press to end a modifier-only chord, so it commits on
+// release -- and must not do that once a real key has been seen.
+check('capture commits modifiers on keyup', /captureMods\.join\('\+'\)/.test(appSrcForLift), true);
+check('capture ignores keyup after a real key', /if \(!capturingShortcutKind \|\| captureSawKey\) return;/.test(appSrcForLift), true);
+check('capture demands two modifiers', /captureMods\.length < 2/.test(appSrcForLift), true);
+
+// main.js must route a modifier-only chord away from globalShortcut, and the
+// watcher must not outlive the app.
+check('main detects a modifier-only chord', mainSrc.includes('hotkeys.isModifierOnly(candidate)'), true);
+check('main watches instead of registering', /isModifierOnly\(candidate\)\)[\s\S]{0,160}startChordWatch\(candidate\)/.test(mainSrc), true);
+check('a dirty chord does not toggle', /msg === 'UP clean'/.test(mainSrc), true);
+// Both edges route through pttRelease now, so a tap can lock the dictation on;
+// a dirty release still has to end in cancelListen, not a lock.
+check('a dirty chord discards a ptt recording',
+  /const lone = hotkeys\.isLoneKey\(chordWatchAccel\);[\s\S]{0,400}msg === 'UP dirty'\) pttRelease\(!lone, \{ heldMs \}\)/.test(mainSrc)
+  && /function pttRelease\(dirty, opts\)[\s\S]{0,300}if \(dirty\) \{\s*cancelListen\(\);/.test(mainSrc), true);
+check('quitting stops the watcher', /will-quit[\s\S]{0,400}stopChordWatch\(\)/.test(mainSrc), true);
+check('every registered chord gets a physical-edge watcher',
+  /registeredShortcut = candidate;[\s\S]{0,180}startChordWatch\(candidate\)/.test(mainSrc), true);
+check('ptt ignores the key-down-only Electron callback',
+  /function dictationHotkeyHandler\(\) \{[\s\S]{0,240}if \(isPtt\(\)\) return;/.test(mainSrc), true);
+check('clean release uses the arming-safe stop path',
+  /msg === 'UP clean'\) pttRelease\(false, \{ heldMs \}\)/.test(mainSrc)
+  && /function pttRelease\(dirty, opts\)[\s\S]{0,1000}\n  requestPttStop\(\);\n\}/.test(mainSrc), true);
+check('the per-poll PowerShell release loop is gone', mainSrc.includes("ps(['keys-down'"), false);
+check('ps1 has the watch action', /"hotkey-watch"\s*\{/.test(psSrc), true);
+check('ps1 reports clean and dirty releases', psSrc.includes('(dirty ? "UP dirty " : "UP clean ") + heldMs'), true);
+check('ps1 excludes sided modifier variants', psSrc.includes('static System.Collections.Generic.HashSet<int> ChordKeys'), true);
+
+// macOS key codes for the Swift helper. Modifiers are keys with two sides.
+check('mac command or control is command', segmentMacKeys('CommandOrControl'), [55, 54]);
+check('mac super is command', segmentMacKeys('Super'), [55, 54]);
+check('mac control', segmentMacKeys('Control'), [59, 62]);
+check('mac option', segmentMacKeys('Alt'), [58, 61]);
+check('mac shift', segmentMacKeys('Shift'), [56, 60]);
+check('mac space', segmentMacKeys('Space'), [49]);
+check('mac letter', segmentMacKeys('V'), [9]);
+check('mac digit', segmentMacKeys('7'), [26]);
+check('mac f-key', segmentMacKeys('F9'), [101]);
+check('mac f21 has no key', segmentMacKeys('F21'), []);
+check('mac numpad differs from digit', segmentMacKeys('num3')[0] === segmentMacKeys('3')[0], false);
+check('mac period char', segmentMacKeys('.'), [47]);
+check('mac insert has no key', segmentMacKeys('Insert'), []);
+check('mac groups', acceleratorMacKeyGroups('CommandOrControl+Shift+Space'), [[55, 54], [56, 60], [49]]);
+check('mac groups drop duplicates', acceleratorMacKeyGroups('Command+Super'), [[55, 54]]);
+check('a mac chord with a key the Mac lacks is refused, not watched as its modifiers', encodeChordFor('darwin', 'CommandOrControl+Shift+Insert'), '');
+check('so is one with F21', encodeChordFor('darwin', 'Shift+F21'), '');
+check('windows keeps Insert', encodeChordFor('win32', 'CommandOrControl+Shift+Insert') !== '', true);
+check('wire for mac', encodeChordFor('darwin', 'Control+Super'), '59|62,55|54');
+check('wire for windows', encodeChordFor('win32', 'Control+Super'), '17,91|92');
+check('main encodes the chord per platform', mainSrc.includes('hotkeys.encodeChordFor(process.platform, accel)'), true);
+const macSrc = fs.readFileSync(path.join(__dirname, '..', 'helper', 'mac', 'main.swift'), 'utf8');
+check('mac helper has the watch action', /case "hotkey-watch":/.test(macSrc), true);
+check('mac helper reports clean and dirty releases', macSrc.includes('emit((dirty ? "UP dirty " : "UP clean ") + String(heldMs))'), true);
+check('mac helper reports a stale hold', macSrc.includes('emit("UP stale")'), true);
+check('mac helper excludes sided modifier variants', /modifierSides\[code\]/.test(macSrc), true);
+
+if (failed) {
+  process.exitCode = 1;
+  console.error(failed + ' test(s) failed');
+} else {
+  console.log('All hotkey tests passed.');
+}

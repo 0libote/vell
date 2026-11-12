@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob: mediastream:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <script src="flow-motion.js"></script>
+  <link rel="stylesheet" href="overlay.css" />
+  <link rel="stylesheet" href="flow-styles.css" />
+  <link rel="stylesheet" href="theme.css" />
+</head>
+<body class="voxden-flow" data-flow-style="island">
+  <div id="flow-hit" class="flow-hit">
+  <div class="orb-atmosphere" aria-hidden="true">
+    <span class="orb-particles"><i class="orb-particle"></i><i class="orb-particle"></i><i class="orb-particle"></i><i class="orb-particle"></i><i class="orb-particle"></i><i class="orb-particle"></i><i class="orb-particle"></i><i class="orb-particle"></i><i class="orb-particle"></i><i class="orb-particle"></i><i class="orb-particle"></i><i class="orb-particle"></i><i class="orb-particle"></i><i class="orb-particle"></i><i class="orb-particle"></i><i class="orb-particle"></i></span>
+  </div>
+  <!-- Screenshot, gear and grip sit outside the pill here, where Orb shows them
+       beside and above its sphere. Absolutely positioned against the hit area,
+       whose content box is centred on the pill, they stay put while it morphs.
+       Island moves the gear and the screenshot inside its capsule at runtime
+       (placeSideControls in overlay.js), so the capsule's own clip reveals
+       them as it opens; it has no grip. -->
+  <button type="button" class="flow-side flow-settings" id="flow-settings" title="Voxden settings" aria-label="Open Voxden settings">
+    <!-- Island's gear: a dashed ring. Hidden for every other style. -->
+    <svg class="side-icon-island" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <circle cx="8" cy="8" r="5.6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-dasharray="2.2 2.2"/>
+      <circle cx="8" cy="8" r="3.9" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    </svg>
+    <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
+      <path fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z"/>
+      <path fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" d="M19.1 14.2a1.6 1.6 0 0 0 .32 1.76l.06.06a1.9 1.9 0 1 1-2.7 2.7l-.05-.06a1.6 1.6 0 0 0-1.77-.32 1.6 1.6 0 0 0-.97 1.47v.17a1.9 1.9 0 1 1-3.8 0v-.09a1.6 1.6 0 0 0-1.05-1.46 1.6 1.6 0 0 0-1.76.32l-.06.06a1.9 1.9 0 1 1-2.7-2.7l.06-.06a1.6 1.6 0 0 0 .32-1.76 1.6 1.6 0 0 0-1.47-.98h-.17a1.9 1.9 0 0 1 0-3.8h.09a1.6 1.6 0 0 0 1.46-1.05 1.6 1.6 0 0 0-.32-1.76l-.06-.06a1.9 1.9 0 1 1 2.7-2.7l.06.06a1.6 1.6 0 0 0 1.76.32h.08a1.6 1.6 0 0 0 .97-1.47v-.17a1.9 1.9 0 1 1 3.8 0v.09a1.6 1.6 0 0 0 .97 1.46 1.6 1.6 0 0 0 1.77-.32l.05-.06a1.9 1.9 0 1 1 2.7 2.7l-.06.06a1.6 1.6 0 0 0-.32 1.76v.08a1.6 1.6 0 0 0 1.47.97h.17a1.9 1.9 0 0 1 0 3.8h-.09a1.6 1.6 0 0 0-1.46.97z"/>
+    </svg>
+  </button>
+  <button type="button" class="flow-side flow-capture" id="flow-capture" title="Capture a screenshot and speak" aria-label="Capture a screenshot and speak">
+    <!-- Island's screenshot: a viewfinder. Hidden for every other style. -->
+    <svg class="side-icon-island" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M2.5 5.5v-2a1 1 0 0 1 1-1h2M10.5 2.5h2a1 1 0 0 1 1 1v2M13.5 10.5v2a1 1 0 0 1-1 1h-2M5.5 13.5h-2a1 1 0 0 1-1-1v-2"/>
+      <circle cx="8" cy="8" r="2" fill="currentColor" stroke="none"/>
+    </svg>
+    <svg viewBox="0 0 20 20" width="13" height="13" aria-hidden="true">
+      <path d="M7 3H3v4m10-4h4v4M3 13v4h4m10-4v4h-4M7 7h6v6H7z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </button>
+  <button type="button" class="flow-side flow-drag" id="flow-drag" title="Drag to move the flow bar" aria-label="Drag to move the flow bar">
+    <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+      <g fill="currentColor">
+        <circle cx="6" cy="3.5" r="1.35"/><circle cx="10" cy="3.5" r="1.35"/>
+        <circle cx="6" cy="8" r="1.35"/><circle cx="10" cy="8" r="1.35"/>
+        <circle cx="6" cy="12.5" r="1.35"/><circle cx="10" cy="12.5" r="1.35"/>
+      </g>
+    </svg>
+  </button>
+  <div id="pill" class="pill idle" role="group" aria-label="Voxden" title="Dictate">
+    <button type="button" id="orb-trigger" class="orb-trigger" aria-label="Start dictation" title="Start dictation" tabindex="-1" disabled></button>
+    <button type="button" class="act act-cancel" id="btn-cancel" title="Cancel" aria-label="Cancel recording">
+      <svg viewBox="0 0 16 16" width="9" height="9" aria-hidden="true">
+        <path d="M4.2 4.2l7.6 7.6M11.8 4.2l-7.6 7.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+    </button>
+
+    <span class="glyph glyph-mic" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="12" height="12">
+        <path fill="currentColor" d="M12 2.5a3.25 3.25 0 0 0-3.25 3.25v6.5a3.25 3.25 0 1 0 6.5 0v-6.5A3.25 3.25 0 0 0 12 2.5z"/>
+        <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M6.75 11.25a5.25 5.25 0 0 0 10.5 0M12 16.5v3.25M9.25 19.75h5.5"/>
+      </svg>
+    </span>
+    <span class="orb-core" aria-hidden="true">
+      <svg class="orb-processing-echoes" viewBox="0 0 40 40" aria-hidden="true">
+        <g class="orb-echo-a"><path d="M20 2C22.5 14 26 17.5 38 20C26 22.5 22.5 26 20 38C17.5 26 14 22.5 2 20C14 17.5 17.5 14 20 2Z"/></g>
+        <g class="orb-echo-b"><path d="M20 2C22.5 14 26 17.5 38 20C26 22.5 22.5 26 20 38C17.5 26 14 22.5 2 20C14 17.5 17.5 14 20 2Z"/></g>
+      </svg>
+      <canvas id="energy-orb" class="energy-orb" width="96" height="96"></canvas>
+    </span>
+    <span class="glyph glyph-check" aria-hidden="true">
+      <svg viewBox="0 0 16 16" width="11" height="11">
+        <path d="M3.2 8.4l3.2 3.2 6.4-6.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </span>
+    <span class="glyph glyph-error" aria-hidden="true">
+      <svg viewBox="0 0 16 16" width="10" height="10">
+        <path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+      <!-- Island marks an error with "!" and keeps the X for a cancel. -->
+      <svg class="glyph-bang" viewBox="0 0 16 16" width="10" height="10">
+        <path d="M8 3.6v5.2" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/>
+        <circle cx="8" cy="12.2" r="1.35" fill="currentColor"/>
+      </svg>
+    </span>
+
+    <div class="wave" id="wave" aria-hidden="true">
+      <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+    </div>
+
+    <span class="dots" id="dots" aria-hidden="true">
+      <i></i><i></i><i></i>
+      <svg class="generation-star" viewBox="0 0 24 24" width="24" height="24">
+        <g class="generation-star-turn"><path d="M12 2C13.4 8.6 15.4 10.6 22 12C15.4 13.4 13.4 15.4 12 22C10.6 15.4 8.6 13.4 2 12C8.6 10.6 10.6 8.6 12 2Z" fill="currentColor"/></g>
+        <path class="generation-star-glint" d="M20 1.5Q20.6 4.4 23.5 5Q20.6 5.6 20 8.5Q19.4 5.6 16.5 5Q19.4 4.4 20 1.5Z" fill="currentColor"/>
+      </svg>
+    </span>
+    <!-- Island's transcribing indicator: eight spokes that turn in steps. -->
+    <span class="spinner" id="spinner" aria-hidden="true"><span class="spinner-turn"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></span>
+    <!-- Island gives the line a spacer of its own, so the room it takes can
+         ride the spring while the words inside sit at their final width. For
+         every other style it is display: contents and changes nothing. The
+         twin is Island's fading copy of the line it is replacing. -->
+    <span class="line" id="line"><span class="label" id="label"></span></span>
+    <span class="label-twin" id="label-twin" aria-hidden="true"></span>
+
+    <button type="button" class="act act-undo" id="btn-undo" aria-label="Undo dictionary addition" title="Undo dictionary addition" tabindex="-1" disabled>Undo</button>
+
+    <!-- Pro: rewrite the dictation just pasted as clean writing, in place. -->
+    <button type="button" class="act act-polish" id="btn-polish" aria-label="Polish this dictation" title="Polish" tabindex="-1">
+      <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+        <path d="M6.6 1.6c.5 2.8 1.4 3.7 4.2 4.2-2.8.5-3.7 1.4-4.2 4.2-.5-2.8-1.4-3.7-4.2-4.2 2.8-.5 3.7-1.4 4.2-4.2Z" fill="currentColor"/>
+        <path d="M12.2 9.3c.26 1.3.66 1.7 1.96 1.96-1.3.26-1.7.66-1.96 1.96-.26-1.3-.66-1.7-1.96-1.96 1.3-.26 1.7-.66 1.96-1.96Z" fill="currentColor"/>
+      </svg>
+    </button>
+
+    <button type="button" class="act act-confirm" id="btn-confirm" title="Stop and transcribe" aria-label="Stop recording and transcribe">
+      <svg class="ico ico-stop" viewBox="0 0 16 16" width="9" height="9" aria-hidden="true">
+        <rect x="3.5" y="3.5" width="9" height="9" rx="1.6" fill="currentColor"/>
+      </svg>
+      <svg class="ico ico-retry" viewBox="0 0 16 16" width="10" height="10" aria-hidden="true">
+        <path d="M12.4 8a4.4 4.4 0 1 1-1.3-3.1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        <path d="M12.8 2.6v2.8H10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+  </div>
+  <div class="orb-actions" role="group" aria-label="Recording actions">
+    <button type="button" id="orb-discard" aria-label="Discard recording" title="Discard recording · Esc" tabindex="-1" disabled>
+      <svg viewBox="0 0 16 16" width="10" height="10" aria-hidden="true"><path d="M4.5 4.5l7 7m0-7l-7 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+    </button>
+    <button type="button" id="orb-finish" aria-label="Finish and transcribe" title="Finish and transcribe" tabindex="-1" disabled>
+      <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path d="M3.2 8.2l3.1 3.1 6.5-6.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+  </div>
+  <script src="cleanup.js"></script>
+  <script src="chunking.js"></script>
+  <script src="cloud-segments.js"></script>
+  <script src="speech-gate.js"></script>
+  <script src="energy-orb.js"></script>
+  <script src="sound-cues.js"></script>
+  <script src="overlay.js"></script>
+</body>
+</html>

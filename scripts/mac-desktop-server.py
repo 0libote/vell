@@ -1,0 +1,307 @@
+#!/usr/bin/env python3
+"""A remote desktop for a headless macOS CI runner, in one file.
+
+Apple's Screen Sharing on a runner puts a remote user on an empty virtual
+display, so the real session stays invisible. This serves a screenshot of the
+real desktop about once a second and turns clicks, typing and key presses on
+the page into cliclick commands on the runner. Everything except the page
+itself requires the token, which is the MAC_VNC_PASSWORD secret.
+"""
+
+import ctypes
+import hmac
+import json
+import os
+import shlex
+import struct
+import subprocess
+import sys
+import threading
+import time
+import urllib.parse
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+TOKEN = os.environ.get("MAC_VNC_PASSWORD", "")
+SHOT = "/tmp/voxden-shot.png"
+MIN_SHOT_INTERVAL = 0.7
+_last_shot = 0.0
+_shot_lock = threading.Lock()
+_shot_size = (0, 0)
+
+
+def logical_size():
+    cg = ctypes.CDLL("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
+
+    class CGRect(ctypes.Structure):
+        _fields_ = [("x", ctypes.c_double), ("y", ctypes.c_double),
+                    ("w", ctypes.c_double), ("h", ctypes.c_double)]
+
+    cg.CGMainDisplayID.restype = ctypes.c_uint32
+    cg.CGDisplayBounds.restype = CGRect
+    cg.CGDisplayBounds.argtypes = [ctypes.c_uint32]
+    bounds = cg.CGDisplayBounds(cg.CGMainDisplayID())
+    return int(bounds.w), int(bounds.h)
+
+
+def png_size(path):
+    with open(path, "rb") as f:
+        head = f.read(24)
+    if len(head) < 24 or head[:8] != b"\x89PNG\r\n\x1a\n":
+        return 0, 0
+    return struct.unpack(">II", head[16:24])
+
+
+def take_shot():
+    """Refresh the screenshot at most every MIN_SHOT_INTERVAL seconds.
+
+    The capture lands in a temporary file and is swapped in atomically, so a
+    click arriving mid-capture still finds the previous image and its size.
+    """
+    global _last_shot, _shot_size
+    with _shot_lock:
+        now = time.time()
+        if now - _last_shot < MIN_SHOT_INTERVAL and os.path.exists(SHOT):
+            return
+        tmp = SHOT + ".tmp.png"
+        subprocess.run(["screencapture", "-x", "-C", "-t", "png", tmp], timeout=10)
+        if os.path.exists(tmp) and os.path.getsize(tmp) > 0:
+            os.replace(tmp, SHOT)
+            _shot_size = png_size(SHOT)
+        _last_shot = time.time()
+
+
+NAMED_KEYS = {
+    "arrow-down", "arrow-left", "arrow-right", "arrow-up", "delete", "end", "enter",
+    "esc", "fwd-delete", "home", "page-down", "page-up", "return", "space", "tab",
+    "num-enter", "num-clear",
+} | {"f%d" % n for n in range(1, 17)} | {"num-%d" % n for n in range(10)}
+
+
+def cliclick(*commands):
+    result = subprocess.run(["cliclick"] + list(commands), capture_output=True, text=True, timeout=20)
+    return (result.stdout + result.stderr).strip()
+
+
+PAGE = """<!doctype html>
+<html><head><meta charset="utf-8"><title>Voxden runner desktop</title>
+<style>
+  body { margin: 0; background: #111; color: #ddd; font: 14px system-ui, sans-serif; }
+  #bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 8px; background: #222; }
+  #bar input[type=text] { width: 260px; }
+  button { padding: 4px 10px; }
+  #screen { display: block; max-width: 100vw; cursor: crosshair; }
+  #log { padding: 4px 8px; color: #9c9; white-space: pre-wrap; }
+</style></head><body>
+<div id="bar">
+  <input id="token" type="password" placeholder="password" size="12">
+  <button onclick="save()">Use</button>
+  <span>|</span>
+  <input id="text" type="text" placeholder="text to type">
+  <button onclick="act({kind:'type', text: v('text')})">Type</button>
+  <button onclick="act({kind:'say', text: v('text')})">Say</button>
+  <button onclick="act({kind:'key', key:'return'})">Return</button>
+  <button onclick="act({kind:'key', key:'esc'})">Esc</button>
+  <button onclick="act({kind:'key', key:'tab'})">Tab</button>
+  <span>|</span>
+  <input id="chord" type="text" value="cmd,shift" size="10" title="modifiers, comma separated: cmd ctrl alt shift">
+  <input id="chordkey" type="text" value="space" size="6" title="key name for cliclick, e.g. space, return, a">
+  <button onclick="act({kind:'shortcut', mods: v('chord'), key: v('chordkey')})">Press chord</button>
+  <button onclick="act({kind:'hold', mods: v('chord'), key: v('chordkey')})">Hold</button>
+  <button onclick="act({kind:'release', mods: v('chord'), key: v('chordkey')})">Release</button>
+  <span>|</span>
+  <label><input id="live" type="checkbox" checked> live</label>
+  <button onclick="refresh()">Refresh</button>
+</div>
+<img id="screen" alt="desktop">
+<div id="log"></div>
+<script>
+  let token = sessionStorage.getItem('token') || '';
+  document.getElementById('token').value = token;
+  function v(id) { return document.getElementById(id).value; }
+  function save() { token = v('token'); sessionStorage.setItem('token', token); refresh(); }
+  function log(t) { document.getElementById('log').textContent = t; }
+  // The password goes in a header, never in a URL, so it can't end up in a
+  // log. The next frame is fetched and decoded off-screen first, so the
+  // visible image never turns into a zero-sized broken image mid-click.
+  let loading = false, shownUrl = '';
+  async function refresh() {
+    if (!token || loading) return;
+    loading = true;
+    try {
+      const r = await fetch('/shot.png', {headers: {'X-Desktop-Key': token}, cache: 'no-store'});
+      if (!r.ok) { log(await r.text()); return; }
+      const url = URL.createObjectURL(await r.blob());
+      const next = new Image();
+      next.src = url;
+      await next.decode();
+      document.getElementById('screen').src = url;
+      if (shownUrl) URL.revokeObjectURL(shownUrl);
+      shownUrl = url;
+    } catch (err) {
+      log('screenshot failed to load');
+    } finally {
+      loading = false;
+    }
+  }
+  function pixelPoint(e) {
+    const img = e.currentTarget;
+    if (!img.naturalWidth || !img.clientWidth) { log('no screenshot yet, click ignored'); return null; }
+    const sx = img.naturalWidth / img.clientWidth, sy = img.naturalHeight / img.clientHeight;
+    return { px: Math.round(e.offsetX * sx), py: Math.round(e.offsetY * sy) };
+  }
+  async function act(a) {
+    const r = await fetch('/act', {method: 'POST', headers: {'X-Desktop-Key': token}, body: JSON.stringify(a)});
+    log(await r.text());
+    setTimeout(refresh, 300);
+  }
+  document.getElementById('screen').addEventListener('click', (e) => {
+    const p = pixelPoint(e);
+    if (p) act({kind: 'click', px: p.px, py: p.py});
+  });
+  document.getElementById('screen').addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    const p = pixelPoint(e);
+    if (p) act({kind: 'rightclick', px: p.px, py: p.py});
+  });
+  setInterval(() => { if (document.getElementById('live').checked) refresh(); }, 1000);
+  refresh();
+</script></body></html>
+"""
+
+
+class Handler(BaseHTTPRequestHandler):
+    def _send(self, code, body, ctype="text/plain; charset=utf-8"):
+        if isinstance(body, str):
+            body = body.encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _authorized(self):
+        # The password comes in a header and is compared in constant time. A
+        # query string never carries it, so the request log can't leak it.
+        given = self.headers.get("X-Desktop-Key") or ""
+        return bool(TOKEN) and hmac.compare_digest(given.encode("utf-8"), TOKEN.encode("utf-8"))
+
+    def do_GET(self):
+        url = urllib.parse.urlparse(self.path)
+        if url.path == "/":
+            return self._send(200, PAGE, "text/html; charset=utf-8")
+        if not self._authorized():
+            return self._send(403, "wrong password")
+        if url.path == "/shot.png":
+            try:
+                take_shot()
+                with open(SHOT, "rb") as f:
+                    return self._send(200, f.read(), "image/png")
+            except Exception as err:  # noqa: BLE001
+                return self._send(500, "screenshot failed: %s" % err)
+        return self._send(404, "not found")
+
+    def do_POST(self):
+        url = urllib.parse.urlparse(self.path)
+        if not self._authorized():
+            return self._send(403, "wrong password")
+        if url.path != "/act":
+            return self._send(404, "not found")
+        length = int(self.headers.get("Content-Length") or 0)
+        try:
+            action = json.loads(self.rfile.read(length) or b"{}")
+        except ValueError:
+            return self._send(400, "bad json")
+        try:
+            return self._send(200, self.perform(action) or "ok")
+        except Exception as err:  # noqa: BLE001
+            return self._send(500, "action failed: %s" % err)
+
+    def perform(self, action):
+        kind = action.get("kind")
+        if kind in ("click", "rightclick"):
+            # Page coordinates are screenshot pixels; cliclick wants points.
+            # A job process outside the GUI session may get no display bounds
+            # back; then the screenshot is taken to be one pixel per point.
+            shot_w, shot_h = _shot_size
+            if not shot_w:
+                take_shot()
+                shot_w, shot_h = _shot_size
+            try:
+                logical_w, logical_h = logical_size()
+            except Exception:  # noqa: BLE001
+                logical_w, logical_h = 0, 0
+            sx = logical_w / shot_w if shot_w and logical_w else 1
+            sy = logical_h / shot_h if shot_h and logical_h else 1
+            x = int(int(action.get("px", 0)) * sx)
+            y = int(int(action.get("py", 0)) * sy)
+            out = cliclick(("rc:%d,%d" if kind == "rightclick" else "c:%d,%d") % (x, y))
+            return "clicked %d,%d (scale %.2f) %s" % (x, y, sx, out)
+        if kind == "type":
+            text = str(action.get("text", ""))
+            return cliclick("t:" + text) if text else "nothing to type"
+        if kind == "say":
+            # Spoken through the default output, which the job points at the
+            # virtual device Voxden records from. Runs in the background so
+            # the page stays responsive while the sentence plays.
+            text = str(action.get("text", "")).strip()
+            if not text:
+                return "nothing to say"
+            # Named device rather than the default output: the default did
+            # not reach the loopback on the runner. Blocks until spoken so
+            # any error text comes back to the page.
+            device = str(action.get("device", "") or os.environ.get("VOXDEN_SAY_DEVICE", "BlackHole 2ch"))
+            # The job's own processes sit outside the desktop session, and
+            # audio they play never reached the loopback. A script opened
+            # with Terminal runs on the desktop, the way the app itself was
+            # launched, so the voice goes through the desktop's devices.
+            script = "/tmp/voxden-say.command"
+            with open(script, "w") as f:
+                f.write("#!/bin/bash\nsay -a %s -r 170 %s\nexit\n" % (shlex.quote(device), shlex.quote(text)))
+            os.chmod(script, 0o755)
+            result = subprocess.run(["open", "-a", "Terminal", script], capture_output=True, text=True, timeout=20)
+            err = (result.stdout + result.stderr).strip()
+            return "saying on the desktop via %s: %s%s" % (device, text, (" | " + err) if err else "")
+        if kind == "key":
+            return cliclick("kp:" + str(action.get("key", "return")))
+        mods = ",".join(m.strip() for m in str(action.get("mods", "")).split(",") if m.strip())
+        key = str(action.get("key", "")).strip()
+        if kind == "shortcut":
+            # cliclick presses named keys with kp: and everything else, such
+            # as a letter for Command+A, by typing it while modifiers are held.
+            steps = []
+            if mods:
+                steps.append("kd:" + mods)
+            if key:
+                steps.append(("kp:" if key in NAMED_KEYS else "t:") + key)
+            if mods:
+                steps.append("ku:" + mods)
+            return cliclick(*steps)
+        # cliclick can hold only modifier keys, so a push-to-talk test needs a
+        # modifier-only chord in Voxden, such as Control+Option.
+        if kind in ("hold", "release"):
+            if key:
+                return "hold and release work with modifiers only; clear the key and set a modifier-only shortcut in Voxden"
+            if not mods:
+                return "nothing to hold"
+            return cliclick(("kd:" if kind == "hold" else "ku:") + mods)
+        return "unknown action"
+
+    def log_message(self, fmt, *args):  # quieter log, and never a query string
+        line = fmt % args
+        if self.path and "?" in self.path:
+            line = line.replace(self.path, self.path.split("?", 1)[0])
+        sys.stderr.write("%s %s\n" % (self.address_string(), line))
+
+
+def main():
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 6080
+    if not TOKEN:
+        sys.exit("MAC_VNC_PASSWORD is not set")
+    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    print("desktop server on %d" % port, flush=True)
+    server.serve_forever()
+
+
+if __name__ == "__main__":
+    main()

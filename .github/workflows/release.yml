@@ -1,0 +1,316 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  # A manual run exercises the whole pipeline -- runtime, tests, installer --
+  # without publishing. The installer is kept as a workflow artifact instead.
+  # `only` picks one half so a Mac fix does not wait on the 40-minute Windows
+  # build, or the other way round. A tag push has no inputs and runs both.
+  workflow_dispatch:
+    inputs:
+      only:
+        description: Which build to run
+        type: choice
+        options:
+          - both
+          - windows
+          - mac
+        default: both
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # Every step below is the same on a tag push and a default manual run;
+    # this only lets a manual run leave the Windows half out.
+    if: github.event_name == 'push' || inputs.only != 'mac'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          # Current 22 LTS includes node:sqlite and meets rebuild's 22.12+ minimum.
+          node-version: '22'
+          cache: npm
+
+      # A tag whose number differs from package.json would build installers
+      # and an update feed named for the wrong version into this draft.
+      - name: Check the tag matches package.json
+        if: github.event_name == 'push'
+        shell: bash
+        run: node -e "const v = 'v' + require('./package.json').version; if (v !== process.env.GITHUB_REF_NAME) { console.error('Tag ' + process.env.GITHUB_REF_NAME + ' does not match package.json ' + v); process.exit(1); }"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check the public sign-in service before a release
+        if: github.event_name == 'push'
+        run: npm run check:account-service
+
+      - name: Setup Python for the bundled speech runtime
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12.10'
+          architecture: x64
+
+      - name: Prepare the complete speech runtime
+        run: npm run prepare:asr-runtime
+
+      - name: Validate app and speech lifecycle
+        env:
+          VOXDEN_PYTHON: ${{ github.workspace }}\dist-runtime-v3\runtime\python.exe
+        run: npm test
+
+      - name: Validate game shortcuts and administrator settings
+        run: |
+          npm run test:game-shortcut
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:admin-apps
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Validate dictation into the app
+        run: npm run test:app-dictation
+
+      - name: Validate native theme saving
+        run: npx --no-install electron scripts/test-app-theme-native.js
+
+      - name: Validate speech setup UI
+        run: npm run test:speech-ui
+
+      - name: Validate music controls UI
+        run: npm run test:media-ui
+
+      - name: Validate sound cues and launch readiness
+        run: npm run test:sounds
+
+      - name: Validate the flow bar overlay
+        run: npm run test:flow-bar-ui
+
+      - name: Validate capture reuse and release highlights
+        run: |
+          npm run test:flow-bar-audio-ui
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:changelog
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:release-ui
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Validate flow bar placement and dragging
+        run: npm run test:flow-bar-main
+
+      - name: Validate the notifications panel
+        run: npm run test:notifications-ui
+
+      # A quit that hangs fails here in minutes, not at the job's hour.
+      - name: Validate packaged startup without installed models
+        timeout-minutes: 5
+        run: npm run test:packaged-startup
+
+      - name: Validate sign-in server persistence before authentication
+        run: npm run test:account-service-native
+
+      # The draft's body comes from release-notes/current.md (build.releaseInfo
+      # in package.json). Rewrite that file for the new version before tagging.
+      # Create it once before parallel asset uploads, which can otherwise race
+      # to create separate drafts for the installer and its blockmap.
+      - name: Prepare the single draft release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $releases = gh api "repos/$env:GITHUB_REPOSITORY/releases?per_page=100" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $drafts = @($releases | Where-Object { $_.tag_name -eq $env:GITHUB_REF_NAME })
+          if ($drafts.Count -gt 1) { throw 'Multiple releases exist for this tag; consolidate them before retrying.' }
+          if ($drafts.Count -eq 1) {
+            if (-not $drafts[0].draft) { throw 'Refusing to upload to a published release.' }
+          } else {
+            gh release create $env:GITHUB_REF_NAME --verify-tag --draft --title "Voxden $($env:GITHUB_REF_NAME.TrimStart('v'))" --notes-file release-notes/current.md
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+      - name: Build and publish
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run release
+
+      - name: Build without publishing
+        if: github.event_name == 'workflow_dispatch'
+        run: npm run dist
+
+      - name: Keep the installer from a manual run
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v7
+        with:
+          name: Voxden-Setup
+          path: |
+            dist/Voxden-Setup-*.exe
+            dist/Voxden-Setup-*.exe.blockmap
+            dist/latest.yml
+          if-no-files-found: error
+
+      - name: Verify the built Windows app and runtime
+        run: node scripts/verify-built-app.js
+
+      - name: Smoke test the built Windows app with fresh and existing profiles
+        timeout-minutes: 5
+        run: |
+          npx --no-install electron scripts/test-packaged-startup.js --resources=dist/win-unpacked/resources
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npx --no-install electron scripts/test-packaged-startup.js --resources=dist/win-unpacked/resources --existing-profile
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+  # The macOS build: Apple Silicon only, signed ad hoc (build/after-pack.js)
+  # until there is an Apple Developer identity. It runs beside the Windows job,
+  # never inside it; on a tag push the mac-release job below attaches what it
+  # builds to the draft the Windows job creates.
+  mac:
+    if: github.event_name == 'push' || inputs.only != 'windows'
+    runs-on: macos-latest
+    timeout-minutes: 45
+    env:
+      # Keeps electron-builder from looking for a signing identity in the
+      # runner keychain.
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+
+      # A tag whose number differs from package.json would build installers
+      # and an update feed named for the wrong version into this draft.
+      - name: Check the tag matches package.json
+        if: github.event_name == 'push'
+        shell: bash
+        run: node -e "const v = 'v' + require('./package.json').version; if (v !== process.env.GITHUB_REF_NAME) { console.error('Tag ' + process.env.GITHUB_REF_NAME + ' does not match package.json ' + v); process.exit(1); }"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The same self-contained speech runtime the Windows job builds, for
+      # Apple Silicon: python-build-standalone plus the CPU engines.
+      - name: Prepare the complete speech runtime
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run prepare:asr-runtime
+
+      # The test chain is && joined, so one failure would hide everything after
+      # it. The report runs each file on its own, lists every result, and then
+      # fails the job if any failed. Nothing is skipped: the files that only
+      # mean something on Windows (test-win32-protocol, the win-unpacked checks
+      # in test-packaged-sidecar and test-qwen-packaged) skip their own
+      # Windows-only parts and still check the rest here.
+      - name: Run the test chain file by file
+        env:
+          VOXDEN_PYTHON: ${{ github.workspace }}/dist-runtime-v3/runtime/bin/python3.12
+        run: node scripts/test-report.js --strict --json dist-test-report/mac.json
+
+      - name: Validate theme saving through native macOS windows
+        run: npx --no-install electron scripts/test-app-theme-native.js
+
+      - name: Validate dictation into the app
+        run: npm run test:app-dictation
+
+      - name: Validate sound cues and launch readiness
+        run: npm run test:sounds
+
+      - name: Build the macOS app, signed ad hoc
+        run: npm run dist:mac
+
+      - name: Validate capture reuse and release highlights
+        run: |
+          npm run test:flow-bar-audio-ui
+          npm run test:changelog
+          npm run test:release-ui
+
+      # What a user downloads, checked as they get it: the zip unpacked with
+      # ditto and the dmg mounted, each app strictly code-signature verified,
+      # arm64 throughout (app, helper, 7za, the runtime's python), Info.plist
+      # and Resources as package.json declares them, and the bundled speech
+      # engine installed and probed through the app's own installer.
+      - name: Verify the zip and dmg
+        run: node scripts/verify-mac-build.js --dist dist --extract dist/mac-verify
+
+      # The unpacked app launched through its own executable: both windows
+      # load, main answers over IPC as packaged macOS, the Swift helper runs.
+      - name: Start the packaged app
+        timeout-minutes: 5
+        run: node scripts/smoke-mac-app.js --app dist/mac-verify/Voxden.app --log dist/mac-smoke.log
+
+      - name: Keep the macOS build
+        uses: actions/upload-artifact@v7
+        with:
+          name: Voxden-mac
+          path: |
+            dist/Voxden-*-mac-*.zip
+            dist/Voxden-*-mac-*.dmg
+            dist/latest-mac.yml
+          if-no-files-found: error
+
+      - name: Keep the smoke test log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Voxden-mac-logs
+          path: |
+            dist/mac-smoke.log*
+            dist-test-report/mac.json
+          if-no-files-found: ignore
+
+  # A tag push puts the Mac build on the same draft release as the Windows
+  # installer. It waits for the Windows job, which creates that draft through
+  # electron-builder, so the two never race to create it; it refuses anything
+  # but a draft, so a published release is never touched; --clobber makes a
+  # re-run replace its own files rather than fail.
+  #
+  # latest-mac.yml is uploaded on purpose. electron-updater cannot install an
+  # update into an app without a real signature, so the Mac app never downloads
+  # one (src/updater.js turns autoDownload off on macOS): it only reads this
+  # file to learn that a newer version exists, then points the user at
+  # voxden.app/download. Without it the Mac app's update check fails outright.
+  # The blockmaps feed differential downloads the Mac app never makes, so they
+  # stay behind until the build is properly signed.
+  mac-release:
+    if: github.event_name == 'push'
+    needs: [release, mac]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Fetch the macOS build
+        uses: actions/download-artifact@v7
+        with:
+          name: Voxden-mac
+          path: mac
+
+      - name: Attach it to the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          ls -l mac
+          # The REST list includes drafts (the tag lookup does not), so this
+          # finds the one electron-builder just made.
+          draft=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=50" \
+            --jq "[.[] | select(.tag_name == \"$TAG\")][0].draft")
+          if [ "$draft" != "true" ]; then
+            echo "::error::No draft release for $TAG (found: ${draft:-nothing}); not touching a published release."
+            exit 1
+          fi
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            mac/Voxden-*-mac-arm64.zip mac/Voxden-*-mac-arm64.dmg mac/latest-mac.yml
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=50" \
+            --jq "[.[] | select(.tag_name == \"$TAG\")][0].assets[] | \"\(.name)  \(.size)\""

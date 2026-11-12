@@ -1,0 +1,320 @@
+'use strict';
+
+// The bell must never lie about what is new. Two failures are the ones that
+// matter: telling a fresh install about every feature the app has ever had,
+// and bringing back a notification the user already cleared. Both come out of
+// src/announcements.js, so both are pinned here.
+
+const announcements = require('../src/announcements');
+const fs = require('fs');
+const path = require('path');
+
+let failed = 0;
+function check(name, got, expected) {
+  const g = JSON.stringify(got);
+  const e = JSON.stringify(expected);
+  if (g !== e) {
+    failed += 1;
+    console.error('FAIL', name, '\n  expected', e, '\n  got     ', g);
+  } else {
+    console.log('ok', name);
+  }
+}
+
+const CATALOG = [
+  { id: 'old', since: '1.0.8', kind: 'feature', title: 'Old news', body: 'Shipped ages ago.' },
+  { id: 'skipped', since: '1.0.9', kind: 'model', title: 'Skipped release', body: 'Landed in between.' },
+  { id: 'current', since: '1.0.10', kind: 'engine', title: 'This build', body: 'Shipped now.', action: { settings: 'general' } },
+  { id: 'future', since: '1.1.0', kind: 'feature', title: 'Not yet', body: 'Has not shipped.' },
+];
+
+const T0 = 1_700_000_000_000;
+
+// Guard the real release catalog, not just delivery rules with invented rows.
+const releaseVersion = require('../package.json').version;
+const releaseRows = announcements.CATALOG.filter(row => row.since === releaseVersion);
+const releaseIds = releaseRows.map(row => row.id).sort();
+const releaseNotes = fs.readFileSync(path.join(__dirname, '../release-notes/current.md'), 'utf8');
+check('the running release has announcements', releaseRows.length > 0, true);
+check('catalog ids are unique', new Set(announcements.CATALOG.map(row => row.id)).size, announcements.CATALOG.length);
+// Retired rows described flow bars and a home robot that no longer exist. A
+// stored record of either id is skipped by list(), so they must stay out.
+check('retired announcements stay retired',
+  announcements.CATALOG.filter(row => ['workspace-2-1-0', 'flow-styles-2-1-0'].includes(row.id)).length, 0);
+check('a stored record of a retired announcement is not drawn',
+  announcements.list({ seenVersion: '2.1.0', items: { 'flow-styles-2-1-0': { ts: T0 } } }), []);
+for (const row of releaseRows) {
+  check(row.id + ' uses the same words in release notes', releaseNotes.includes(row.body), true);
+}
+for (const [label, state] of [
+  ['fresh install', null],
+  ['upgrade from 1.0.22', { seenVersion: '1.0.22', items: {} }],
+  ['earlier local 2.1.0 build', { seenVersion: '2.1.0', items: {} }],
+]) {
+  const delivered = announcements.deliver(state, { version: releaseVersion, now: T0 }).state;
+  // An upgrade also delivers releases skipped since the last installed build.
+  // A fresh install only needs the highlights for the version it is running.
+  const expectedIds = state ? announcements.CATALOG.filter(row =>
+    announcements.compareVersions(row.since, state.seenVersion) > 0
+    && announcements.compareVersions(row.since, releaseVersion) <= 0
+  ).map(row => row.id).sort() : releaseIds;
+  check(label + ' receives the applicable highlights', announcements.list(delivered).map(row => row.id).sort(), expectedIds);
+  check(label + ' has an unread badge', announcements.unreadCount(announcements.list(delivered)), expectedIds.length);
+  const clearedRelease = announcements.clearAll(delivered).state;
+  check(label + ' does not resurrect cleared highlights', announcements.list(announcements.deliver(clearedRelease, { version: releaseVersion, now: T0 + 1 }).state), []);
+}
+
+// A 2.1.1 rebuild adds four major highlights without replaying the Auto
+// cleanup announcement or any 2.1.0 news the user has already dismissed.
+const highlights211 = [
+  'auto-cleanup-2-1-1', 'flow-controls-2-1-1', 'flow-motion-2-1-1',
+  'flow-reliability-2-1-1', 'performance-2-1-1',
+].sort();
+check('2.1.1 groups the release into five major highlights',
+  announcements.CATALOG.filter(row => row.since === '2.1.1').map(row => row.id).sort(), highlights211);
+check('the original Auto cleanup announcement keeps its body',
+  announcements.CATALOG.find(row => row.id === 'auto-cleanup-2-1-1').body,
+  'Enable Auto cleanup in Writing style to fix common English grammar and punctuation mistakes while keeping your selected tone. No extra model download. It starts off and pauses in Verbatim mode.');
+
+const cleared210 = announcements.clearAll(
+  announcements.deliver(null, { version: '2.1.0', now: T0 }).state
+).state;
+const upgraded211 = announcements.deliver(cleared210, { version: '2.1.1', now: T0 + 1 });
+check('2.1.0 upgrade receives only the five new 2.1.1 highlights',
+  announcements.list(upgraded211.state).map(row => row.id).sort(), highlights211);
+check('2.1.0 upgrade has five unread highlights',
+  announcements.unreadCount(announcements.list(upgraded211.state)), 5);
+check('2.1.0 upgrade preserves every cleared older record',
+  Object.keys(cleared210.items).every(id =>
+    JSON.stringify(upgraded211.state.items[id]) === JSON.stringify(cleared210.items[id])), true);
+check('restarting the 2.1.0 upgrade does not deliver again',
+  announcements.deliver(upgraded211.state, { version: '2.1.1', now: T0 + 2 }).changed, false);
+
+const earlier211 = {
+  seenVersion: '2.1.1',
+  items: {
+    'auto-cleanup-2-1-1': { ts: T0, read: true, cleared: true },
+    'workspace-2-1-0': { ts: T0 - 1000, read: true, cleared: true },
+  },
+};
+const rebuilt211 = announcements.deliver(earlier211, { version: '2.1.1', now: T0 + 3 });
+const newRebuildIds = highlights211.filter(id => id !== 'auto-cleanup-2-1-1');
+check('an earlier 2.1.1 installation receives only the four added highlights',
+  announcements.list(rebuilt211.state).map(row => row.id).sort(), newRebuildIds);
+check('an earlier 2.1.1 installation has four unread highlights',
+  announcements.unreadCount(announcements.list(rebuilt211.state)), 4);
+check('same-version delivery preserves cleared Auto cleanup and older records',
+  Object.keys(earlier211.items).every(id =>
+    JSON.stringify(rebuilt211.state.items[id]) === JSON.stringify(earlier211.items[id])), true);
+check('same-version delivery does not backfill missing 2.1.0 news',
+  !!rebuilt211.state.items['capture-2-1-0'], false);
+check('restarting the 2.1.1 rebuild changes nothing',
+  announcements.deliver(rebuilt211.state, { version: '2.1.1', now: T0 + 4 }).changed, false);
+const clearedRebuildOne = announcements.clearOne(rebuilt211.state, 'performance-2-1-1').state;
+check('a dismissed rebuild highlight remains dismissed after restart',
+  announcements.list(announcements.deliver(clearedRebuildOne, { version: '2.1.1', now: T0 + 5 }).state)
+    .map(row => row.id).sort(), newRebuildIds.filter(id => id !== 'performance-2-1-1'));
+const clearedRebuildAll = announcements.clearAll(clearedRebuildOne).state;
+check('clearing all rebuilt 2.1.1 highlights survives another restart',
+  announcements.list(announcements.deliver(clearedRebuildAll, { version: '2.1.1', now: T0 + 6 }).state), []);
+
+// 2.1.2 announces history cleanup and the SmartScreen install steps alongside
+// the original flow bar fix. An existing installation receives each highlight
+// once, including a rebuild for users who already opened 2.1.2 and cleared the
+// flow bar announcement.
+const highlights212 = ['flow-input-2-1-2', 'history-retention-2-1-2', 'smartscreen-install-2-1-2'];
+check('2.1.2 carries the flow bar, history cleanup and SmartScreen highlights',
+  announcements.CATALOG.filter(row => row.since === '2.1.2').map(row => row.id).sort(), highlights212);
+check('the flow bar input highlight opens System settings',
+  announcements.CATALOG.find(row => row.id === 'flow-input-2-1-2').action.settings, 'system');
+const historyRetention = announcements.CATALOG.find(row => row.id === 'history-retention-2-1-2');
+check('the history cleanup highlight opens Dictation', historyRetention.action.view, 'dictation');
+check('the history cleanup notification does not disclose a numeric retention limit',
+  /\b(?:1[,.]?000|thousand)\b/i.test(historyRetention.title + ' ' + historyRetention.body), false);
+const cleared211 = announcements.clearAll(
+  announcements.deliver(null, { version: '2.1.1', now: T0 }).state
+).state;
+const upgraded212 = announcements.deliver(cleared211, { version: '2.1.2', now: T0 + 1 });
+check('2.1.1 upgrade receives only the three 2.1.2 highlights',
+  announcements.list(upgraded212.state).map(row => row.id).sort(), highlights212);
+check('2.1.1 upgrade preserves every cleared 2.1.1 record',
+  Object.keys(cleared211.items).every(id =>
+    JSON.stringify(upgraded212.state.items[id]) === JSON.stringify(cleared211.items[id])), true);
+check('restarting the 2.1.2 upgrade does not deliver again',
+  announcements.deliver(upgraded212.state, { version: '2.1.2', now: T0 + 2 }).changed, false);
+check('a 2.1.0 upgrade straight to 2.1.2 receives the 2.1.1 and 2.1.2 highlights',
+  announcements.list(announcements.deliver(cleared210, { version: '2.1.2', now: T0 + 3 }).state).map(row => row.id).sort(),
+  highlights211.concat(highlights212).sort());
+
+const earlier212 = {
+  seenVersion: '2.1.2',
+  items: {
+    'flow-input-2-1-2': { ts: T0, read: true, cleared: true },
+    'auto-cleanup-2-1-1': { ts: T0 - 1000, read: true, cleared: true },
+  },
+};
+const rebuilt212 = announcements.deliver(earlier212, { version: '2.1.2', now: T0 + 4 });
+check('an earlier 2.1.2 installation receives only the added history cleanup and SmartScreen highlights',
+  announcements.list(rebuilt212.state).map(row => row.id).sort(), ['history-retention-2-1-2', 'smartscreen-install-2-1-2']);
+check('the rebuilt 2.1.2 installation has two unread highlights',
+  announcements.unreadCount(announcements.list(rebuilt212.state)), 2);
+check('the 2.1.2 rebuild preserves cleared flow bar and older notifications',
+  Object.keys(earlier212.items).every(id =>
+    JSON.stringify(rebuilt212.state.items[id]) === JSON.stringify(earlier212.items[id])), true);
+check('the 2.1.2 rebuild does not backfill missing older news',
+  !!rebuilt212.state.items['performance-2-1-1'], false);
+check('restarting the 2.1.2 rebuild does not repeat the history cleanup announcement',
+  announcements.deliver(rebuilt212.state, { version: '2.1.2', now: T0 + 5 }).changed, false);
+const clearedHistory212 = announcements.clearOne(rebuilt212.state, 'history-retention-2-1-2').state;
+check('a cleared history cleanup announcement remains dismissed after restart',
+  announcements.list(announcements.deliver(clearedHistory212, { version: '2.1.2', now: T0 + 6 }).state)
+    .map(row => row.id), ['smartscreen-install-2-1-2']);
+
+for (const id of ['qwen-recommended', 'qwen-gpu-acceleration']) {
+  check(id + ' links to Speech engines', announcements.CATALOG.find(entry => entry.id === id).action.settings, 'speech-engines');
+}
+const muteOtherAudio = announcements.CATALOG.find(entry => entry.id === 'mute-other-audio-1-0-22') || {};
+check('1.0.22 announces muting other audio', muteOtherAudio.since, '1.0.22');
+check('1.0.22 audio announcement links to General', muteOtherAudio.action && muteOtherAudio.action.settings, 'general');
+check('1.0.19 recordings link to privacy', announcements.CATALOG.find(entry => entry.id === 'dictation-recordings').action.settings, 'privacy');
+check('1.0.19 settings split links to General', announcements.CATALOG.find(entry => entry.id === 'settings-split-1-0-19').action.settings, 'general');
+check('1.0.19 announces the retired local packs', !!announcements.CATALOG.find(entry => entry.id === 'local-correction-retired'), true);
+check('1.0.19 announces smoother startup', !!announcements.CATALOG.find(entry => entry.id === 'smoother-startup-1-0-19'), true);
+
+function ids(items) {
+  return items.map((item) => item.id);
+}
+
+function deliver(state, version, now) {
+  return announcements.deliver(state, { catalog: CATALOG, version, now });
+}
+
+// --- Versions order by number, not by string ------------------------------
+
+check('1.0.9 is older than 1.0.10', announcements.compareVersions('1.0.9', '1.0.10'), -1);
+check('equal versions compare equal', announcements.compareVersions('1.0.10', '1.0.10'), 0);
+check('a missing segment counts as zero', announcements.compareVersions('1.1', '1.1.0'), 0);
+check('a prerelease tail is ignored', announcements.compareVersions('1.0.14-beta.1', '1.0.14'), 0);
+check('nonsense sorts below everything', announcements.compareVersions('', '1.0.1'), -1);
+
+// --- A fresh install is told what shipped in this build, and nothing else ---
+
+const fresh = deliver(null, '1.0.10', T0);
+check('a fresh store only hears about the running version',
+  ids(announcements.list(fresh.state, CATALOG)), ['current']);
+check('the fresh store records the version it caught up to', fresh.state.seenVersion, '1.0.10');
+check('an unshipped entry stays out', !!fresh.state.items.future, false);
+
+// --- Restarting the same build says nothing new ----------------------------
+
+const restarted = deliver(fresh.state, '1.0.10', T0 + 1000);
+check('a restart changes nothing', restarted.changed, false);
+check('a restart does not re-deliver',
+  ids(announcements.list(restarted.state, CATALOG)), ['current']);
+
+const extraCatalog = CATALOG.concat([
+  { id: 'late', since: '1.0.10', kind: 'feature', title: 'Late news', body: 'Added in a rebuild.' },
+]);
+const late = announcements.deliver(fresh.state, { catalog: extraCatalog, version: '1.0.10', now: T0 + 2000 });
+check('a same-version rebuild still delivers new catalog rows',
+  ids(announcements.list(late.state, extraCatalog)).sort(), ['current', 'late']);
+check('older catalog rows stay out of a same-version rebuild', !!late.state.items.old, false);
+
+// --- Updating delivers everything between the two versions -----------------
+
+const before = deliver(null, '1.0.8', T0).state;
+check('the installed build is the only news on install',
+  ids(announcements.list(before, CATALOG)), ['old']);
+
+// The user skips 1.0.9 entirely and lands on 1.0.10, so both are new to them.
+const after = deliver(before, '1.0.10', T0 + 5000).state;
+check('a skipped release is still delivered',
+  ids(announcements.list(after, CATALOG)).sort(), ['current', 'old', 'skipped']);
+check('the store follows the running version', after.seenVersion, '1.0.10');
+
+// --- Reading, clearing, and staying cleared --------------------------------
+
+check('everything delivered starts unread',
+  announcements.unreadCount(announcements.list(after, CATALOG)), 3);
+
+const read = announcements.markAllRead(after);
+check('marking read reports the change', read.changed, true);
+check('nothing is unread afterwards',
+  announcements.unreadCount(announcements.list(read.state, CATALOG)), 0);
+check('marking read twice is a no-op', announcements.markAllRead(read.state).changed, false);
+check('read notifications stay in the list',
+  ids(announcements.list(read.state, CATALOG)).sort(), ['current', 'old', 'skipped']);
+
+const dropped = announcements.clearOne(read.state, 'old');
+check('clearing one removes it',
+  ids(announcements.list(dropped.state, CATALOG)).sort(), ['current', 'skipped']);
+check('clearing an unknown id is a no-op', announcements.clearOne(dropped.state, 'nope').changed, false);
+
+// This is the regression the tombstone exists for: a cleared notification must
+// not walk back in the next time the catalog is folded into the store.
+const afterClear = deliver(dropped.state, '1.0.10', T0 + 9000).state;
+check('a cleared notification does not come back',
+  ids(announcements.list(afterClear, CATALOG)).sort(), ['current', 'skipped']);
+
+const emptied = announcements.clearAll(afterClear);
+check('clear all empties the panel', announcements.list(emptied.state, CATALOG), []);
+check('clear all twice is a no-op', announcements.clearAll(emptied.state).changed, false);
+check('clearing survives the next delivery',
+  announcements.list(deliver(emptied.state, '1.0.10', T0 + 12000).state, CATALOG), []);
+
+// --- Runtime notifications share the same store ----------------------------
+
+const entry = announcements.updateReadyEntry('1.0.11');
+check('the update entry is keyed by version', entry.id, 'update-ready:1.0.11');
+
+const noted = announcements.note(emptied.state, entry, T0 + 20000);
+check('a runtime notification arrives unread',
+  announcements.list(noted.state, CATALOG).map((i) => [i.id, i.kind, i.unread]),
+  [['update-ready:1.0.11', 'update', true]]);
+check('the same event twice only notifies once',
+  announcements.note(noted.state, entry, T0 + 21000).changed, false);
+check('an entry with no title is not a notification',
+  announcements.note(noted.state, { id: 'x', title: '  ' }, T0).changed, false);
+check('an update with no version raises nothing', announcements.updateReadyEntry(''), null);
+
+// A runtime notification carries its own words, so it survives a build whose
+// catalog knows nothing about it.
+check('a runtime notification does not need the catalog',
+  announcements.list(noted.state, []).map((i) => i.title), ['Voxden 1.0.11 is ready']);
+
+// --- Newest first ----------------------------------------------------------
+
+check('the newest notification is first',
+  ids(announcements.list(announcements.note(after, entry, T0 + 30000).state, CATALOG))[0],
+  'update-ready:1.0.11');
+
+// --- A store file that has been edited or corrupted ------------------------
+
+check('a garbage store reads as empty',
+  announcements.normalizeState('nope'), { seenVersion: '', items: {} });
+check('a record with no timestamp is dropped',
+  announcements.normalizeState({ items: { a: { read: true } } }).items, {});
+check('a garbage store still delivers',
+  ids(announcements.list(deliver('nope', '1.0.10', T0).state, CATALOG)), ['current']);
+check('an unknown kind falls back to feature',
+  announcements.list({ items: { a: { ts: T0, inline: { kind: 'nonsense', title: 'Hi' } } } }, [])
+    .map((i) => i.kind),
+  ['feature']);
+check('a stored id with no catalog row is not drawn blank',
+  announcements.list({ items: { ghost: { ts: T0 } } }, CATALOG), []);
+
+// --- deliver() does not mutate what it was given ---------------------------
+
+const original = deliver(null, '1.0.8', T0).state;
+const snapshot = JSON.stringify(original);
+announcements.clearAll(original);
+announcements.markAllRead(original);
+announcements.note(original, entry, T0);
+deliver(original, '1.0.10', T0);
+check('callers keep the state they passed in', JSON.stringify(original), snapshot);
+
+if (failed) {
+  console.error('\n' + failed + ' notification test(s) failed');
+  process.exit(1);
+}
+console.log('\nall notification tests passed');

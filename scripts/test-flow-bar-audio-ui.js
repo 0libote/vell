@@ -1,0 +1,559 @@
+'use strict';
+
+// Run the shipped overlay and preload while only the audio device is fake.
+// Device failures and delayed callbacks can then be reproduced without opening
+// the user's microphone, waiting for ASR, or depending on their audio driver.
+const { app, BrowserWindow, ipcMain } = require('electron');
+const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'voxden-flow-audio-'));
+app.setPath('userData', profile);
+app.disableHardwareAcceleration();
+// The second fixture uses Chromium's real capture graph with a local synthetic
+// input. No default system microphone or speaker is used by either fixture.
+const fakeWav = Buffer.alloc(44 + 48000 * 2);
+fakeWav.write('RIFF', 0); fakeWav.writeUInt32LE(fakeWav.length - 8, 4);
+fakeWav.write('WAVEfmt ', 8); fakeWav.writeUInt32LE(16, 16);
+fakeWav.writeUInt16LE(1, 20); fakeWav.writeUInt16LE(1, 22);
+fakeWav.writeUInt32LE(48000, 24); fakeWav.writeUInt32LE(96000, 28);
+fakeWav.writeUInt16LE(2, 32); fakeWav.writeUInt16LE(16, 34);
+fakeWav.write('data', 36); fakeWav.writeUInt32LE(fakeWav.length - 44, 40);
+for (let i = 0; i < 48000; i++) {
+  const t = i / 48000;
+  const envelope = .6 + .4 * Math.sin(2 * Math.PI * 3 * t);
+  const sample = envelope * (.25 * Math.sin(2 * Math.PI * 220 * t) + .12 * Math.sin(2 * Math.PI * 440 * t));
+  fakeWav.writeInt16LE(Math.round(sample * 32767), 44 + i * 2);
+}
+const fakeAudioPath = path.join(profile, 'synthetic-input.wav');
+fs.writeFileSync(fakeAudioPath, fakeWav);
+app.commandLine.appendSwitch('use-fake-device-for-media-stream');
+app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
+app.commandLine.appendSwitch('use-file-for-fake-audio-capture', fakeAudioPath);
+// macOS's sandboxed audio service cannot read the temporary WAV used by this
+// fake-device fixture. Relax only its audio-service sandbox for this test;
+// the shipped app never sets this switch or uses a fake microphone.
+if (process.platform === 'darwin') app.commandLine.appendSwitch('disable-features', 'AudioServiceSandbox');
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+const deadline = setTimeout(() => { console.error('Flow bar audio UI timed out'); app.exit(1); }, 30000);
+// A failed assertion must end the run. Left to Electron it becomes a modal
+// error box, which on a macOS runner blocks the thread the deadline above
+// needs, so the job hung until its 45-minute limit.
+const fail = (error) => { console.error(error); app.exit(1); };
+process.on('uncaughtException', fail);
+process.on('unhandledRejection', fail);
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+// Waits for a condition the renderer reports over IPC. A fixed turn was not
+// always long enough on a loaded CI runner.
+async function waitFor(condition, ms = 3000) {
+  const until = Date.now() + ms;
+  while (!condition() && Date.now() < until) await pause(10);
+}
+
+app.whenReady().then(async () => {
+  const win = new BrowserWindow({
+    show: false, width: 260, height: 96, frame: false, transparent: true,
+    webPreferences: {
+      preload: path.join(__dirname, '../src/preload.js'), contextIsolation: true,
+      sandbox: false, backgroundThrottling: false, offscreen: true,
+    },
+  });
+  const errors = [];
+  const failures = [];
+  let ready = 0;
+  win.webContents.on('console-message', (event, level, message) => {
+    const severity = event.level === undefined ? level : event.level;
+    const text = event.message === undefined ? message : event.message;
+    if ((severity === 'error' || Number(severity) >= 3) && !/Content-Security-Policy/.test(text)) errors.push(text);
+  });
+  // The order the main process hears things in, which is the whole point of
+  // the recovery park below: a clip that lands after the failure is too late.
+  const ipcOrder = [];
+  ipcMain.on('capture-failed', (event, message) => {
+    if (event.sender !== win.webContents) return;
+    failures.push(message);
+    ipcOrder.push('failed');
+  });
+  const readyTimings = [];
+  const startupTimings = [];
+  ipcMain.on('hud-diag', (event, name, fields) => {
+    if (event.sender === win.webContents && name === 'capture-startup') startupTimings.push(fields);
+  });
+  ipcMain.on('capture-ready', (event, timing) => {
+    if (event.sender !== win.webContents) return;
+    ready += 1;
+    readyTimings.push(timing);
+  });
+  await win.loadFile(path.join(__dirname, '../src/overlay.html'));
+  const run = code => win.webContents.executeJavaScript(code);
+  await run(`soundsEnabled = false;
+    window.audioTest = (() => {
+      const fake = { config: {}, streams: [], contexts: [], requests: [], nodes: [], timers: new Map(), clock: 100, nextTimer: 0 };
+      addEventListener('unhandledrejection', event => { console.error('Unhandled audio rejection: ' + event.reason); });
+      Object.defineProperty(performance, 'now', { value: () => fake.clock, configurable: true });
+      window.setInterval = (callback, ms) => {
+        const id = ++fake.nextTimer; fake.timers.set(id, { callback, ms }); return id;
+      };
+      window.clearInterval = id => fake.timers.delete(id);
+      function stream(kind) {
+        const track = { onended: null, stops: 0, stop() { this.stops++; } };
+        const result = { kind, track, getTracks: () => [track], getAudioTracks: () => [track] };
+        fake.streams.push(result);
+        return result;
+      }
+      function node(kind, context) {
+        if (fake.config.fail === kind) throw new Error('Simulated ' + kind + ' failure');
+        const result = { kind, context, disconnects: 0, connections: [],
+          connect(other) {
+            if (fake.config.fail === 'connect') throw new Error('Simulated connection failure');
+            this.connections.push(other);
+          },
+          disconnect() { this.disconnects++; },
+        };
+        if (kind === 'analyser') Object.assign(result, {
+          fftSize: 1024, frequencyBinCount: 512,
+          getFloatTimeDomainData: data => data.fill(0),
+          getByteFrequencyData: data => data.fill(0),
+        });
+        if (kind === 'sink') result.stream = stream('sink');
+        fake.nodes.push(result);
+        return result;
+      }
+      window.AudioContext = class {
+        constructor() {
+          if (fake.config.fail === 'constructor') throw new Error('Simulated device initialization failure');
+          this.state = fake.config.resume ? 'suspended' : 'running';
+          this.sampleRate = 48000;
+          this.closes = 0;
+          this.behavior = { ...fake.config };
+          fake.contexts.push(this);
+        }
+        resume() {
+          if (this.behavior.resume === 'reject') return Promise.reject(new Error('Simulated resume failure'));
+          if (this.behavior.resume === 'pending') return new Promise(resolve => { this.releaseResume = () => { this.state = 'running'; resolve(); }; });
+          this.state = 'running'; return Promise.resolve();
+        }
+        close() { this.closes++; this.state = 'closed'; return Promise.resolve(); }
+        createMediaStreamSource() { return node('source', this); }
+        createAnalyser() { return node('analyser', this); }
+        createScriptProcessor() { return node('processor', this); }
+        createMediaStreamDestination() { return node('sink', this); }
+      };
+      navigator.mediaDevices.getUserMedia = options => {
+        const request = { options, config: { ...fake.config } }; fake.requests.push(request);
+        if (request.config.micError) return Promise.reject(new DOMException('Simulated microphone error', request.config.micError));
+        if (request.config.micPending) return new Promise(resolve => { request.release = () => { request.stream = stream('mic'); resolve(request.stream); }; });
+        request.stream = stream('mic'); return Promise.resolve(request.stream);
+      };
+      fake.pcm = (callback = processor && processor.onaudioprocess, length = 4096) => {
+        if (!callback) throw new Error('Expected an audio callback');
+        callback({ inputBuffer: { getChannelData: () => new Float32Array(length).fill(.01) } });
+        stopWaveLoop();
+      };
+      fake.snapshot = () => ({
+        capturing, hudMode, generation: captureGen, chunks: dsPcmChunks.length,
+        hasGraph: !!(mediaStream || audioCtx || sourceNode || analyser || processor || captureSink),
+        timers: fake.timers.size,
+        streams: fake.streams.map(s => ({ kind: s.kind, stops: s.track.stops, endedDetached: s.track.onended === null })),
+        contexts: fake.contexts.map(c => ({ closes: c.closes, state: c.state })),
+        nodes: fake.nodes.map(n => ({ kind: n.kind, disconnects: n.disconnects, callbackDetached: n.kind !== 'processor' || n.onaudioprocess === null })),
+      });
+      fake.configure = config => {
+        fake.config = config; fake.streams = []; fake.contexts = []; fake.requests = []; fake.nodes = [];
+      };
+      return fake;
+    })(); true`);
+  // A timeout turn also flushes the renderer->main IPC channel. rAF cannot be
+  // used for this: inactive transparent windows may receive no compositor frames.
+  const flush = () => pause(20);
+  async function state(payload) {
+    win.webContents.send('state', { soundsEnabled: false, alwaysShowFlowBar: true, engine: 'whisper', engineStatus: 'ready', ...payload });
+    await flush();
+  }
+  async function reset(config = {}) {
+    await state({ mode: 'cancel' });
+    await state({ mode: 'idle' });
+    assert.strictEqual(await run('audioTest.timers.size'), 0, 'cancelling releases the PCM watchdog');
+    await run('closeIdleAudioContext(); audioTest.configure(' + JSON.stringify(config) + '); true');
+    failures.length = 0;
+    ready = 0;
+  }
+  async function start() {
+    await state({ mode: 'arming', prepareOnly: false });
+  }
+  async function assertReleased(label) {
+    await run('closeIdleAudioContext(); true');
+    const actual = await run('audioTest.snapshot()');
+    assert.strictEqual(actual.capturing, false, label + ' clears capturing');
+    assert.strictEqual(actual.hasGraph, false, label + ' drops graph references');
+    assert.strictEqual(actual.timers, 0, label + ' clears the PCM watchdog');
+    assert.strictEqual(actual.chunks, 0, label + ' drops unfinished PCM');
+    assert.ok(actual.streams.every(s => s.stops === 1 && s.endedDetached), label + ' stops every microphone and sink track once');
+    assert.ok(actual.contexts.every(c => c.closes === 1), label + ' closes every opened audio context once');
+    assert.ok(actual.nodes.every(n => n.disconnects === 1 && n.callbackDetached), label + ' disconnects every node and detaches callbacks');
+    return actual;
+  }
+
+  for (const fail of ['constructor', 'source', 'analyser', 'processor', 'sink', 'connect']) {
+    await reset({ fail });
+    await start();
+    // Wait for the report, then a moment longer so a duplicate would show.
+    await waitFor(() => failures.length > 0);
+    await pause(50);
+    assert.strictEqual(failures.length, 1, fail + ' reports exactly one capture failure');
+    assert.match(failures[0], /audio could not start/i);
+    assert.strictEqual(ready, 0, fail + ' never claims the microphone is recording');
+    assert.strictEqual((await assertReleased(fail)).hudMode, 'error');
+  }
+  await reset({ resume: 'reject' });
+  await start();
+  await waitFor(() => failures.length > 0);
+  await pause(50);
+  assert.strictEqual(failures.length, 1, 'resume rejection reports one failure');
+  await assertReleased('resume rejection');
+
+  for (const micError of ['NotAllowedError', 'SecurityError', 'NotFoundError', 'NotReadableError']) {
+    await reset({ micError });
+    await start();
+    await waitFor(() => failures.length >= 1); await pause(50);
+    assert.strictEqual(failures.length, 1, micError + ' reports one failure');
+    assert.match(failures[0], /^(NotAllowedError|SecurityError)$/.test(micError) ? /allow microphone access/i : /microphone unavailable/i);
+    assert.strictEqual(ready, 0, micError + ' cannot report recording');
+    await assertReleased(micError);
+  }
+
+  await reset();
+  await start();
+  assert.strictEqual(await run('hudMode'), 'arming', 'opening a graph alone must not display Recording');
+  assert.strictEqual(ready, 0, 'no capture-ready before the first PCM buffer');
+  await run('audioTest.pcm(undefined, 0); true');
+  await flush();
+  assert.strictEqual(ready, 0, 'empty PCM buffers are not readiness');
+  await run('audioTest.pcm(); true');
+  await flush();
+  await waitFor(() => ready >= 1); await pause(50);
+  assert.strictEqual(ready, 1, 'the first PCM frame confirms readiness');
+  assert.strictEqual(await run('hudMode'), 'recording', 'Recording corresponds to delivered audio');
+  await run('audioTest.pcm(); audioTest.pcm(); true');
+  await flush();
+  await waitFor(() => ready >= 1); await pause(50);
+  assert.strictEqual(ready, 1, 'later PCM does not send duplicate readiness');
+  assert.strictEqual(await run('dsPcmChunks.length'), 3, 'PCM reaches the local speech-engine buffer');
+  await run('audioTest.oldCallback = processor.onaudioprocess; audioTest.oldEnded = mediaStream.track.onended; mediaStream.track.onended(); true');
+  await flush();
+  await waitFor(() => failures.length >= 1); await pause(50);
+  assert.strictEqual(failures.length, 1, 'a disconnected input reports a failure');
+  assert.match(failures[0], /disconnected/i);
+  await assertReleased('input disconnected');
+  await run('audioTest.pcm(audioTest.oldCallback); audioTest.oldEnded(); true');
+  await flush();
+  await waitFor(() => failures.length >= 1); await pause(50);
+  assert.strictEqual(failures.length, 1, 'queued device callbacks cannot report the same failure twice');
+  assert.strictEqual(ready, 1, 'queued PCM cannot revive a failed capture');
+
+  // The microphone opens while other audio is still being paused. What it
+  // hears until the pause is done is that audio and the start cue, not the
+  // user, so none of it is recorded, and recording is announced the moment
+  // the pause is done and audio is flowing.
+  await reset();
+  readyTimings.length = 0;
+  await state({ mode: 'arming', prepareOnly: true });
+  assert.strictEqual(await run('audioTest.requests.length'), 1, 'the microphone opens without waiting for the pause');
+  await run('audioTest.clock = 180; audioTest.pcm(); audioTest.pcm(); true');
+  await flush();
+  assert.strictEqual(ready, 0, 'a live microphone is not recording while the pause is pending');
+  assert.strictEqual(await run('hudMode'), 'arming', 'the bar keeps saying arming until the pause is done');
+  assert.strictEqual(await run('dsPcmChunks.length'), 0, 'audio heard during the pause is dropped, not recorded');
+  await state({ mode: 'arming', prepareOnly: true });
+  assert.strictEqual(await run('audioTest.requests.length'), 1, 'a refresh during the pause opens no second microphone');
+  assert.strictEqual(ready, 0);
+  await run('audioTest.clock = 430; true');
+  await state({ mode: 'arming', prepareOnly: false });
+  await waitFor(() => ready >= 1); await pause(50);
+  assert.strictEqual(ready, 1, 'recording is announced as soon as the pause is done');
+  assert.strictEqual(await run('hudMode'), 'recording');
+  assert.deepStrictEqual(readyTimings.at(-1), { micMs: 80, holdMs: 250 },
+    'main is told how long the microphone took and how long it then waited on the pause');
+  await run('audioTest.pcm(); true');
+  await flush();
+  await waitFor(() => ready >= 1); await pause(50);
+  assert.strictEqual(ready, 1, 'audio after the release does not announce it twice');
+  assert.strictEqual(await run('dsPcmChunks.length'), 1, 'the first buffer after the pause is the start of the recording');
+
+  // Pause finished before the first buffer: nothing waited, nothing dropped.
+  await reset();
+  readyTimings.length = 0;
+  await run('audioTest.clock = 100; true');
+  await state({ mode: 'arming', prepareOnly: true });
+  await state({ mode: 'arming', prepareOnly: false });
+  assert.strictEqual(ready, 0, 'a released hold still waits for audio to arrive');
+  assert.strictEqual(await run('hudMode'), 'arming');
+  await run('audioTest.clock = 160; audioTest.pcm(); true');
+  await flush();
+  await waitFor(() => ready >= 1); await pause(50);
+  assert.strictEqual(ready, 1, 'the first buffer after the release announces recording');
+  assert.deepStrictEqual(readyTimings.at(-1), { micMs: 60, holdMs: 0 }, 'a pause that was already done costs the microphone nothing');
+  assert.strictEqual(await run('dsPcmChunks.length'), 1, 'and that first buffer is recorded');
+
+  // Cancelling during the pause leaves no hold behind for the next dictation.
+  await reset();
+  await state({ mode: 'arming', prepareOnly: true });
+  await state({ mode: 'cancel' });
+  await start();
+  await run('audioTest.pcm(); true');
+  await flush();
+  await waitFor(() => ready >= 1); await pause(50);
+  assert.strictEqual(ready, 1, 'a push-to-talk press right after a cancelled one is not held back');
+  assert.strictEqual(await run('dsPcmChunks.length'), 1);
+
+  await reset();
+  await start();
+  await run('audioTest.oldCallback = processor.onaudioprocess; audioTest.oldEnded = mediaStream.track.onended; true');
+  await state({ mode: 'cancel' });
+  await assertReleased('cancelled capture');
+  await start();
+  await run('audioTest.pcm(audioTest.oldCallback); audioTest.oldEnded(); true');
+  await flush();
+  assert.strictEqual(ready, 0, 'old PCM cannot mark a new capture ready');
+  assert.strictEqual(failures.length, 0, 'old device end cannot fail a new capture');
+  assert.strictEqual(await run('capturing && dsPcmChunks.length === 0'), true, 'the new capture survives with an empty buffer');
+  await run('audioTest.pcm(); true');
+  await flush();
+  await waitFor(() => ready >= 1); await pause(50);
+  assert.strictEqual(ready, 1, 'only the new capture can report readiness');
+
+  await reset({ micPending: true });
+  await start();
+  assert.strictEqual(await run('audioTest.requests.length'), 1);
+  await state({ mode: 'cancel' });
+  await run('audioTest.config = {}; true');
+  await start();
+  await run('audioTest.requests[0].release(); true');
+  await flush();
+  assert.strictEqual(await run('audioTest.requests[0].stream.track.stops'), 1, 'late getUserMedia stream is closed');
+  assert.strictEqual(await run('mediaStream === audioTest.requests[1].stream && mediaStream.track.stops === 0'), true,
+    'late getUserMedia cannot replace or stop the new microphone');
+  assert.strictEqual(failures.length, 0, 'an obsolete microphone promise is discarded quietly');
+  await run('audioTest.pcm(); true');
+  await flush();
+  await waitFor(() => ready >= 1); await pause(50);
+  assert.strictEqual(ready, 1, 'the replacement microphone records normally');
+
+  await reset({ resume: 'pending' });
+  await start();
+  assert.strictEqual(ready, 0, 'pending audio resume remains in arming');
+  await state({ mode: 'cancel' });
+  await run('audioTest.config = {}; true');
+  await start();
+  await run('audioTest.contexts[0].releaseResume(); true');
+  await flush();
+  assert.strictEqual(await run('audioCtx === audioTest.contexts[1] && mediaStream === audioTest.requests[1].stream'), true,
+    'an obsolete resume cannot attach its graph to the replacement capture');
+  assert.strictEqual(await run('audioTest.contexts[0].closes'), 1, 'cancel already closed the obsolete context');
+  assert.strictEqual(ready, 0);
+  await run('audioTest.pcm(); true');
+  await flush();
+  await waitFor(() => ready >= 1); await pause(50);
+  assert.strictEqual(ready, 1);
+
+  await reset();
+  await start();
+  await run('audioTest.pcm(); audioTest.clock += 10001; [...audioTest.timers.values()].forEach(t => t.callback()); true');
+  await flush();
+  await waitFor(() => failures.length >= 1); await pause(50);
+  assert.strictEqual(failures.length, 1, 'PCM stopping after recording began reports a failure');
+  assert.match(failures[0], /stopped responding/i);
+  await assertReleased('stalled PCM');
+
+  await reset();
+  await start();
+  await run('processor.onaudioprocess({ inputBuffer: { getChannelData() { throw new Error("Device callback failed"); } } }); true');
+  await flush();
+  await waitFor(() => failures.length >= 1); await pause(50);
+  assert.strictEqual(failures.length, 1, 'malformed audio callback fails safely');
+  assert.match(failures[0], /read microphone audio/i);
+  await assertReleased('audio callback failure');
+
+  // Retain only a healthy context, never microphone tracks or old callbacks.
+  await reset();
+  await start();
+  await run('audioTest.pcm(); audioTest.savedContext = audioCtx; audioTest.oldCallback = processor.onaudioprocess; true');
+  await state({ mode: 'cancel' });
+  assert.strictEqual(await run('idleAudioCtx === audioTest.savedContext && !audioCtx && !mediaStream && !processor'), true);
+  assert.strictEqual(await run('audioTest.streams.every(s => s.track.stops === 1)'), true, 'idle context keeps no microphone or sink track');
+  assert.strictEqual(await run('audioTest.nodes.every(n => n.disconnects === 1)'), true, 'cached context has no attached capture graph');
+  ready = 0;
+  await start();
+  assert.strictEqual(await run('audioCtx === audioTest.savedContext && audioTest.contexts.length === 1'), true,
+    'the next recording reuses the healthy context');
+  await run('audioTest.pcm(audioTest.oldCallback); true');
+  await flush();
+  assert.strictEqual(ready, 0, 'reusing a context does not reuse old readiness or PCM');
+  await run('audioTest.pcm(); true');
+  await flush();
+  await waitFor(() => ready >= 1); await pause(50);
+  assert.strictEqual(ready, 1);
+  assert.strictEqual(await run('capMarks.reusedContext'), true);
+  await state({ mode: 'cancel' });
+  await run('idleAudioCtx.state = "closed"; true');
+  await start();
+  assert.strictEqual(await run('audioTest.contexts.length'), 2, 'a closed cached context is replaced');
+  await run('audioTest.pcm(); true');
+  await state({ mode: 'cancel' });
+  await run('window.dispatchEvent(new Event("pagehide")); true');
+  assert.strictEqual(await run('idleAudioCtx'), null, 'closing the renderer releases its cached context');
+
+  // Re-loading discards every fake JS node and timer. Capture now goes through
+  // real getUserMedia, AudioContext, ScriptProcessor and WAV encoding, while a
+  // fake ASR response keeps this an audio/overlay test instead of a model test.
+  await win.loadFile(path.join(__dirname, '../src/overlay.html'));
+  await run('soundsEnabled = false; true');
+  failures.length = 0;
+  ready = 0;
+  const transcripts = [];
+  const transcriptions = [];
+  let ended = 0;
+  let confirms = 0;
+  ipcMain.on('capture-ended', event => { if (event.sender === win.webContents) ended += 1; });
+  ipcMain.on('hud-confirm', event => {
+    if (event.sender !== win.webContents) return;
+    confirms += 1;
+    win.webContents.send('state', { mode: 'stop', engine: 'whisper', engineStatus: 'ready', soundsEnabled: false });
+  });
+  ipcMain.handle('transcribe-local', (_event, wav) => {
+    const data = Buffer.from(wav);
+    transcriptions.push(data);
+    return 'Synthetic microphone works.';
+  });
+  ipcMain.on('transcript', (event, text) => {
+    if (event.sender !== win.webContents) return;
+    transcripts.push(text);
+    win.webContents.send('state', { mode: 'success', text, soundsEnabled: false });
+  });
+  await start();
+  const waitUntil = async (predicate, label) => {
+    const until = Date.now() + 10000;
+    while (Date.now() < until) {
+      if (await predicate()) return;
+      await pause(40);
+    }
+    assert.fail(label + '; capture failures: ' + failures.join('; '));
+  };
+  await waitUntil(async () => ready === 1 && await run('dsPcmChunks.reduce((sum, pcm) => sum + pcm.length, 0) >= OUT_RATE * .7'),
+    'the real graph must produce PCM and announce recording');
+  assert.strictEqual(await run('hudMode'), 'recording');
+  assert.strictEqual(await run('audioCtx instanceof AudioContext && processor instanceof ScriptProcessorNode'), true,
+    'the complete pipeline uses native Web Audio nodes');
+  const gate = await run('speechGateApi().analyseSpeech(mergePcm(dsPcmChunks), { sampleRate: OUT_RATE })');
+  assert.ok(gate.speech, 'the real fake-device PCM must pass the unmodified speech gate: ' + JSON.stringify(gate));
+  const finishPoint = await run(`(() => {
+    const r = btnConfirm.getBoundingClientRect();
+    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+  })()`);
+  win.webContents.sendInputEvent({ type: 'mouseMove', ...finishPoint });
+  win.webContents.sendInputEvent({ type: 'mouseDown', ...finishPoint, button: 'left', clickCount: 1 });
+  win.webContents.sendInputEvent({ type: 'mouseUp', ...finishPoint, button: 'left', clickCount: 1 });
+  await waitUntil(() => transcripts.length === 1, 'clicking Island Stop must complete transcription');
+  assert.strictEqual(confirms, 1, 'the actual Stop click emits exactly one confirm IPC');
+  assert.strictEqual(ended, 1, 'stop releases the microphone before transcription completes');
+  assert.strictEqual(transcriptions.length, 1, 'the full recording is submitted once');
+  assert.strictEqual(transcriptions[0].toString('ascii', 0, 4), 'RIFF');
+  assert.strictEqual(transcriptions[0].readUInt32LE(24), 16000, 'the live recording is encoded at the ASR sample rate');
+  assert.ok(transcriptions[0].length > 44 + 16000 * .7 * 2, 'the encoded clip contains the real PCM');
+  assert.deepStrictEqual(transcripts, ['Synthetic microphone works.']);
+  await state({ mode: 'idle' });
+  assert.strictEqual(await run('hudMode === "idle" && !capturing && !mediaStream && !audioCtx && !processor && !captureWatch'), true,
+    'a full Stop/transcribe/result cycle returns to idle without live audio resources');
+  assert.deepStrictEqual(failures, [], 'the native synthetic microphone must not fail');
+
+  const coldStartup = readyTimings.at(-1).micMs;
+  await run('window.previousCaptureContext = idleAudioCtx; true');
+  ready = 0;
+  await start();
+  await waitUntil(async () => ready === 1 && await run('dsPcmChunks.reduce((sum, pcm) => sum + pcm.length, 0) >= OUT_RATE * .2'),
+    'a reused native context must deliver fresh PCM');
+  assert.strictEqual(await run('audioCtx === window.previousCaptureContext && capMarks.reusedContext'), true);
+  const warmStartup = readyTimings.at(-1).micMs;
+  const stages = startupTimings.at(-1);
+  assert.strictEqual(stages.reusedContext, true);
+  for (const key of ['getUserMediaMs', 'contextMs', 'firstBufferMs', 'micMs']) {
+    assert(Number.isFinite(stages[key]) && stages[key] >= 0, 'startup diagnostic measures ' + key);
+  }
+  await state({ mode: 'cancel' });
+  assert.strictEqual(await run('!mediaStream && !sourceNode && !processor && !!idleAudioCtx'), true,
+    'native reuse releases the microphone and its nodes again');
+  console.log('Synthetic device startup: fresh=' + Math.round(coldStartup) + ' ms, reused=' + Math.round(warmStartup) + ' ms');
+
+  // A recording the speech gate rejects is the common false negative: a quiet
+  // microphone, or someone sitting back from it. The words are still in the
+  // clip, so it has to reach main -- and reach it before the failure does,
+  // because capture-failed is one-way and main shelves whatever is parked the
+  // moment it arrives.
+  await win.loadFile(path.join(__dirname, '../src/overlay.html'));
+  await run('soundsEnabled = false; true');
+  ready = 0;
+  ipcOrder.length = 0;
+  const parked = [];
+  ipcMain.handle('park-audio', (_event, wav) => {
+    parked.push(Buffer.from(wav));
+    ipcOrder.push('park');
+    return true;
+  });
+  await start();
+  await waitUntil(async () => ready === 1 && await run('dsPcmChunks.reduce((sum, pcm) => sum + pcm.length, 0) >= OUT_RATE * .7'),
+    'the gate rejection needs a real recording to keep');
+  await run(`globalThis.voxdenSpeechGate = Object.assign({}, globalThis.voxdenSpeechGate,
+    { analyseSpeech: () => ({ speech: false }) }); true`);
+  await run('finishCapture(true)');
+  await waitUntil(() => failures.length === 1, 'a rejected recording still reports the failure');
+  assert.strictEqual(transcriptions.length, 1, 'a rejected recording is never sent to the engine');
+  assert.deepStrictEqual(ipcOrder, ['park', 'failed'], 'the clip is kept before the failure is reported');
+  assert.strictEqual(parked.length, 1, 'the clip is handed over exactly once');
+  assert.strictEqual(parked[0].toString('ascii', 0, 4), 'RIFF', 'and as a playable WAV');
+  assert.ok(parked[0].length > 44 + 16000 * .7 * 2, 'the whole recording is kept, not a fragment');
+
+  // The live copy: a long dictation writes itself to disk while it is still
+  // being spoken, so a power cut cannot take it. Driven through the real audio
+  // callback -- the synthetic head start only saves the test five seconds of
+  // talking, it does not stand in for any of the code under test.
+  await win.loadFile(path.join(__dirname, '../src/overlay.html'));
+  await run('soundsEnabled = false; true');
+  ready = 0;
+  const blocks = [];
+  ipcMain.on('capture-flush', (event, pcm, rate) => {
+    if (event.sender === win.webContents) blocks.push({ bytes: Buffer.from(pcm).length, rate });
+  });
+  await start();
+  await waitUntil(async () => ready === 1, 'the live copy test needs a running capture');
+  assert.deepStrictEqual(blocks, [], 'a dictation this short is never written to disk');
+  // Five seconds in, which is where insuring the recording starts being worth
+  // the write.
+  await run(`keepLiveAudio = true; resetLiveCopy(); dsPcmChunks.length = 0;
+    for (let i = 0; i < 5; i++) dsPcmChunks.push(new Float32Array(OUT_RATE).fill(.05)); true`);
+  await waitUntil(() => blocks.length === 1, 'the recording so far is handed over');
+  assert.strictEqual(blocks[0].rate, 16000, 'at the rate it was recorded');
+  assert.ok(blocks[0].bytes >= 5 * 16000 * 2, 'and all of it: ' + blocks[0].bytes);
+  const first = blocks[0].bytes;
+
+  await run('for (let i = 0; i < 2; i++) dsPcmChunks.push(new Float32Array(OUT_RATE).fill(.05)); true');
+  await pause(300);
+  assert.strictEqual(blocks.length, 1, 'two more seconds is under the cadence, so nothing is written');
+  await run('dsPcmChunks.push(new Float32Array(OUT_RATE).fill(.05)); true');
+  await waitUntil(() => blocks.length === 2, 'three seconds on, the next block goes out');
+  assert.ok(blocks[1].bytes >= 3 * 16000 * 2 && blocks[1].bytes < first,
+    'each block is new audio only, never the whole clip again: ' + blocks[1].bytes);
+  await state({ mode: 'cancel' });
+  await state({ mode: 'idle' });
+  // assertReleased() reads the fake device harness, which this page reload
+  // replaced with the real one; check the capture state directly instead.
+  assert.strictEqual(await run('hudMode === "idle" && !capturing && !mediaStream && !audioCtx && !processor'), true,
+    'cancelling the insured dictation releases the microphone like any other');
+
+  assert.deepStrictEqual(errors, [], 'device failures must not produce unhandled renderer errors');
+  console.log('real overlay audio: device faults, readiness, stale callbacks, stall recovery, native synthetic Stop/transcribe cycle, gate-rejected recovery park and live-copy flush passed');
+  clearTimeout(deadline);
+  win.destroy();
+  app.quit();
+}).catch(error => { console.error(error); app.exit(1); });

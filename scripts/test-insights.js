@@ -1,0 +1,280 @@
+'use strict';
+
+const {
+  isAiContext,
+  appIdentity,
+  displayBucket,
+  computeInsights,
+  computeStreaks,
+  computeHeatmap,
+  computeFixes,
+  computeMilestone,
+  computeMilestoneTimeline,
+  availableYears,
+  appLeaderboard,
+  wordCloud,
+  computeClock,
+  computeLength,
+  filterByRange,
+  wordDiffCount,
+} = require('../src/insights');
+const { applyDictionary } = require('../src/dictionary');
+
+let failed = 0;
+function check(name, got, expected) {
+  const g = JSON.stringify(got);
+  const e = JSON.stringify(expected);
+  if (g !== e) {
+    failed += 1;
+    console.error('FAIL', name, '\n  expected', e, '\n  got     ', g);
+  } else {
+    console.log('ok', name);
+  }
+}
+
+const DAY = 86400000;
+const NOW = new Date(2026, 7, 29, 12, 0, 0).getTime();
+
+check('ai context cursor title', isAiContext('cursor.exe', 'Fix bug - Cursor'), true);
+check('ai context chatgpt title', isAiContext('chrome.exe', 'ChatGPT - Google Chrome'), true);
+check('ai context slack false', isAiContext('slack.exe', 'general - Slack'), false);
+check(
+  'chatgpt title overrides powershell host',
+  appIdentity({ exe: 'powershell.exe', title: 'ChatGPT' }),
+  { key: 'ai:chatgpt', label: 'ChatGPT' }
+);
+
+check(
+  'display bucket ai overrides other',
+  displayBucket({ exe: 'chrome.exe', title: 'Claude', category: 'other' }),
+  'ai'
+);
+check(
+  'display bucket keeps work',
+  displayBucket({ exe: 'slack.exe', title: 'team', category: 'work' }),
+  'work'
+);
+
+check(
+  'empty insights subtitle',
+  computeInsights([], [], '7d', NOW).subtitle,
+  'No dictations in the last 7 days'
+);
+
+const weekEntries = [
+  { ts: NOW - 2 * DAY, text: 'hello world', durationMs: 60000, exe: 'cursor.exe', title: 'Cursor', category: 'other', dictionaryHits: 2, styleFixes: 3 },
+  { ts: NOW - DAY, text: 'email body here', durationMs: 30000, exe: 'outlook.exe', title: 'Inbox', category: 'email', dictionaryHits: 1, styleFixes: 0 },
+];
+const ins = computeInsights(weekEntries, [{ from: 'a', to: 'b' }], '7d', NOW);
+check('insights dictation count', ins.volume.dictations, 2);
+check('insights has timed pace', ins.pace.hasTimed, true);
+check('insights where has target', ins.where.withTarget, 2);
+check('insights ai bucket present', ins.where.rows.some((r) => r.id === 'ai'), true);
+check('insights keeps zero buckets for the chart', ins.where.rows.length, 5);
+check('insights counts distinct apps', ins.where.totalApps, 2);
+check('insights fixes total', ins.fixes.total, 6);
+check('insights average length', ins.length.average, 3);
+
+const hostedAi = computeInsights([
+  { ts: NOW, text: 'one two', exe: 'powershell.exe', title: 'ChatGPT', category: 'other' },
+  { ts: NOW, text: 'three four five', exe: 'chrome.exe', title: 'ChatGPT - Google Chrome', category: 'other' },
+  { ts: NOW, text: 'six', exe: 'powershell.exe', title: 'Status', category: 'other' },
+], [], 'all', NOW);
+const chatGptApp = hostedAi.where.apps.find((app) => app.label === 'ChatGPT');
+check('top apps groups chatgpt across host processes', chatGptApp && chatGptApp.words, 5);
+check('top apps keeps non-ai powershell separate', hostedAi.where.totalApps, 2);
+
+check('streak single day', computeStreaks([{ ts: NOW }], NOW).currentStreak, 1);
+check(
+  'streak gap breaks',
+  computeStreaks([
+    { ts: NOW - 5 * DAY, text: 'a' },
+    { ts: NOW, text: 'b' },
+  ], NOW).currentStreak,
+  1
+);
+check(
+  'streak consecutive',
+  computeStreaks([
+    { ts: NOW, text: 'a' },
+    { ts: NOW - DAY, text: 'b' },
+    { ts: NOW - 2 * DAY, text: 'c' },
+  ], NOW).currentStreak,
+  3
+);
+check(
+  'streak counts yesterday when today is idle',
+  computeStreaks([
+    { ts: NOW - DAY, text: 'a' },
+    { ts: NOW - 2 * DAY, text: 'b' },
+  ], NOW).currentStreak,
+  2
+);
+
+const streaks = computeStreaks([{ ts: NOW, text: 'a' }], NOW);
+const heat = computeHeatmap([{ ts: NOW, text: 'one two three' }], NOW, streaks.currentDays);
+check('heatmap column count', heat.columns.length, heat.weeks);
+
+// The window tracks how much history exists. A fixed span made a new account
+// read as months of missed days rather than a short history.
+const weeksFor = (entries) => computeHeatmap(entries, NOW, new Set()).weeks;
+check('heatmap floors at the minimum for a new account', weeksFor([{ ts: NOW, text: 'a' }]), 6);
+check('heatmap floors at the minimum with no history', weeksFor([]), 6);
+check('heatmap grows with history', weeksFor([{ ts: NOW - 70 * DAY, text: 'a' }]), 11);
+check(
+  'heatmap caps at the maximum',
+  weeksFor([{ ts: NOW - 700 * DAY, text: 'a' }]),
+  17
+);
+check(
+  'heatmap window is driven by the oldest entry',
+  weeksFor([{ ts: NOW, text: 'a' }, { ts: NOW - 70 * DAY, text: 'b' }]),
+  weeksFor([{ ts: NOW - 70 * DAY, text: 'b' }])
+);
+check(
+  'heatmap still ends today when the window shrinks',
+  new Date(computeHeatmap([{ ts: NOW, text: 'a' }], NOW, new Set()).endTs).getDate(),
+  new Date(NOW).getDate()
+);
+check('heatmap rows per column', heat.columns[0].length, 7);
+check('heatmap starts on sunday', new Date(heat.columns[0][0].ts).getDay(), 0);
+check('heatmap labels months', heat.months.length > 0, true);
+check(
+  'heatmap marks today in the streak',
+  heat.columns[heat.weeks - 1].some((c) => c.inStreak && c.words === 3),
+  true
+);
+check(
+  'heatmap marks days after today as future',
+  heat.columns[heat.weeks - 1].filter((c) => c.future).length,
+  6 - new Date(NOW).getDay()
+);
+
+check('milestone reached', computeMilestone(900).text, "You've written a blog post!");
+check('milestone next target', computeMilestone(900).next, 'a long essay');
+check('milestone below first tier', computeMilestone(10).text, null);
+check('milestone progress is bounded', computeMilestone(10).percent <= 100, true);
+
+check('fixes without tracked data', computeFixes([{ ts: NOW, text: 'a' }]).hasData, false);
+check('fixes split', computeFixes(weekEntries), { dictionary: 3, style: 3, total: 6, hasData: true });
+
+const clock = computeClock([
+  { ts: new Date(2026, 7, 29, 9, 0, 0).getTime() },
+  { ts: new Date(2026, 7, 28, 9, 30, 0).getTime() },
+  { ts: new Date(2026, 7, 27, 22, 0, 0).getTime() },
+]);
+check('clock peak hour', clock.peakHour, 9);
+check('clock total', clock.total, 3);
+check('clock peak is full height', clock.hours[9].percent, 100);
+check('clock empty has no peak', computeClock([]).peakHour, null);
+
+check('length longest', computeLength([{ text: 'a b c' }, { text: 'a' }]).longest, 3);
+
+// wordDiffCount is a diff, not a tally, so spans do not compose: a count taken
+// across a wider span can be SMALLER than one taken across a span inside it.
+// Here styling expands a contraction and a later stage puts it back, so the
+// outer span collapses to nothing while the inner one still reports an edit.
+// Anything that sums per-stage counts has to measure disjoint spans; nesting
+// them lets a reported total exceed the edits that actually happened.
+const staged = { before: 'i cant go', styled: 'i cannot go', after: 'i cant go' };
+check('outer span collapses', wordDiffCount(staged.before, staged.after), 0);
+check('inner span exceeds it', wordDiffCount(staged.styled, staged.after), 1);
+check(
+  'disjoint spans total the real edits',
+  wordDiffCount(staged.before, staged.styled) + wordDiffCount(staged.styled, staged.after),
+  2
+);
+
+check('word diff identical', wordDiffCount('hello there world', 'hello there world'), 0);
+check('word diff substitution', wordDiffCount('vox don is here', 'Voxden is here'), 2);
+check('word diff insertion', wordDiffCount('hello world', 'hello big world'), 1);
+check('word diff deletion', wordDiffCount('um hello world', 'hello world'), 1);
+check('word diff from empty', wordDiffCount('', 'hello world'), 2);
+check('word diff both empty', wordDiffCount('', ''), 0);
+
+check('filter 7d', filterByRange(weekEntries, '7d', NOW).length, 2);
+check(
+  'filter 7d excludes old',
+  filterByRange([{ ts: NOW - 20 * DAY, text: 'old' }], '7d', NOW).length,
+  0
+);
+
+check(
+  'dictionary hits meta',
+  applyDictionary('open vox don now', [{ from: 'vox don', to: 'Voxden' }], true),
+  { text: 'open Voxden now', hits: 1 }
+);
+check(
+  'dictionary hits none',
+  applyDictionary('hello world', [{ from: 'vox don', to: 'Voxden' }], true).hits,
+  0
+);
+
+check(
+  'insights no crash without category',
+  computeInsights([{ ts: NOW, text: 'hello there' }], [], 'all', NOW).volume.words,
+  2
+);
+check(
+  'insights no crash on empty history',
+  computeInsights([], [], 'all', NOW).rhythm.currentStreak,
+  0
+);
+
+// --- Year-wise milestones -------------------------------------------------------
+// A milestone read within a year is a dated event, not a lifetime total: the
+// day it was cleared is the dictation that tipped the count over the line.
+const hundred = Array.from({ length: 100 }, (_, i) => 'w' + i).join(' ');
+const yearEntries = [
+  { ts: new Date(2025, 10, 3).getTime(), text: hundred },
+  { ts: new Date(2026, 0, 4).getTime(), text: hundred },
+  { ts: new Date(2026, 1, 9).getTime(), text: hundred },
+  { ts: new Date(2026, 2, 14).getTime(), text: hundred },
+];
+check('available years: every year with a dictation, oldest first', availableYears(yearEntries, NOW), [2025, 2026]);
+check('available years: the current year even with nothing in it', availableYears([], NOW), [2026]);
+const tl = computeMilestoneTimeline(yearEntries, 2026, NOW);
+check('year timeline counts only that year', [tl.words, tl.dictations], [300, 3]);
+check('year timeline stamps the dictation that tipped the milestone', tl.milestones[0].reachedAt, new Date(2026, 2, 14).getTime());
+check('year timeline states', tl.milestones.slice(0, 3).map((m) => m.state), ['reached', 'next', 'locked']);
+check('year timeline next', tl.next, { label: 'a blog post', words: 750, remaining: 450, percent: 10 });
+check('year timeline latest', tl.latest, { label: 'a full page', reachedAt: new Date(2026, 2, 14).getTime() });
+check('year timeline reads the previous year on its own', computeMilestoneTimeline(yearEntries, 2025, NOW).words, 100);
+check('year timeline on an empty year starts at zero', computeMilestoneTimeline(yearEntries, 2024, NOW).next.percent, 0);
+check('insights picks the latest year by default', computeInsights(yearEntries, [], 'all', NOW).milestones.year, 2026);
+check('insights honours a requested year', computeInsights(yearEntries, [], 'all', NOW, { year: 2025 }).milestones.year, 2025);
+check('insights falls back on a year with no history', computeInsights(yearEntries, [], 'all', NOW, { year: 2019 }).milestones.year, 2026);
+check('insights lists the years', computeInsights(yearEntries, [], 'all', NOW).years, [2025, 2026]);
+
+// --- App leaderboard -----------------------------------------------------------
+const lbEntries = [
+  { ts: NOW - DAY, text: 'one two three four five', exe: 'slack.exe', title: 'general - Slack', category: 'work' },
+  { ts: NOW - 2 * DAY, text: 'six seven eight nine ten', exe: 'slack.exe', title: 'general - Slack', category: 'work' },
+  { ts: NOW - 3 * DAY, text: 'a b c d e', exe: 'chrome.exe', title: 'ChatGPT - Google Chrome', category: 'other' },
+  { ts: NOW - 10 * DAY, text: Array(20).fill('x').join(' '), exe: 'chrome.exe', title: 'ChatGPT - Google Chrome', category: 'other' },
+];
+const lb = appLeaderboard(lbEntries, '7d', NOW, 6);
+check('leaderboard ranks by words in the range', lb.rows.map((r) => r.label), ['Slack', 'ChatGPT']);
+check('leaderboard rank and share', lb.rows.map((r) => [r.rank, r.share]), [[1, 67], [2, 33]]);
+check('leaderboard tags each app with its usual bucket', lb.rows.map((r) => r.bucket), ['work', 'ai']);
+check('leaderboard direction against the week before', lb.rows.map((r) => r.trend), ['new', 'down']);
+check('leaderboard counts distinct apps', lb.total, 2);
+check('leaderboard all time ranks the whole history', appLeaderboard(lbEntries, 'all', NOW, 6).rows[0].label, 'ChatGPT');
+check('leaderboard all time words', appLeaderboard(lbEntries, 'all', NOW, 6).rows[0].words, 25);
+check('leaderboard honours the limit', appLeaderboard(lbEntries, 'all', NOW, 1).rows.length, 1);
+check('leaderboard skips dictations with no app', appLeaderboard([{ ts: NOW, text: 'a b' }], 'all', NOW).total, 0);
+check('insights carries the leaderboard', computeInsights(lbEntries, [], '7d', NOW).where.leaderboard.rows.length, 2);
+
+// --- Word cloud ------------------------------------------------------------------
+check('word cloud sizes each word by its own count', wordCloud([{ text: 'invoice invoice invoice draft draft the a' }, { text: 'invoice team' }], 5), [
+  { word: 'invoice', count: 4, weight: 100 },
+  { word: 'draft', count: 2, weight: 50 },
+  { word: 'team', count: 1, weight: 25 },
+]);
+check('word cloud on nothing', wordCloud([], 5), []);
+
+if (failed) {
+  console.error(failed + ' failed');
+  process.exit(1);
+}
+console.log('all insights tests passed');

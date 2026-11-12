@@ -1,0 +1,111 @@
+/* Uses the same theme tokens and controls as every other settings page. */
+.billing-panel > .settings-panel-title { margin-bottom: 8px; }
+/* The toolbar is hidden once subscribed, so the gap above the cards lives on
+   the grid rather than on the toolbar. */
+.billing-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin: 24px 0 0; }
+.billing-period { font-size: 12px; color: var(--text); padding: 7px 12px; background: var(--panel-2); border-radius: 8px; }
+.billing-region-label { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+.billing-region-label .setting-select { min-width: 116px; max-width: 180px; }
+.billing-plans { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); gap: 14px; margin-top: 20px; }
+.billing-card { display: flex; flex-direction: column; min-width: 0; padding: 23px 20px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--panel); }
+/* Pro wears the same gold as the account card. */
+.billing-card.billing-pro {
+  border-color: rgba(232, 193, 92, 0.55);
+  background: linear-gradient(180deg, rgba(232, 193, 92, 0.1), rgba(232, 193, 92, 0.03) 55%, transparent), var(--panel);
+  box-shadow: 0 0 0 1px rgba(232, 193, 92, 0.12), 0 12px 32px rgba(0, 0, 0, 0.25);
+}
+.billing-card.billing-pro h3 { color: #f1d27a; }
+.billing-card.billing-pro .billing-badge {
+  color: #2a1e05;
+  background: linear-gradient(135deg, #f1d27a, #d4a437);
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-weight: 750;
+  letter-spacing: 1px;
+}
+.billing-card.billing-pro .billing-features li::before { color: #e8c15c; }
+.billing-card.billing-pro .billing-price { color: #f1d27a; }
+/* The card's own actions (Get Pro, Manage subscription) are gold too. */
+.billing-card.billing-pro .btn-primary {
+  background: linear-gradient(135deg, #f1d27a, #d4a437);
+  color: #2a1e05;
+  border-color: transparent;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 0 16px rgba(232, 193, 92, 0.18);
+}
+.billing-card.billing-pro .btn-primary:hover { background: linear-gradient(135deg, #f7dd8c, #dfb04a); color: #2a1e05; }
+.billing-card.billing-pro .btn-primary:disabled { opacity: .6; box-shadow: none; }
+/* The one-time welcome offer: a gold-edged ticket between the price and the
+   features, so the first month reads as part of the deal rather than small
+   print. Static on purpose; nothing on this page animates on its own. */
+.billing-welcome {
+  position: relative;
+  margin: 20px 0 0;
+  padding: 16px 18px 15px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-card);
+  background:
+    radial-gradient(130% 120% at 100% 0%, rgba(241, 210, 122, 0.2), transparent 58%) padding-box,
+    linear-gradient(180deg, #2a2412, #1e1b12) padding-box,
+    linear-gradient(135deg, #f7dd8c, #d4a437 45%, rgba(212, 164, 55, 0.3)) border-box;
+  box-shadow: 0 10px 28px rgba(212, 164, 55, 0.14), inset 0 1px 0 rgba(255, 244, 214, 0.08);
+  overflow: hidden;
+}
+.billing-welcome-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 8px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #f1d27a, #d4a437);
+  color: #2a1e05;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.billing-welcome-amount { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 9px; margin: 13px 0 0; color: #f7dd8c; }
+.billing-welcome-number { font-size: 34px; font-weight: 650; line-height: 1.05; letter-spacing: -1.2px; font-variant-numeric: tabular-nums; }
+.billing-welcome-unit { font-size: 15px; font-weight: 600; color: #f1d27a; }
+.billing-welcome-lead { margin: 3px 0 0; font-size: 13px; color: var(--text); }
+.billing-welcome-detail { margin: 10px 0 0; padding-top: 10px; border-top: 1px dashed rgba(241, 210, 122, 0.28); font-size: 12px; line-height: 1.55; color: #d9cfae; text-wrap: pretty; }
+.billing-card h3 { font-size: 18px; font-weight: 600; letter-spacing: -.3px; margin: 0; }
+.billing-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.billing-badge { font-size: 10px; }
+.billing-description { font-size: 13px; line-height: 1.5; color: var(--muted); margin: 8px 0 0; }
+.billing-price { margin: 24px 0 6px; font-size: 40px; font-weight: 600; line-height: 1.2; letter-spacing: -1.5px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.billing-price-unit { font-size: 13px; font-weight: 400; letter-spacing: 0; color: var(--muted); white-space: nowrap; }
+.billing-caption { font-size: 12px; color: var(--muted); line-height: 1.6; margin: 0; }
+/* The list takes the card's spare height so the actions line up across cards;
+   its rows stay packed at the top instead of spreading through that height. */
+.billing-features { list-style: none; padding: 0; margin: 24px 0; display: grid; align-content: start; gap: 14px; font-size: 13px; line-height: 1.5; flex: 1; }
+.billing-features li { position: relative; padding-left: 21px; }
+.billing-features li::before { content: '✓'; position: absolute; left: 0; color: var(--mint); }
+.billing-actions { display: grid; gap: 8px; margin-top: 17px; }
+.billing-actions > button { width: 100%; white-space: normal; min-height: 39px; }
+.billing-current { display: block; text-align: center; color: var(--muted); padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius-control); font-size: 12px; }
+.billing-footnote { color: var(--muted); font-size: 12px; line-height: 1.6; text-align: center; margin: 17px 0 22px; }
+.billing-faq { border-top: 1px solid var(--border); }
+.billing-faq details { border-bottom: 1px solid var(--border); }
+.billing-faq summary { cursor: pointer; padding: 14px 0; color: var(--text); font-size: 13px; }
+.billing-faq details p { font-size: 13px; color: var(--muted); line-height: 1.6; margin: 0 0 15px; }
+.billing-plans.is-subscribed { grid-template-columns: minmax(0, 1fr); }
+
+/* Manage subscription: the facts of the plan and the one way out of it. */
+.subscription-dialog { width: min(480px, calc(100vw - 56px)); }
+.subscription-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 20px; margin: 18px 0 0; padding: 16px 18px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--panel-2); }
+.subscription-fact { display: grid; gap: 3px; min-width: 0; }
+.subscription-fact dt { font-size: 10.5px; font-weight: 600; letter-spacing: .4px; text-transform: uppercase; color: var(--faint); }
+.subscription-fact dd { margin: 0; font-size: 13px; color: var(--text); overflow-wrap: anywhere; }
+.subscription-fact dd.is-off { color: var(--muted); }
+.subscription-note { margin: 14px 0 0; }
+/* Cancelling is the one action here with consequences; it stands out on its
+   own side, the others sit together on the right. */
+.subscription-dialog .lang-dialog-actions { justify-content: flex-end; }
+.subscription-dialog #subscription-cancel { margin-right: auto; }
+.subscription-note:empty { display: none; }
+@media (max-width: 560px) { .subscription-facts { grid-template-columns: 1fr; } }
+#account-open-billing { margin-top: 20px; }
+@media (max-width: 880px) { .billing-plans { grid-template-columns: minmax(0, 1fr); } .billing-pro { order: -1; } }
+
+/* The Free card turns red only when the week is actually spent. */
+.billing-caption.is-error { color: var(--red); }

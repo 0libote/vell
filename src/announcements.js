@@ -1,0 +1,623 @@
+'use strict';
+
+// What the bell in the title bar has to say.
+//
+// Two things feed it. The CATALOG below ships inside the app and describes
+// what is new about the build the user is running -- a new engine, a new
+// language model, a feature that did not exist before. Runtime events (an
+// update finished downloading) are added with note() as they happen. Both end
+// up in the same store, so the panel, the badge and "clear all" only ever deal
+// with one kind of thing.
+//
+// Everything here is pure: a state object goes in, a new state object comes
+// out. The main process owns reading and writing the file; this owns the rules.
+
+// Group related release improvements into useful summaries, including fixes
+// that change everyday dictation or recovery. Keep the full release notes in
+// sync with these words so the bell and GitHub describe the same build.
+//
+// To announce something, add an entry with `since` set to the version it ships
+// in. Ids are permanent: a delivered id is remembered forever so a cleared
+// notification cannot come back, which also means an id must never be reused
+// for different news.
+const CATALOG = [
+  {
+    id: 'island-redesign-2-2-0',
+    since: '2.2.0',
+    kind: 'feature',
+    title: 'A new look',
+    body: "Voxden has a new look: one header with your sections in a navigation island, a Dictation page that puts today's words beside your history, and a Polish page that uses the whole window. Push to talk is also fixed for the cases where it kept recording after you let go of the key.",
+  },
+  {
+    id: 'fewer-stray-stops-2-1-11',
+    since: '2.1.11',
+    kind: 'feature',
+    title: 'Fewer stray full stops',
+    body: 'Fewer stray full stops in cloud dictation: when Voxden Cloud splits a long dictation at a pause and puts a full stop where your sentence goes on, that full stop is now taken out. Voxden Cloud is also starting to send your words in a new way that keeps the wait after you stop short.',
+  },
+  {
+    id: 'faster-cloud-2-1-10',
+    since: '2.1.10',
+    kind: 'feature',
+    title: 'Faster cloud dictation',
+    body: 'Voxden Cloud is much faster: your words usually appear a second or two after you stop, and a piece that gets stuck is asked again instead of failing the dictation. Voxden Cloud now covers 18 languages.',
+  },
+  {
+    id: 'clearer-cloud-2-1-9',
+    since: '2.1.9',
+    kind: 'feature',
+    title: 'Clearer cloud dictation',
+    body: 'Names and long words come through whole, and a word you break off and start again is left out. Voxden Cloud now listens for up to 100 words from your dictionary.',
+  },
+  {
+    id: 'windows-fixes-2-1-8',
+    since: '2.1.8',
+    kind: 'feature',
+    title: 'Taskbar and game fixes',
+    body: 'Fixes for the Windows taskbar, games and fullscreen apps. The game shortcut now starts off: turn it on in Settings, under Shortcuts.',
+    action: { settings: 'general' },
+  },
+  {
+    id: 'smoother-dictation-2-1-7',
+    since: '2.1.7',
+    kind: 'feature',
+    title: 'Smoother everyday dictation',
+    body: 'Faster dictation, more reliable pasting and refreshed sounds.',
+  },
+  {
+    id: 'polish-2-1-6',
+    since: '2.1.6',
+    kind: 'feature',
+    title: 'Polish a dictation where you pasted it',
+    body: 'Polish is here for Voxden Pro. After a dictation, a gold Polish button on the flow bar rewrites the words you just dictated and pastes the clean version over them. If Voxden cannot be sure it has the right words selected, the polished text goes to your clipboard instead. It costs 0.25 cloud credits per 100 words, shown before anything is sent.',
+    action: { view: 'polish' },
+  },
+  {
+    id: 'polish-page-2-1-6',
+    since: '2.1.6',
+    kind: 'feature',
+    title: 'Polish, Grammar or Tighten any text',
+    body: 'The new Polish page works on anything you type or paste, or on a recent dictation, in three modes at the same price: Polish rewrites for flow, Grammar fixes only what is wrong and keeps your words, and Tighten says it in fewer words. It shows what changed, and it keeps your own corrections: "1.0.15, yeah, 16" becomes 1.0.16.',
+    action: { view: 'polish' },
+  },
+  {
+    id: 'styles-keep-words-2-1-6',
+    since: '2.1.6',
+    kind: 'feature',
+    title: 'Writing styles keep your words',
+    body: 'Writing styles no longer change your words. A tone sets capitals and punctuation only: Formal capitalises every sentence and ends with a full stop, Casual keeps the speech engine\'s punctuation, and Very casual starts sentences in lower case. Filler is um, uh and hmm, and "you know" when it is set off by commas. Words you repeat on purpose, like "very, very", stay.',
+    action: { view: 'writing-style' },
+  },
+  {
+    id: 'new-logo-2-1-5',
+    since: '2.1.5',
+    kind: 'feature',
+    title: 'A new Voxden logo',
+    body: 'Voxden has a new logo. The new V is on the taskbar, the tray, the installer and the title bar.',
+  },
+  {
+    id: 'island-flow-bar-2-1-5',
+    since: '2.1.5',
+    kind: 'feature',
+    title: 'Meet Island, the new flow bar',
+    body: 'Island is the new flow bar, and the default: one black capsule that rests as a small pill and opens on hover into settings, the microphone and screenshot capture. Drag the bar itself to move it. Classic and Ribbon are retired and switch to Island, and Orb stays in Settings → Display.',
+    action: { settings: 'display' },
+  },
+  {
+    id: 'dictation-page-2-1-5',
+    since: '2.1.5',
+    kind: 'feature',
+    title: 'Your dictations come first',
+    body: 'The Dictation page puts your recent dictations first. Beside them sit a week card with your words for each day, your voice profile as a ring, and your speaking pace. Search is a round button, and Ctrl+F opens it on Dictation and Dictionary.',
+    action: { view: 'dictation' },
+  },
+  {
+    id: 'voice-recovery-2-1-5',
+    since: '2.1.5',
+    kind: 'feature',
+    title: 'Get back a dictation that failed',
+    body: 'A dictation that fails to become text keeps its recording. It waits on the Dictation page under Not transcribed for 14 days, and Recover turns it into text with the speech engine you use now.',
+    action: { view: 'dictation' },
+  },
+  {
+    id: 'cloud-busy-local-2-1-5',
+    since: '2.1.5',
+    kind: 'feature',
+    title: 'Dictation carries on when the cloud is busy',
+    body: 'When Voxden Cloud is too busy to answer, your dictation is transcribed by the speech model on your PC instead of failing, if you have one installed. The flow bar says "Cloud busy. Using this PC…" while it switches.',
+    action: { settings: 'speech-engines' },
+  },
+  {
+    id: 'pro-worldwide-2-1-4',
+    since: '2.1.4',
+    kind: 'feature',
+    title: 'Voxden Pro, outside India too',
+    body: 'Voxden Pro is now $8 a month everywhere outside India, charged through Razorpay by international card.',
+    action: { settings: 'billing' },
+  },
+  {
+    id: 'white-theme-2-1-3',
+    since: '2.1.3',
+    kind: 'feature',
+    title: 'A White theme for Voxden',
+    body: 'Choose White or the original Voxden theme in Settings → Display. Your choice is saved, switches immediately and leaves the floating dictation bar in its chosen style. Pro and Voxden Cloud accents stay gold in both themes.',
+    action: { settings: 'display' },
+  },
+  {
+    id: 'organized-settings-2-1-3',
+    since: '2.1.3',
+    kind: 'feature',
+    title: 'Settings, with more room to breathe',
+    body: 'General and System settings are easier to scan. Display now holds app themes, flow bar styles and motion preferences, while microphone, languages and dictation controls stay together in General.',
+    action: { settings: 'general' },
+  },
+  {
+    id: 'dashboard-2-1-3',
+    since: '2.1.3',
+    kind: 'feature',
+    title: 'A calmer dictation dashboard',
+    body: 'The dictation dashboard has floating app icons, clearer speaking pace and time saved, and a steady voice profile card. Icons keep moving smoothly during sidebar resizing, and opening Settings dims the whole workspace in both themes.',
+    action: { view: 'dictation' },
+  },
+  {
+    id: 'cloud-recovery-2-1-3',
+    since: '2.1.3',
+    kind: 'feature',
+    title: 'More reliable longer dictations',
+    body: 'Longer cloud dictations recover from interrupted segments more reliably. Segment boundaries preserve complete words, and failed transcriptions keep the recording available for retry.',
+    action: { view: 'dictation' },
+  },
+  {
+    id: 'history-retention-2-1-2',
+    since: '2.1.2',
+    kind: 'feature',
+    title: 'Lighter dictation history',
+    body: 'Older dictation history now clears automatically to keep Voxden lighter. Your dictation totals, Insights, dictionary, automatic learning and saved training data stay intact.',
+    action: { view: 'dictation' },
+  },
+  {
+    id: 'flow-input-2-1-2',
+    since: '2.1.2',
+    kind: 'feature',
+    title: 'The flow bar stays clickable',
+    body: 'The flow bar keeps taking clicks and drags after your display sleeps, after a full-screen app or another window covers it, and after Windows minimizes and restores it. It used to look normal and open on hover while ignoring every click until a restart.',
+    action: { settings: 'system' },
+  },
+  {
+    id: 'smartscreen-install-2-1-2',
+    since: '2.1.2',
+    kind: 'feature',
+    title: 'Getting past the Windows install warning',
+    body: 'Voxden is not yet code-signed, so Windows shows a blue "Windows protected your PC" screen whenever you run the installer by hand. Click More info, then Run anyway. It is a Microsoft SmartScreen notice about an installer it has not seen before, not a virus report.',
+  },
+  {
+    id: 'auto-cleanup-2-1-1',
+    since: '2.1.1',
+    kind: 'feature',
+    title: 'Lightweight Auto cleanup',
+    body: 'Enable Auto cleanup in Writing style to fix common English grammar and punctuation mistakes while keeping your selected tone. No extra model download. It starts off and pauses in Verbatim mode.',
+    action: { view: 'writing-style' },
+  },
+  {
+    id: 'flow-controls-2-1-1',
+    since: '2.1.1',
+    kind: 'feature',
+    title: 'Polished flow bar controls',
+    body: 'Orb\'s hover controls keep the microphone in the center, with Settings and the drag handle at the sides and screenshot capture above. Its buttons stay responsive while you move between controls.',
+    action: { settings: 'display' },
+  },
+  {
+    id: 'flow-reliability-2-1-1',
+    since: '2.1.1',
+    kind: 'feature',
+    title: 'More reliable recording and settings',
+    body: 'Recording and transcription recover more reliably from slow startup, microphone interruptions and stalled drawing. Settings changes preserve result editing, and the app can still be moved by its title bar while Settings is open.',
+    action: { settings: 'system' },
+  },
+  {
+    id: 'flow-motion-2-1-1',
+    since: '2.1.1',
+    kind: 'feature',
+    title: 'Choose how the flow bar animates',
+    body: 'Choose Follow Windows, On or Reduced in System settings to control animations for the flow bar and its previews. Voxden explains when Windows Animation effects are off.',
+    action: { settings: 'system' },
+  },
+  {
+    id: 'performance-2-1-1',
+    since: '2.1.1',
+    kind: 'feature',
+    title: 'Less background work',
+    body: 'The dashboard avoids unnecessary work in the background, Orb drawing is lighter, and speech-engine CPU workers sleep between jobs. Smaller laptops use a CPU worker budget suited to their processor count.',
+  },
+  {
+    id: 'capture-2-1-0',
+    since: '2.1.0',
+    kind: 'feature',
+    title: 'Capture a screenshot and dictate',
+    body: 'Select a screen region, mark it with Circle, Arrow, Pen or Hide, and speak while annotating. Voxden pastes your words and marked screenshot into an app that accepts images. Capture never sends the message automatically.',
+  },
+  {
+    id: 'dictionary-learning-2-1-0',
+    since: '2.1.0',
+    kind: 'feature',
+    title: 'Corrections can teach your dictionary',
+    body: 'Correct a recently dictated word in a supported Windows text field and Voxden can learn its spelling locally. The flow bar offers Undo. Auto-add to dictionary can be turned off in General settings.',
+    action: { settings: 'general' },
+  },
+  {
+    id: 'compact-qwen-2-1-0',
+    since: '2.1.0',
+    kind: 'engine',
+    title: 'Smaller Qwen GPU downloads',
+    body: 'Qwen CUDA acceleration downloads are now 1.88–2.10 GB, depending on reusable support files. The complete runtime is preserved, with no manual Python or pip setup. Verified GPU installations can also reclaim eligible leftover download files.',
+    action: { settings: 'speech-engines' },
+  },
+  {
+    id: 'recovery-2-1-0',
+    since: '2.1.0',
+    kind: 'feature',
+    title: 'More reliable dictation and recovery',
+    body: 'Cancelled retries cannot paste later or overwrite newer edits. History saves have recovery copies, clipboard handling preserves newer copies, and retention settings also cover retry audio. Cleanup better preserves other languages, addresses, numbers and line breaks.',
+  },
+  {
+    id: 'installer-branding-2-1-0',
+    since: '2.1.0',
+    kind: 'feature',
+    title: 'A properly branded Windows installer',
+    body: 'Setup uses the approved Voxden logo, sharp text that scales with Windows display settings, and a Made by Sounak credit on the finish page. The app title bar uses the same logo with a larger wordmark.',
+  },
+  {
+    id: 'mute-other-audio-1-0-22',
+    since: '1.0.22',
+    kind: 'feature',
+    title: 'Other audio goes quiet while you dictate',
+    body: 'Voxden now pauses music and silences calls, videos, games and other playback while the microphone is open. Anything already muted or paused stays that way.',
+    action: { settings: 'general' },
+  },
+  {
+    id: 'dictation-recordings',
+    since: '1.0.19',
+    kind: 'feature',
+    title: 'Play back, save or retry any dictation',
+    body: 'Each dictation keeps its recording for 14 days. Open ⋯ to play it, save a WAV, or run it again. Turn this off under Data and privacy.',
+    action: { settings: 'privacy' },
+  },
+  {
+    id: 'settings-split-1-0-19',
+    since: '1.0.19',
+    kind: 'feature',
+    title: 'Settings are simpler',
+    body: 'General holds your name, shortcuts, microphone and language. Engines, downloads and acceleration live under Speech engines.',
+    action: { settings: 'general' },
+  },
+  {
+    id: 'local-correction-retired',
+    since: '1.0.19',
+    kind: 'feature',
+    title: 'Local sentence correction is gone',
+    body: 'Language packs and rewrite controls were removed. Built-in cleanup still handles fillers and punctuation. Leftover pack files are deleted to free space.',
+  },
+  {
+    id: 'smoother-startup-1-0-19',
+    since: '1.0.19',
+    kind: 'feature',
+    title: 'Smoother startup',
+    body: 'The flow bar no longer stutters the pointer. Engines load in the background without locking the PC.',
+  },
+  {
+    id: 'qwen-recommended',
+    since: '1.0.17',
+    kind: 'feature',
+    title: 'Qwen3-ASR is available',
+    body: 'In Voxden\'s tests it caught names and dictionary words more often than Parakeet or Whisper large-v3. Your current choice is unchanged; download it under Speech engines if you want to try it. The Help page is also shorter and written for first-time users.',
+    action: { settings: 'speech-engines' },
+  },
+  {
+    id: 'instant-dictation',
+    since: '1.0.16',
+    kind: 'feature',
+    title: 'Dictation starts and pastes faster',
+    body: 'The speech engine now warms up in the background when Voxden opens, the microphone opens the moment you press the shortcut, and the transcript lands in your app about a second sooner. Voxden also uses far less of your CPU while it sits idle.',
+  },
+  {
+    id: 'numbers-as-digits',
+    since: '1.0.16',
+    kind: 'feature',
+    title: 'Spoken numbers are written as digits',
+    body: '“One point zero point sixteen” comes out as 1.0.16, “twenty five percent” as 25%, and “twenty twenty six” as 2026. Turn it off under Writing style if you prefer words.',
+    action: { view: 'writing-style' },
+  },
+  {
+    id: 'notifications-centre',
+    since: '1.0.14',
+    kind: 'feature',
+    title: 'Notifications live in the title bar',
+    body: 'New engines, new language models and finished updates now show up under the bell instead of going unnoticed.',
+  },
+  {
+    id: 'qwen-gpu-acceleration',
+    since: '1.0.10',
+    kind: 'engine',
+    title: 'Qwen dictation can use your GPU',
+    body: 'Install the acceleration pack for your card and Qwen transcribes several times faster than it does on the CPU.',
+    action: { settings: 'speech-engines' },
+  },
+];
+
+const KINDS = new Set(['feature', 'model', 'engine', 'update', 'credits', 'paste']);
+
+// Versions here are the app's own, so they are dotted numbers with an
+// occasional prerelease tail. The tail is dropped rather than ordered: it only
+// has to decide whether news has shipped yet, and 1.0.14-beta.1 is close
+// enough to 1.0.14 for that.
+function versionParts(value) {
+  const main = String(value == null ? '' : value).trim().split(/[-+]/)[0];
+  return main.split('.').map((part) => {
+    const n = parseInt(part, 10);
+    return Number.isFinite(n) ? n : 0;
+  });
+}
+
+function compareVersions(a, b) {
+  const left = versionParts(a);
+  const right = versionParts(b);
+  const len = Math.max(left.length, right.length);
+  for (let i = 0; i < len; i += 1) {
+    const l = left[i] || 0;
+    const r = right[i] || 0;
+    if (l !== r) return l < r ? -1 : 1;
+  }
+  return 0;
+}
+
+function num(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function text(value) {
+  return typeof value === 'string' ? value : '';
+}
+
+function normalizeKind(value) {
+  const kind = text(value).trim().toLowerCase();
+  return KINDS.has(kind) ? kind : 'feature';
+}
+
+// An entry the app invented at runtime rather than one it shipped with. It
+// carries its own words because there is no catalog row to look them up in.
+function normalizeInline(value) {
+  if (!value || typeof value !== 'object') return null;
+  const title = text(value.title).trim();
+  if (!title) return null;
+  const inline = {
+    kind: normalizeKind(value.kind),
+    title,
+    body: text(value.body).trim(),
+  };
+  if (value.action && typeof value.action === 'object') {
+    // A settings pane, or a view of the window: Writing style and the
+    // dictionary are views, not settings panes.
+    const settings = text(value.action.settings).trim();
+    const view = text(value.action.view).trim();
+    if (settings) inline.action = { settings };
+    else if (view) inline.action = { view };
+  }
+  return inline;
+}
+
+// The store has been through JSON and a file the user can edit, so nothing in
+// it is trusted. A record that cannot be read is dropped, not repaired: the
+// worst it costs is one notification.
+function normalizeState(raw) {
+  const state = { seenVersion: '', items: {} };
+  if (!raw || typeof raw !== 'object') return state;
+  state.seenVersion = text(raw.seenVersion).trim();
+  const items = raw.items && typeof raw.items === 'object' ? raw.items : {};
+  for (const id of Object.keys(items)) {
+    const record = items[id];
+    if (!id || !record || typeof record !== 'object') continue;
+    const ts = num(record.ts, 0);
+    if (!ts) continue;
+    const next = {
+      ts,
+      read: !!record.read,
+      cleared: !!record.cleared,
+    };
+    const inline = normalizeInline(record.inline);
+    if (inline) next.inline = inline;
+    state.items[id] = next;
+  }
+  return state;
+}
+
+function cloneState(state) {
+  const items = {};
+  for (const id of Object.keys(state.items)) {
+    items[id] = Object.assign({}, state.items[id]);
+  }
+  return { seenVersion: state.seenVersion, items };
+}
+
+// Which catalog rows count as news for this run.
+//
+// A store that has never been written belongs to a fresh install, and a fresh
+// install has no history to catch up on -- everything in the app is new to it
+// at once, which is not news, it is the app. Only what ships *in this version*
+// is worth saying, and that is the same thing an existing user sees when they
+// update into it.
+//
+// After that first run the rule is the ordinary one: anything that shipped
+// after the version last seen, up to the version running now. Skipping a
+// release still delivers what happened in between, because the comparison is
+// against what the user last ran, not against the previous release.
+//
+// A rebuild of the same version can add catalog rows. Those still count as
+// news if this launch has never stored them — otherwise a 1.0.19 rebuild
+// that added announcements would stay silent for anyone who had already
+// opened 1.0.19 once.
+function isNews(entry, seenVersion, version) {
+  if (compareVersions(entry.since, version) > 0) return false;
+  if (!seenVersion) return compareVersions(entry.since, version) === 0;
+  if (compareVersions(entry.since, seenVersion) > 0) return true;
+  return compareVersions(entry.since, version) === 0
+    && compareVersions(seenVersion, version) === 0;
+}
+
+// Fold the catalog into the store for the version now running. Ids already in
+// the store are left exactly as they are, so a notification that was read or
+// cleared stays that way across restarts and downgrades.
+function deliver(state, options) {
+  const opts = options || {};
+  const catalog = Array.isArray(opts.catalog) ? opts.catalog : CATALOG;
+  const version = text(opts.version).trim();
+  const now = num(opts.now, Date.now());
+  const next = cloneState(normalizeState(state));
+  let changed = false;
+
+  for (const entry of catalog) {
+    if (!entry || !entry.id) continue;
+    if (next.items[entry.id]) continue;
+    if (!isNews(entry, next.seenVersion, version)) continue;
+    next.items[entry.id] = { ts: now, read: false, cleared: false };
+    changed = true;
+  }
+
+  if (version && next.seenVersion !== version) {
+    next.seenVersion = version;
+    changed = true;
+  }
+  return { state: next, changed };
+}
+
+// A notification the app raised itself. Called on every broadcast of the event
+// behind it, so it has to be idempotent: the id carries the version or the
+// subject it is about, and a second call with the same id changes nothing.
+function note(state, entry, now) {
+  const next = cloneState(normalizeState(state));
+  const id = entry && text(entry.id).trim();
+  const inline = normalizeInline(entry);
+  if (!id || !inline) return { state: next, changed: false };
+  if (next.items[id]) return { state: next, changed: false };
+  next.items[id] = { ts: num(now, Date.now()), read: false, cleared: false, inline };
+  return { state: next, changed: true };
+}
+
+// What the panel draws: newest first, cleared ones gone. A stored id with no
+// catalog row and no inline copy is skipped rather than shown blank -- that is
+// what a catalog entry retired in a later build looks like.
+function list(state, catalog) {
+  const rows = Array.isArray(catalog) ? catalog : CATALOG;
+  const byId = new Map(rows.filter((e) => e && e.id).map((e) => [e.id, e]));
+  const clean = normalizeState(state);
+  const out = [];
+  for (const id of Object.keys(clean.items)) {
+    const record = clean.items[id];
+    if (record.cleared) continue;
+    const source = record.inline || byId.get(id);
+    if (!source) continue;
+    const item = {
+      id,
+      kind: normalizeKind(source.kind),
+      title: text(source.title),
+      body: text(source.body),
+      ts: record.ts,
+      unread: !record.read,
+    };
+    if (source.action && source.action.settings) {
+      item.action = { settings: source.action.settings };
+    } else if (source.action && source.action.view) {
+      item.action = { view: source.action.view };
+    }
+    out.push(item);
+  }
+  out.sort((a, b) => (b.ts - a.ts) || a.id.localeCompare(b.id));
+  return out;
+}
+
+function unreadCount(items) {
+  return (Array.isArray(items) ? items : []).filter((item) => item && item.unread).length;
+}
+
+function markAllRead(state) {
+  const next = cloneState(normalizeState(state));
+  let changed = false;
+  for (const id of Object.keys(next.items)) {
+    if (next.items[id].read || next.items[id].cleared) continue;
+    next.items[id].read = true;
+    changed = true;
+  }
+  return { state: next, changed };
+}
+
+// Clearing keeps the id. The record is the only memory that this notification
+// was ever delivered, and dropping it would put the notification back on the
+// next launch.
+function clearOne(state, id) {
+  const next = cloneState(normalizeState(state));
+  const key = text(id).trim();
+  const record = key && next.items[key];
+  if (!record || record.cleared) return { state: next, changed: false };
+  record.cleared = true;
+  record.read = true;
+  return { state: next, changed: true };
+}
+
+function clearAll(state) {
+  const next = cloneState(normalizeState(state));
+  let changed = false;
+  for (const id of Object.keys(next.items)) {
+    if (next.items[id].cleared) continue;
+    next.items[id].cleared = true;
+    next.items[id].read = true;
+    changed = true;
+  }
+  return { state: next, changed };
+}
+
+// The one runtime notification the app raises today. Only a finished download
+// is stored: a download in progress is drawn live from the update status and
+// forgotten when it ends, because a row that says "43%" is not news worth
+// keeping. The panel offers a restart on this row while the update is still
+// waiting; the words below cover the case where it is not (the row outlives
+// the install, and then just records that it happened).
+function updateReadyEntry(version) {
+  const v = text(version).trim();
+  if (!v) return null;
+  return {
+    id: 'update-ready:' + v,
+    kind: 'update',
+    title: 'Voxden ' + v + ' is ready',
+    body: 'The update is downloaded. Restart Voxden to finish installing it, or it installs when you next quit.',
+    action: { settings: 'system' },
+  };
+}
+
+// The Mac build cannot install its own updates yet (see src/updater.js), so a
+// newer release there is news the moment it is found, not once downloaded.
+function updateAvailableEntry(version) {
+  const v = text(version).trim();
+  if (!v) return null;
+  return {
+    id: 'update-available:' + v,
+    kind: 'update',
+    title: 'Voxden ' + v + ' is out',
+    body: 'Download it from voxden.app/download and drag it over this copy in Applications.',
+    action: { settings: 'system' },
+  };
+}
+
+module.exports = {
+  CATALOG,
+  compareVersions,
+  normalizeState,
+  deliver,
+  note,
+  list,
+  unreadCount,
+  markAllRead,
+  clearOne,
+  clearAll,
+  updateReadyEntry,
+  updateAvailableEntry,
+};

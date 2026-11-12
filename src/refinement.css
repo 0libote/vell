@@ -1,0 +1,185 @@
+/* Shared finishing layer for the existing desktop renderer. */
+:root {
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+}
+
+html, body { background: var(--bg); }
+button, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+button { touch-action: manipulation; }
+button:focus-visible, [role="button"]:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 2px solid var(--mint);
+  outline-offset: 3px;
+}
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; clip-path: inset(50%); overflow: hidden; white-space: nowrap; }
+.pane:not([hidden]) > .pane-body { animation: page-settle 220ms var(--ease-out) both; }
+@keyframes page-settle { from { opacity: .25; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+#view-dictation .premium-title, #view-dictionary .premium-title,
+#view-writing-style .premium-title, #view-insights .premium-title {
+  text-shadow: none;
+}
+.premium-kicker { font-size: 9px; letter-spacing: .13em; }
+.page-description { margin: 3px 0 0; letter-spacing: 0; }
+.premium-heading { gap: 7px; }
+.btn-primary:hover { transform: translateY(-1px); }
+.btn-primary:active, .btn-secondary:active { transform: scale(.97); }
+.btn-primary, .btn-secondary, .icon-btn { transition: background 130ms, transform 130ms var(--ease-out), border-color 130ms; }
+.segmented, .ins-range { border-radius: 9px; padding: 4px; }
+.segmented-btn { border-radius: 6px; transition: background 150ms, color 150ms; }
+.settings-dialog, .vocab-dialog { box-shadow: 0 24px 100px #0007; animation: dialog-settle 180ms var(--ease-out); }
+@keyframes dialog-settle { from { opacity: 0; transform: translateY(7px) scale(.985); } to { opacity: 1; transform: none; } }
+
+/* Home: the recent dictations, with one focused introduction above them.
+   The Dictation page's layout and its cards live in dictation-island.css. */
+.shortcut-launch { font: inherit; }
+.shortcut-launch kbd { text-align: center; }
+.empty { color: #989fa9; line-height: 1.8; }
+
+/* Vocabulary: an overview and a quiet, scannable list. */
+.dict-head { margin-bottom: 24px; align-items: center; }
+.dict-head .btn-primary { min-height: 36px; padding-inline: 15px; white-space: nowrap; }
+.vocab-overview { display: flex; gap: 26px; align-items: center; min-height: 113px; box-sizing: border-box; margin-bottom: 28px; padding: 24px 24px 24px 26px; border: 1px solid var(--brand-border); }
+.vocab-overview-copy { display: flex; flex-direction: column; gap: 6px; flex: 0 0 230px; min-width: 0; }
+.vocab-overview h2 { margin: 0; font-size: 16px; font-weight: 550; letter-spacing: -.022em; }
+.vocab-overview p { margin: 0; }
+/* A correction happening: the heard form, struck out, then the fixed form. */
+.vocab-fix { --fix-bg: var(--bg); flex: 1; min-width: 0; height: 54px; box-sizing: border-box; padding: 0 20px; display: flex; align-items: center; gap: 14px; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--fix-bg); font-family: Georgia, "Iowan Old Style", "Palatino Linotype", Palatino, serif; font-size: 18px; letter-spacing: -.3px; white-space: nowrap; }
+.vocab-fix-from { color: var(--muted); text-decoration: line-through; text-decoration-color: transparent; transition: text-decoration-color 200ms ease; }
+.vocab-fix.is-fixed .vocab-fix-from { text-decoration-color: var(--red); }
+.vocab-fix-arrow { color: var(--accent); opacity: 0; transition: opacity 300ms ease; }
+.vocab-fix-to { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text); font-weight: 700; opacity: 0; transform: translateX(-8px); transition: opacity 300ms ease, transform 300ms cubic-bezier(.2, .9, .3, 1); }
+.vocab-fix.is-fixed :is(.vocab-fix-arrow, .vocab-fix-to) { opacity: 1; transform: none; }
+.vocab-fix.is-running.is-fixed :is(.vocab-fix-arrow, .vocab-fix-to) { transition-delay: 160ms; }
+/* Still (reduced motion, another page, the example): settle without sliding. */
+.vocab-fix:not(.is-running) :is(.vocab-fix-from, .vocab-fix-arrow, .vocab-fix-to) { transition: none; }
+@media (prefers-reduced-motion: reduce) { .vocab-fix :is(.vocab-fix-from, .vocab-fix-arrow, .vocab-fix-to) { transition: none; } }
+.vocab-count { display: flex; flex-direction: column; gap: 7px; padding-left: 22px; border-left: 1px solid var(--border); white-space: nowrap; }
+.vocab-count strong { font-size: 25px; font-weight: 500; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.vocab-count span { font-size: 9px; }
+.dict-toolbar { margin-bottom: 17px; }
+/* Opened in a narrow window, the search gives way rather than overflow. */
+.dict-toolbar .round-search.is-open { flex: 0 1 240px; min-width: 0; }
+.dict-list { gap: 0; border: 1px solid var(--border); overflow: hidden; }
+.dict-list:empty { display: none; }
+.dict-row { border: 0; border-bottom: 1px solid #cce3d30a; padding: 15px 18px; background: var(--surface); min-height: 61px; transition: background 140ms; }
+.dict-row:last-child { border-bottom: 0; }
+.dict-row-actions { opacity: .45; transition: opacity 120ms; }
+.dict-row-arrow { color: var(--mint); font-size: 18px; }
+.dict-row-to, .dict-row-term { font-weight: 550; }
+.dict-empty { border: 1px dashed var(--brand-border); border-radius: 12px; padding: 45px 30px; margin: 0; text-align: center; }
+.list-caption { margin: 12px 2px 0; font-size: 10px; }
+
+/* Writing preferences. The playground lives in writing-preview.css. */
+.writing-section-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 13px; gap: 10px; }
+.writing-section-heading h2 { font-size: 12px; font-weight: 550; margin: 0; }
+.writing-section-heading > span { color: #98a3af; font-size: 9px; }
+
+/* Insights: a readable overview and softer chart cards. */
+.insights-pane { gap: 22px; }
+.ins-header { gap: 19px; }
+.ins-head-top { align-items: center; }
+.ins-range-btn { font-size: 10px; padding: 6px 10px; }
+.ins-tabs { gap: 24px; }
+.ins-tab { font-size: 12px; }
+.ins-subtitle { font-size: 10px; }
+.ins-overview { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--border); padding: 22px 0; }
+.ins-overview > div { padding: 0 24px; display: flex; flex-direction: column; gap: 10px; }
+.ins-overview > div + div { border-left: 1px solid var(--border); }
+.ins-overview span { color: #9fa8b2; font-size: 10px; }
+.ins-overview strong { font-size: 30px; font-weight: 500; letter-spacing: -.05em; font-variant-numeric: tabular-nums; }
+.ins-overview small { font-size: 12px; font-weight: 400; color: #9ca5af; letter-spacing: 0; }
+.ins-grid { gap: 13px; }
+.ins-card { padding: 21px; transition: border-color 150ms, background 150ms; }
+.ins-card h2 { font-weight: 550; letter-spacing: -.025em; }
+.ins-big-num { font-weight: 500; letter-spacing: -.045em; }
+.ins-cap-label { color: #a9b2bc; font-size: 9px; }
+.ins-foot { font-size: 10px; line-height: 1.7; }
+.ins-progress-track { height: 5px; }
+.ins-grid.is-revealing .ins-card { animation-duration: 320ms; animation-delay: calc(var(--i, 0) * 30ms); }
+.ins-heat-cell { transition: transform 120ms, background 120ms; }
+.ins-heat-cell:hover { transform: scale(1.15); }
+
+/* One brand green across the home metrics and their detailed voice view. */
+.ins-profile-status, .ins-profile-percent,
+.ins-profile-step-marker { color: var(--mint); }
+.ins-profile-status { background: var(--mint-soft); border-color: var(--brand-border); }
+.ins-profile-progress-fill {
+  box-shadow: 0 0 8px rgba(var(--mint-rgb), .16);
+}
+.ins-profile-step.is-current .ins-profile-step-marker,
+.ins-profile-step.is-complete .ins-profile-step-marker { border-color: rgba(var(--mint-rgb), .4); background: var(--mint-soft); }
+
+/* Flow styles use fixed preview stages: only their artwork moves. */
+.flow-style-setting { display: block; container-type: inline-size; }
+.flow-style-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-top: 14px; }
+.flow-style-card {
+  position: relative; display: grid; grid-template-rows: 70px auto 1fr; align-content: start;
+  min-width: 0; padding: 0 12px 14px; appearance: none; border: 1px solid var(--border);
+  border-radius: 11px; color: var(--text); text-align: left; font: inherit;
+  cursor: pointer; transition: border-color 160ms, background-color 160ms, box-shadow 160ms;
+}
+.flow-style-card[aria-checked="true"] { box-shadow: inset 0 1px 0 #ffffff05; }
+.flow-style-card:focus-visible { outline-offset: 3px; }
+.flow-style-name { display: block; font-size: 11px; font-weight: 600; letter-spacing: -.01em; line-height: 1.5; }
+.flow-style-description { display: block; margin-top: 5px; color: var(--muted); font-size: 10px; line-height: 1.55; }
+.flow-style-selected { position: absolute; right: 9px; top: 9px; width: 9px; height: 9px; border: 1px solid #87939055; border-radius: 50%; }
+.flow-style-selected::after { content: ''; position: absolute; inset: 2px; border-radius: inherit; background: var(--mint); opacity: 0; transition: opacity 130ms; }
+.flow-style-card[aria-checked="true"] .flow-style-selected { border-color: var(--mint); }
+.flow-style-card[aria-checked="true"] .flow-style-selected::after { opacity: 1; }
+.flow-style-preview { position: relative; display: grid; place-items: center; align-self: stretch; min-width: 0; height: 70px; color: var(--mint); pointer-events: none; }
+/* Island is the recording capsule, drawn still in fixed colours so it reads the
+   same in both app themes: a black body, one hairline, grey keys and mint bars.
+   No shadow, glow, transition or animation. */
+.flow-preview-island-cap { display: flex; align-items: center; justify-content: space-between; box-sizing: border-box; width: 96px; height: 22px; padding: 0 2px; border: 1px solid rgba(255, 255, 255, .24); border-radius: 11px; background: #000; }
+.flow-preview-island-key { display: grid; place-items: center; flex: none; width: 16px; height: 16px; border-radius: 50%; background: #2c2c2e; }
+.flow-preview-island-key svg { display: block; fill: none; stroke: rgba(235, 235, 245, .78); stroke-width: 2; stroke-linecap: round; }
+.flow-preview-island-stop::before { content: ''; width: 6px; height: 6px; border-radius: 1.5px; background: #fff; }
+.flow-preview-island-wave { display: block; flex: none; fill: none; stroke: #9cf3c4; stroke-width: 2; stroke-linecap: round; }
+.flow-preview-orb-shell { position: relative; isolation: isolate; display: grid; place-items: center; width: 44px; height: 44px; transform: scale(.95); transition: transform 240ms var(--ease-out); }
+.flow-preview-orb-shell::before { content: ''; position: absolute; inset: 4px; z-index: -1; border-radius: 50%; background: radial-gradient(circle, rgba(var(--mint-rgb), .19), rgba(var(--mint-rgb), .05) 55%, transparent 75%); opacity: .25; transform: scale(1); transition: opacity 240ms ease, transform 300ms var(--ease-out); }
+.flow-preview-orb-canvas { display: block; width: 44px; height: 44px; }
+.flow-style-card:is(:hover, :focus-visible) .flow-preview-orb-shell { transform: scale(1.05); }
+.flow-style-card:is(:hover, :focus-visible) .flow-preview-orb-shell::before { opacity: .7; transform: scale(1.15); }
+.flow-style-hint, .flow-style-status { margin: 11px 0 0; font-size: 10px; line-height: 1.65; color: var(--muted); }
+.flow-style-status { color: var(--red); }
+@container (max-width: 440px) {
+  .flow-style-options { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .flow-style-card { grid-template-columns: 102px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 8px; padding: 10px 24px 10px 0; }
+  .flow-style-preview { grid-row: 1 / 3; height: 58px; }
+  .flow-preview-island-cap { transform: scale(.85); }
+  .flow-style-name { align-self: end; }
+  .flow-style-description { align-self: start; margin-top: 3px; }
+}
+
+@media (max-width: 1000px) {
+  .vocab-overview { flex-wrap: wrap; gap: 20px; }
+  .vocab-overview-copy, .vocab-fix { flex-basis: 100%; }
+  .vocab-count { padding-left: 0; border: 0; flex: 1; }
+  .vocab-count + .vocab-count { padding-left: 20px; border-left: 1px solid var(--border); }
+}
+@media (max-width: 820px) {
+  .ins-head-top { align-items: flex-start; }
+  .ins-range { flex-shrink: 0; }
+  .ins-overview > div { padding-inline: 15px; }
+  .ins-overview strong { font-size: 25px; }
+  .ins-overview span { font-size: 9px; }
+}
+@media (max-width: 700px) {
+  .dict-head { gap: 12px; flex-wrap: wrap; }
+  .ins-head-top { flex-direction: column; gap: 17px; }
+  .ins-overview { padding-block: 17px; }
+  .ins-overview > div { padding-inline: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Flow previews have their own explicit preference. Other app motion still
+     follows Windows even when the user enables flow bar animations. */
+  *:not(.flow-style-setting, .flow-style-setting *),
+  *:not(.flow-style-setting, .flow-style-setting *)::before,
+  *:not(.flow-style-setting, .flow-style-setting *)::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; animation-delay: 0ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+  .pane:not([hidden]) > .pane-body { animation: none; }
+}
+:where(html[data-flow-motion="reduced"]) .flow-style-setting *,
+:where(html[data-flow-motion="reduced"]) .flow-style-setting *::before,
+:where(html[data-flow-motion="reduced"]) .flow-style-setting *::after { animation: none !important; transition: none !important; }
+:where(html[data-flow-motion="reduced"]) .flow-style-card:is(:hover, :focus-visible) .flow-preview-orb-shell { transform: scale(.95); }
+:where(html[data-flow-motion="reduced"]) .flow-style-card:is(:hover, :focus-visible) .flow-preview-orb-shell::before { opacity: .25; transform: none; }

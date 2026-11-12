@@ -1,0 +1,911 @@
+:root {
+  --mint: #9cf3c4;
+  --mint-rgb: 156, 243, 196;
+  /* One curve and one duration for every flow-bar morph, so bar -> mic -> recording
+     all read as the same piece of motion instead of three separate tweens.
+     Eased at both ends: a front-loaded ease-out covers a fifth of the distance
+     in the first frame, which reads as a lurch on a shape this small. */
+  --spring: cubic-bezier(0.4, 0, 0.2, 1);
+  --morph: 240ms;
+  /* Content chips can ease towards their natural width. The capsule itself
+     always follows their width plus its padding, without a second tween. */
+  interpolate-size: allow-keywords;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+body {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 10px;
+  box-sizing: border-box;
+}
+
+.flow-hit {
+  --flow-side-offset: 21px;
+  --flow-side-bottom: 14px;
+  --flow-capture-bottom: 48px;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  flex: 0 0 auto;
+  padding: 22px 26px 10px;
+  pointer-events: none;
+}
+
+/* --- Hover cluster ---------------------------------------------------------
+   Screenshot above, settings left, grip right. Each control travels from the
+   centre along its own axis. Absolute positions keep their destinations steady
+   while the pill morphs, and reversing a hover retraces the current motion. */
+.flow-side {
+  position: absolute;
+  /* The expanded pill is a 32px circle whose bottom sits on the hit area's
+     10px floor, so its centre is 26px up and a 24px button centres at 14. */
+  bottom: var(--flow-side-bottom);
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  appearance: none;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 50%;
+  background: rgba(10, 10, 12, 0.92);
+  color: rgba(255, 255, 255, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  outline: none;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translate(var(--flow-from-x, 0px), var(--flow-from-y, 0px)) scale(.6);
+  transform-origin: center;
+  will-change: transform, opacity;
+  transition:
+    opacity 140ms ease,
+    transform 180ms cubic-bezier(.4, 0, .6, 1),
+    visibility 0s linear 180ms,
+    color 160ms ease,
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+
+.flow-settings {
+  --flow-from-x: 24px;
+  right: calc(50% + var(--flow-side-offset));
+  cursor: pointer;
+}
+
+.flow-capture {
+  --flow-from-y: 28px;
+  left: calc(50% - 12px);
+  bottom: var(--flow-capture-bottom);
+  cursor: pointer;
+}
+
+.flow-drag {
+  --flow-from-x: -24px;
+  left: calc(50% + var(--flow-side-offset));
+  cursor: grab;
+}
+
+/* Only alongside the resting bar. Every other pill state owns the space these
+   would sit in -- the recording capsule, the success line and its edit box all
+   grow outwards from the same centre. */
+body.shown.always-flow.flow-expanded.flow-idle .flow-side {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: none;
+  transition:
+    opacity 180ms ease-out,
+    transform 300ms cubic-bezier(.16, 1, .3, 1),
+    visibility 0s,
+    color 160ms ease,
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+
+/* A small second beat lets the top action unfold after the two side handles. */
+body.shown.always-flow.flow-expanded.flow-idle .flow-capture {
+  transition-delay: 30ms, 30ms, 0s, 0s, 0s, 0s;
+}
+
+.flow-side:hover {
+  color: #ffffff;
+  background: rgba(28, 28, 32, 0.96);
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+.flow-drag:hover,
+body.flow-dragging .flow-drag {
+  color: var(--mint);
+  border-color: rgba(184, 213, 200, 0.4);
+}
+
+body.flow-dragging .flow-drag {
+  cursor: grabbing;
+}
+
+/* Nothing should read as clickable while the bar is being carried. */
+body.flow-dragging .pill.idle {
+  cursor: grabbing;
+}
+
+body.shown .flow-hit {
+  pointer-events: auto;
+}
+
+.pill {
+  /* The waveform brightens towards pearl white as input rises; the app's
+     accent remains in the capsule's restrained inner edge. */
+  --mic: #ffffff;
+  --voice-glow: 0;
+  /* Always a length, never a percentage. `left` is measured from the padding
+     box, so 15px is the centre of the 32px hover circle and also the mic's slot
+     in arming -- the click morph moves it by zero. It used to default to 50%,
+     and interpolating 50% -> 15px resolves that half against a width that is
+     itself mid-animation, which sent the mic two pixels right and back on every
+     click. Each shape that is not 32px wide names its own offset below. */
+  --mic-left: 15px;
+  /* Space between chips. Applied as half a gap on each chip rather than as the
+     flex `gap`, because `gap` is charged per item -- including the collapsed
+     ones -- and six invisible chips were padding the capsule by thirty pixels
+     it had no content for. */
+  --chip-gap: 6px;
+  appearance: none;
+  box-sizing: border-box;
+  position: relative;
+  /* Not flat black on a hairline. A near-black that still has a hue, a rim
+     bright enough to separate it from a dark desktop, and real elevation
+     underneath: without a shadow the bar sits on the screen like a sticker
+     rather than floating above whatever is behind it. The shadow's total
+     reach stays inside the clearance below the pill so the window edge never
+     cuts it off. */
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  background: #0d0d11;
+  color: #ffffff;
+  height: 32px;
+  width: auto;
+  min-width: 0;
+  max-width: 200px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: 4px 1px;
+  box-shadow:
+    0 5px 12px rgba(0, 0, 0, 0.5),
+    0 1px 2px rgba(0, 0, 0, 0.55);
+  filter: none;
+  cursor: default;
+  outline: none;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(8px) scale(0.94);
+  transform-origin: 50% 100%;
+  /* No `will-change` here. It gave the capsule a layer of its own, and a
+     layer's corner is snapped to whole pixels. The capsule is centred and its
+     size animates, so that corner crosses a pixel boundary every frame or two,
+     and everything inside -- drawn from the corner, but placed from the centre
+     and the floor -- hopped a pixel each time it did: the mic shook as the bar
+     opened, at every display scale, while its layout box never moved. The pop
+     in and out still get a layer for as long as they run; animations do that
+     by themselves. */
+  transition:
+    height var(--morph) var(--spring),
+    border-radius var(--morph) var(--spring),
+    padding var(--morph) var(--spring),
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    opacity 140ms ease,
+    transform var(--morph) var(--spring);
+}
+
+/* The sheen: a top-lit highlight fading into a floor shadow, on its own layer
+   so it can cross-fade rather than fight the pill's background-color
+   transition. Two pixels of gradient are the difference between a shape that
+   reads as a physical object and one that reads as a filled rectangle. */
+.pill::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.13) 0%,
+    rgba(255, 255, 255, 0.03) 38%,
+    rgba(255, 255, 255, 0) 62%,
+    rgba(0, 0, 0, 0.22) 100%
+  );
+  opacity: 1;
+  transition: opacity 260ms ease;
+}
+
+/* The glow gets its own layer. Only opacity/transform animate on it, so the
+   pulse is composited instead of repainting a blurred box-shadow every frame,
+   and it no longer competes with the pill for the single `animation` slot.
+   No spread on the shadows: a spread radius keeps the shadow at full strength
+   for that many pixels before the blur falls off, which reads as a hard stroke
+   around the bar rather than a glow. Total reach stays under the clearance
+   below the bar so the halo is never clipped by the window edge. */
+.pill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  will-change: opacity, transform;
+  box-shadow:
+    0 0 8px rgba(184, 213, 200, 0.5),
+    0 0 18px rgba(184, 213, 200, 0.26);
+  transition: opacity 320ms ease, transform 320ms var(--spring);
+}
+
+body.shown .pill {
+  pointer-events: auto;
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+body.shown.entering .pill {
+  animation: popIn 240ms cubic-bezier(0.16, 1.14, 0.24, 1) forwards;
+}
+
+body.hiding .pill {
+  pointer-events: none;
+  animation: popOut 160ms cubic-bezier(0.4, 0.0, 0.7, 0.2) both;
+}
+
+@keyframes popIn {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes popOut {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.92);
+  }
+}
+
+.pill.idle {
+  /* The empty circle is 30px of padding plus its rim. Animating an explicit
+     width towards auto while its chips also animate applied easing twice;
+     the capsule briefly shrank on click and pulled the mic backwards. */
+  padding: 0 15px;
+}
+
+body.always-flow .pill.idle {
+  cursor: pointer;
+}
+
+/* --- Flow bar shapes -------------------------------------------------------
+   Each style draws its own resting and open shapes in flow-styles.css: Island
+   a small black pill that opens into its capsule, Orb a sphere. Neither rests
+   with a glow, a sheen or anything else that moves. */
+
+/* The mic stays on one absolute layer for its whole life, in every state --
+   not only the four that draw it. It used to be display:none in the outcome
+   states, which made it a flex child the moment that rule stopped matching,
+   and a chip appearing in the row is a width change the capsule then has to
+   chase. Off the flow entirely, it can never move the shape around it. */
+.glyph-mic {
+  position: absolute;
+  top: 50%;
+  left: var(--mic-left);
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.72);
+  transform-origin: center;
+  pointer-events: none;
+  transition:
+    left var(--morph) var(--spring),
+    opacity 110ms ease-out,
+    transform 130ms cubic-bezier(.4, 0, 1, 1);
+}
+
+.pill.idle .glyph-mic,
+.pill.arming .glyph-mic,
+.pill.recording .glyph-mic {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+  transition:
+    left var(--morph) var(--spring),
+    opacity 140ms ease-out,
+    transform 190ms cubic-bezier(.16, 1, .3, 1);
+}
+
+:where(html[data-flow-motion="reduced"]) :is(.act, .wave, .dots, .label, .glyph-check, .glyph-error) {
+  transition: opacity 120ms ease, display 120ms allow-discrete;
+  transform: none;
+}
+
+/* Every state that carries content is four pixels taller than the idle circle.
+   A 21px chip inside a 32px capsule left three pixels of air above and below
+   it, which is what made the bar look cramped rather than composed. */
+.pill.recording,
+.pill.arming,
+.pill.transcribing,
+.pill.success,
+.pill.learned,
+.pill.error,
+.pill.cancel {
+  height: 36px;
+}
+
+/* Horizontal padding is written net of a half gap, because the outermost chip
+   carries one of its own. `--chip-gap: 6px` plus `padding-inline: 4px` is the
+   same 7px of air the capsule always had between its rim and the first chip. */
+.pill.recording {
+  --mic-left: 42px;
+  --chip-gap: 6px;
+  width: auto;
+  min-width: 0;
+  padding: 4px 4px;
+  justify-content: center;
+  /* Keep the taller bars and their glow inside the capsule boundary. */
+  overflow: hidden;
+}
+
+/* No `min-width` on either of the two dots states, even though both used one to
+   reach their resting size. A minimum is a max() against the content width, and
+   two eased curves that cross under a max() come out of it with a kink: leaving
+   recording, the capsule undershot transcribing's 72px by ten and then grew
+   back into it. The same air, spent as padding, is part of the content width
+   instead of an argument with it. */
+.pill.arming {
+  --chip-gap: 5px;
+  min-width: 0;
+  padding: 4px 25.5px;
+}
+
+.pill.transcribing {
+  --chip-gap: 6px;
+  min-width: 0;
+  padding: 4px 12px 4px 44px;
+}
+
+.pill.success,
+.pill.learned {
+  --chip-gap: 7px;
+  min-width: 0;
+  padding: 4px 6.5px;
+}
+
+.pill.error {
+  --chip-gap: 7px;
+  min-width: 0;
+  padding: 4px 6.5px;
+}
+
+/* A cancel is not a failure, so it borrows the error layout but none of its
+   alarm: the same X mark, drawn in the muted grey the idle bar already uses. */
+.pill.cancel {
+  --chip-gap: 6px;
+  min-width: 0;
+  padding: 4px 7px;
+}
+
+.glyph {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--mic, #ffffff);
+}
+
+/* Island-only artwork. Every other style keeps its X for errors, its own gear
+   and screenshot icons, and never draws the spinner or the line's fading
+   twin; flow-styles.css turns them on for Island. */
+.glyph-bang,
+.spinner,
+.label-twin,
+.side-icon-island {
+  display: none;
+}
+
+/* Island's spacer around the line. Elsewhere it has no box, so the line is a
+   chip of the capsule exactly as it always was. */
+.line {
+  display: contents;
+}
+
+/* The markup sizes each icon, so the mic is scaled here rather than there --
+   at 12px beside a pair of 21px chips it read as an afterthought. */
+.glyph-mic svg {
+  width: 15px;
+  height: 15px;
+  transform-box: view-box;
+  transform-origin: center;
+}
+
+/* The outcome marks get a disc too, but a tinted one with no rim: a ring is
+   what the capsule uses to say "button", and neither of these is one. */
+.pill.success .glyph-check,
+.pill.learned .glyph-check,
+.pill.error .glyph-error,
+.pill.cancel .glyph-error {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  margin-inline: calc(var(--chip-gap) / 2);
+  opacity: 1;
+  transform: none;
+}
+
+.pill.success .glyph-check,
+.pill.learned .glyph-check {
+  background: rgba(74, 222, 128, 0.16);
+}
+
+.pill.error .glyph-error {
+  background: rgba(248, 113, 113, 0.16);
+}
+
+.pill.cancel .glyph-error {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.pill.success .glyph-check,
+.pill.learned .glyph-check {
+  color: #5fe093;
+}
+
+.pill.error .glyph-error {
+  color: #ff7d7d;
+}
+
+.pill.cancel .glyph-error {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* Both marks live in a chip of their own rather than floating loose on the
+   capsule. A bare glyph on a dark fill has no target to aim at and no state to
+   show; a ring gives it both, and the pair of them read as controls instead of
+   as decoration. */
+.act {
+  appearance: none;
+  width: 21px;
+  height: 21px;
+  padding: 0;
+  box-sizing: border-box;
+  /* The rim is an inset shadow rather than a border, because a border has a
+     floor: sub-pixel widths are snapped up to one device pixel, so a chip
+     collapsing to nothing stuck at 0.96px until the very last frame of the
+     morph and then dropped the three pixels the two of them were holding open.
+     A shadow costs the box no width, so the chip really does reach zero. */
+  border: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  cursor: pointer;
+  outline: none;
+  /* A chip on its way out is still on screen for the length of the fade, and
+     a half-faded Cancel that still takes clicks is worse than no Cancel. */
+  pointer-events: none;
+}
+
+.pill.success.can-polish .act-polish,
+.pill.recording .act-cancel,
+.pill.recording .act-confirm,
+.pill.success.can-retry .act-confirm,
+.pill.error.can-retry .act-confirm {
+  width: 21px;
+  margin-inline: calc(var(--chip-gap) / 2);
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+/* Reserve the mic's old flex slot between Cancel and the waveform while the
+   visible mic itself remains on the stable absolute animation layer. */
+.pill.recording .act-cancel {
+  margin-right: calc(var(--chip-gap) / 2 + 21px);
+}
+
+.act-cancel { color: #ff7d7d; }
+.act-cancel:hover {
+  background: rgba(248, 113, 113, 0.22);
+  box-shadow:
+    inset 0 0 0 1px rgba(248, 113, 113, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+.act-confirm { color: #5fe093; }
+.act-confirm:hover {
+  background: rgba(74, 222, 128, 0.22);
+  box-shadow:
+    inset 0 0 0 1px rgba(74, 222, 128, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+/* Polish (Pro) rewrites the result just pasted. Gold, the colour Pro wears in
+   the app, as a solid disc with a dark sparkle so it stands out from the
+   grey controls beside it. */
+.act-polish {
+  color: #1f1600;
+  background: #F5C84C;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 236, 170, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.act-polish svg { width: 12px; height: 12px; }
+.act-polish:hover {
+  background: #FFD86A;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 244, 200, 0.75),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+/* One chip, two jobs, two faces. While recording it is Stop, and wears the
+   square everyone knows from a tape deck, so a bar that is still listening
+   cannot be mistaken for one that has finished. After a result it is Retry
+   and wears the arrow. It used to be a tick in both states, and what the tick
+   would do right now was a real question. */
+.act-confirm { position: relative; }
+/* Both glyphs are stacked in the chip's centre and only one is lit. Neither
+   takes part in layout, so the swap cannot move the row -- the capsule is as
+   wide as its chips, and a glyph that appeared by display would have moved it
+   in a step. No fade of its own: the chip fades in around it, and the two
+   states are never on screen back to back. */
+.act-confirm .ico {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  opacity: 0;
+}
+.pill.recording .act-confirm .ico-stop { opacity: 1; }
+.pill.success.can-retry .act-confirm .ico-retry,
+.pill.error.can-retry .act-confirm .ico-retry { opacity: 1; }
+
+/* After the shown rules, so a hover scale is not undone by `transform: none`. */
+.act:hover { transform: scale(1.09); }
+.act:active { transform: scale(0.93); }
+
+/* --- Content entry ---------------------------------------------------------
+   The capsule sizes itself with `width: auto`, so its width is whatever its
+   chips currently measure. That only works if the chips change size the way
+   the capsule does -- over the morph, one frame at a time.
+
+   Hiding them with `display` broke that twice over. `none` and `flex` are not
+   a size, so the row's measurement jumped between two numbers with nothing in
+   between; and `allow-discrete` put that jump 300ms into a 340ms morph, so the
+   capsule chased a target that moved out from under it at 88% and snapped the
+   last stretch. Worse, a state whose declared width was already `auto` got no
+   transition at all -- `auto` to `auto` is not a change, so the capsule simply
+   teleported to its new content the instant the class flipped. Arming into
+   recording covered a hundred pixels in one frame that way.
+
+   So a hidden chip is a zero-width chip instead: same box, no size. It keeps
+   its display and eases its width and margins on the morph curve, and `auto`
+   follows it continuously the whole way. Even the empty idle shapes use only
+   padding, so entering or interrupting them never adds a second width tween.
+
+   The mic is not in this set. It lives on an absolute layer, contributes no
+   width to anything, and has its own tuned motion. */
+.act,
+.wave,
+.dots,
+.label,
+.glyph-check,
+.glyph-error {
+  width: 0;
+  min-width: 0;
+  margin-inline: 0;
+  padding-inline: 0;
+  /* A collapsed box still has its contents laid out inside it; without this
+     they hang out either side of a nought-wide chip. */
+  overflow: hidden;
+  opacity: 0;
+  transform: scale(0.6);
+  flex: 0 0 auto;
+  transition:
+    width var(--morph) var(--spring),
+    margin var(--morph) var(--spring),
+    opacity 140ms ease,
+    transform var(--morph) var(--spring),
+    background-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+/* The strip is the one chip that cannot be collapsed by clipping it: the bars
+   carry a glow, and a box tight enough to hide them would cut it off while they
+   are lit. So the bars shrink and the strip stays `auto` -- which is also the
+   only way it stays honest. Easing the strip's own width towards a target that
+   is itself easing gives a curve that is the product of two, and a capsule
+   whose width is one such term plus several plain ones is no longer monotonic:
+   the mic drifted two pixels the wrong way early in the morph. One easing per
+   term, and the sum of them can only move one way. */
+.wave {
+  position: relative;
+  isolation: isolate;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  gap: 0;
+  pointer-events: none;
+  overflow: visible;
+  color: #cdd3da;
+  transition:
+    margin var(--morph) var(--spring),
+    column-gap var(--morph) var(--spring),
+    opacity 140ms ease,
+    transform var(--morph) var(--spring);
+}
+
+/* Fixed-height bars keep the travelling ripple off the layout path. The
+   inset hairline adds definition without changing the capsule's geometry. */
+.wave i {
+  position: relative;
+  display: inline-block;
+  width: 0;
+  height: 22px;
+  border-radius: 99px;
+  color: inherit;
+  background: linear-gradient(180deg, color-mix(in srgb, currentColor 84%, white), currentColor 45%, color-mix(in srgb, currentColor 92%, transparent));
+  box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .24);
+  filter: none;
+  transform: scaleY(0.15);
+  transform-origin: 50% 50%;
+  will-change: transform;
+  flex: 0 0 auto;
+  /* Never transform: updateWave writes that inline sixty times a second, and a
+     transition on it would fight every one of those writes. Width is safe --
+     nothing touches it after the strip has opened. */
+  transition: width var(--morph) var(--spring);
+}
+
+.pill.recording .wave {
+  margin-inline: calc(var(--chip-gap) / 2);
+  /* Wider bars with air between them. At 1.5px the strip read as a hairline
+     texture rather than as a voice; the extra pixel is what makes each bar a
+     bar. */
+  column-gap: 2.5px;
+  opacity: 1;
+  transform: none;
+}
+
+.pill.recording .wave i {
+  width: 2.5px;
+}
+
+/* Static halo layers fade with the meter's continuous energy. No animated
+   blur or box-shadow, no threshold class, and no extra layout-sized children.
+   Bars stop at 19px high, leaving breathing room for the 3px light falloff. */
+.wave::before {
+  content: '';
+  position: absolute;
+  inset: -2px -5px;
+  z-index: -1;
+  background: radial-gradient(ellipse, rgba(222, 232, 240, .19), rgba(222, 232, 240, .055) 46%, rgba(222, 232, 240, 0) 74%);
+  border-radius: 50%;
+  opacity: var(--voice-glow);
+  pointer-events: none;
+}
+.wave i::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 3px rgba(232, 241, 248, .5);
+  opacity: var(--voice-glow);
+  pointer-events: none;
+}
+.pill.recording .wave::before,
+.pill.recording .wave i::after { will-change: opacity; }
+.pill.recording::after {
+  box-shadow: inset 0 0 0 1px rgba(184, 213, 200, .22), inset 0 0 8px rgba(184, 213, 200, .055);
+  opacity: var(--voice-glow);
+  transition: none;
+}
+
+.dots {
+  /* Reserve this slot with capsule padding. A loading chip that grows and
+     immediately collapses when the mic becomes ready reverses its transition
+     faster than the new controls enter, briefly narrowing the capsule. */
+  position: absolute;
+  top: 50%;
+  left: 15px;
+  margin-top: -13px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.dots i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #c8c8cc;
+  opacity: 0.35;
+  animation: blink 1s infinite;
+  flex: 0 0 auto;
+}
+.dots i:nth-child(2) { animation-delay: 0.15s; }
+.dots i:nth-child(3) { animation-delay: 0.3s; }
+
+.pill.arming .dots,
+.pill.transcribing .dots {
+  width: 15px;
+  margin-inline: 0;
+  opacity: 1;
+  transform: none;
+}
+.pill.arming .dots { left: 28px; }
+
+/* The star rotates inside a fixed 26px slot. Only the SVG group rotates;
+   its positioning box stays still during generation. */
+.pill.transcribing .dots { width: 26px; }
+.generation-star {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 24px;
+  height: 24px;
+  color: #d4e2df;
+  opacity: 0;
+  transition: opacity 130ms ease;
+  pointer-events: none;
+}
+.pill.transcribing .generation-star { opacity: 1; }
+.generation-star-turn { transform-box: view-box; transform-origin: 50% 50%; }
+.pill.transcribing .generation-star-turn { animation: generation-turn 2100ms linear infinite; }
+.generation-star-glint { opacity: 0; transform-box: fill-box; transform-origin: center; }
+.pill.transcribing .generation-star-glint { animation: generation-glint 1400ms ease-in-out infinite; }
+@keyframes generation-turn { to { transform: rotate(360deg); } }
+@keyframes generation-glint { 0%, 100% { opacity: .15; transform: scale(.55); } 50% { opacity: .75; transform: scale(.85); } }
+
+.label {
+  font-size: 11px;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+  display: block;
+  color: #ffffff;
+  /* The one chip that has to give. Every other one is a fixed size the capsule
+     is built around, but a transcript is as long as it is, and the capsule
+     stops growing at 200px. Without this the line keeps its full width and
+     hangs out of both ends of the pill instead of ellipsising inside it. */
+  flex-shrink: 1;
+}
+
+/* Either because the state always carries a line, or because setHud was handed
+   one -- the loading note during transcribing is the only case of the second. */
+/* `fit-content`, not `auto`. Both name the line's natural width, but `auto`
+   resolves it against the room left in the capsule and ignores the ceiling the
+   line is held to, so on a long transcript it eased towards a target sixty
+   pixels past where the line actually ends up -- the capsule ran out ahead of
+   the chips it was replacing and bulged fourteen pixels before the clamp pulled
+   it back. `fit-content` lands on the width the line really settles at, for a
+   line of any length, so the term eases once and stops. */
+.pill.success .label,
+.pill.error .label,
+.pill.cancel .label,
+.pill.has-line .label {
+  width: fit-content;
+  margin-inline: calc(var(--chip-gap) / 2);
+  opacity: 1;
+  transform: none;
+}
+
+.pill.cancel .label {
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.pill.success .label {
+  cursor: text;
+  max-width: 240px;
+}
+
+.pill.success .label:focus {
+  outline: none;
+  white-space: normal;
+  overflow: auto;
+  max-width: 300px;
+}
+
+/* A learned word and its Undo action need more room than the transcript chip.
+   Keep the label flexible so the button remains reachable on small displays. */
+.pill.learned {
+  max-width: min(400px, calc(100vw - 52px));
+  border-color: rgba(184, 213, 200, .26);
+}
+
+.pill.learned .label {
+  max-width: 290px;
+  cursor: default;
+}
+
+.act-undo {
+  height: 24px;
+  border-radius: 7px;
+  color: var(--mint);
+  font: 600 11px "Segoe UI", system-ui, sans-serif;
+  white-space: nowrap;
+}
+
+.pill.learned.can-undo .act-undo {
+  width: 46px;
+  margin-inline: calc(var(--chip-gap) / 2);
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.pill.learned.can-undo .act-undo:disabled {
+  opacity: .55;
+  cursor: wait;
+}
+
+.act-undo:hover { background: rgba(184, 213, 200, .16); }
+
+@keyframes blink {
+  0%, 80%, 100% { opacity: 0.25; }
+  40% { opacity: 1; }
+}
+
+/* Feedback stays on inner layers so it never disturbs the capsule's morph. */
+.dots i { animation: none; transition: opacity 120ms ease; }
+.pill.transcribing .dots i { opacity: 0; }
+.pill.arming .dots i { animation: processing-hop 780ms ease-in-out infinite; }
+.pill.arming .dots i:nth-child(2) { animation-delay: 100ms; }
+.pill.arming .dots i:nth-child(3) { animation-delay: 200ms; }
+.pill.transcribing { border-color: rgba(195, 213, 221, .22); }
+.pill.transcribing::before { animation: generation-breathe 2100ms ease-in-out infinite; }
+.flow-settings:hover svg { transform: rotate(30deg); }
+.flow-settings svg { transition: transform 220ms ease-out; }
+.pill.success { border-color: rgba(184, 213, 200, .26); }
+.pill.success .glyph-check svg { animation: flow-check-pop 300ms cubic-bezier(.2, 1.4, .4, 1) both; }
+.pill.success .glyph-check path { stroke-dasharray: 24; stroke-dashoffset: 0; animation: flow-check-draw 280ms ease-out both; }
+.pill.error .glyph-error svg { animation: flow-error-nudge 260ms ease-out; }
+.flow-side:focus-visible, .act:focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
+@keyframes generation-breathe { 0%, 100% { opacity: .5; } 50% { opacity: .9; } }
+@keyframes processing-hop { 0%, 70%, 100% { transform: translateY(0); opacity: .35; } 35% { transform: translateY(-2px); opacity: 1; } }
+@keyframes flow-check-pop { from { transform: scale(.55); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes flow-check-draw { from { stroke-dashoffset: 24; } to { stroke-dashoffset: 0; } }
+@keyframes flow-error-nudge { 0%, 100% { transform: translateX(0); } 30% { transform: translateX(-2px); } 65% { transform: translateX(2px); } }
+
+:where(html[data-flow-motion="reduced"]) *, :where(html[data-flow-motion="reduced"]) *::before, :where(html[data-flow-motion="reduced"]) *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; animation-delay: 0ms !important; transition-duration: .01ms !important; transition-delay: 0ms !important; }
+:where(html[data-flow-motion="reduced"]) .generation-star-turn, :where(html[data-flow-motion="reduced"]) .generation-star-glint { animation: none !important; transform: none !important; }
+:where(html[data-flow-motion="reduced"]) .pill.transcribing .generation-star-glint { opacity: .4; }
+:where(html[data-flow-motion="reduced"]) .pill.transcribing::before { animation: none !important; }

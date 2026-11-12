@@ -1,0 +1,51 @@
+node_modules/
+models/
+.venv/
+venv/
+temp/
+data/
+dist/
+*.wav
+__pycache__/
+*.pyc
+.cache/
+huggingface/
+*.log
+training/work/
+.claude/settings.local.json
+.claude/worktrees/
+scripts/vocabulary-pack.personal.json
+# Prompt scripts carrying private vocabulary; see training/record.py --prompts.
+*.personal.txt
+dist-runtime/
+dist-runtime-extracted/
+dist-cuda-pack/
+dist-model/
+
+dist-runtime-v3/
+dist-qwen-cuda-pack/
+dist-qwen-rocm-pack/
+.claude/
+
+# Account service database
+server/data/
+
+# Deployment secrets
+deploy/.env
+
+# Local agent skills (Higgsfield), installed per machine
+.agents/
+skills-lock.json
+
+# Credentials that must never be committed
+.env
+.env.*
+!.env.example
+!*.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*service-account*.json
+keystore.properties
+google-services.json
