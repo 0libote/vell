@@ -46,7 +46,7 @@ async function main() {
   assert.strictEqual(fs.statSync(runtimePath).size, manifest.runtime.size);
   assert.strictEqual(await sha256File(runtimePath), manifest.runtime.sha256, 'bundled runtime hash mismatch');
   const highlights = require('../src/announcements').CATALOG.filter(row => row.since === pkg.version);
-  const installer = path.join(output, 'Voxden-Setup-' + pkg.version + '.exe');
+  const installer = path.join(output, 'Vell-Setup-' + pkg.version + '.exe');
   const report = {
     version: built.version, sourceFiles, sidecarFiles,
     releaseHighlights: highlights.map(row => ({ id: row.id, title: row.title })),

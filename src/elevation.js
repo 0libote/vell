@@ -117,9 +117,9 @@ function psLiteral(value) {
 }
 
 // The script that asks Windows to start `cmd` as administrator. It prints one
-// line: VOXDEN_OK once Windows has started it, VOXDEN_CANCELLED when the user
+// line: VELL_OK once Windows has started it, VELL_CANCELLED when the user
 // said no at the prompt (error 1223, the same in every language), or
-// VOXDEN_FAILED and the reason. ProcessStartInfo with the runas verb is what
+// VELL_FAILED and the reason. ProcessStartInfo with the runas verb is what
 // Start-Process -Verb RunAs calls; called directly, its error keeps the
 // Windows error code, where Start-Process hands back only the message.
 function elevatedStartScript(cmd) {
@@ -133,12 +133,12 @@ function elevatedStartScript(cmd) {
     "$psi.Verb = 'runas'",
     'try {',
     '  $null = [System.Diagnostics.Process]::Start($psi)',
-    "  [Console]::Out.WriteLine('VOXDEN_OK')",
+    "  [Console]::Out.WriteLine('VELL_OK')",
     '} catch {',
     '  $e = $_.Exception',
     '  while ($e -and -not ($e -is [System.ComponentModel.Win32Exception])) { $e = $e.InnerException }',
-    "  if ($e -and $e.NativeErrorCode -eq 1223) { [Console]::Out.WriteLine('VOXDEN_CANCELLED') }",
-    "  else { [Console]::Out.WriteLine('VOXDEN_FAILED ' + $_.Exception.Message) }",
+    "  if ($e -and $e.NativeErrorCode -eq 1223) { [Console]::Out.WriteLine('VELL_CANCELLED') }",
+    "  else { [Console]::Out.WriteLine('VELL_FAILED ' + $_.Exception.Message) }",
     '}',
   ].join('\r\n');
 }
@@ -154,9 +154,9 @@ function encodeCommand(script) {
 function startResult(stdout) {
   const lines = String(stdout || '').split(/\r?\n/).map((line) => line.trim());
   const line = lines.find((l) => l.startsWith('VOXDEN_')) || '';
-  if (line === 'VOXDEN_OK') return { ok: true };
-  if (line === 'VOXDEN_CANCELLED') return { ok: false, reason: CANCELLED };
-  return { ok: false, reason: FAILED, detail: line.replace(/^VOXDEN_FAILED\s*/, '').slice(0, 200) };
+  if (line === 'VELL_OK') return { ok: true };
+  if (line === 'VELL_CANCELLED') return { ok: false, reason: CANCELLED };
+  return { ok: false, reason: FAILED, detail: line.replace(/^VELL_FAILED\s*/, '').slice(0, 200) };
 }
 
 // PowerShell by its full path. A bare powershell.exe is looked up in the

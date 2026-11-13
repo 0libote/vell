@@ -36,10 +36,10 @@ const { extractZip } = require('./zip');
 
 const fsPromises = fs.promises;
 
-const DEFAULT_REPOSITORY = 'sounak1125/voxden';
+const DEFAULT_REPOSITORY = '0libote/vell';
 const DEFAULT_RELEASE_TAG = 'cuda-pack-v1';
-const MANIFEST_ASSET = 'voxden-cuda-pack.json';
-const PACK_ASSET = 'voxden-cuda-pack-win-x64.zip';
+const MANIFEST_ASSET = 'vell-cuda-pack.json';
+const PACK_ASSET = 'vell-cuda-pack-win-x64.zip';
 const RECEIPT_SCHEMA = 1;
 
 // The file whose presence proves the install: it is the one CTranslate2 opens,
@@ -59,7 +59,7 @@ function friendlyFetchError(err) {
   }
   if (err instanceof ReleaseError) return err;
   return new ReleaseError(
-    'Could not reach the Voxden GPU-support release on GitHub. Check the connection and try again.',
+    'Could not reach the Vell GPU-support release on GitHub. Check the connection and try again.',
     'NETWORK_ERROR'
   );
 }
@@ -78,7 +78,7 @@ class CudaPackManager {
       releaseTag: this.releaseTag,
       releaseApiUrl: opts.releaseApiUrl,
       fetchImpl: opts.fetchImpl,
-      userAgent: 'Voxden-Cuda-Pack',
+      userAgent: 'Vell-Cuda-Pack',
       cancelLabel: 'NVIDIA GPU support',
       segmentSize: opts.segmentSize,
       segmentThreshold: opts.segmentThreshold,

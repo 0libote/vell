@@ -67,7 +67,7 @@ function revealTimer(h) {
 function stubHelper(h) {
   h.run(`
     var helperCalls = [];
-    ps = async (args) => { helperCalls.push(args.slice()); return args[0] === 'paste' ? 'VOXDEN_OK' : ''; };
+    ps = async (args) => { helperCalls.push(args.slice()); return args[0] === 'paste' ? 'VELL_OK' : ''; };
     clipboardPaste = { paste: (text, send) => send(), restore() {} };
   `);
 }
@@ -369,7 +369,7 @@ async function main() {
       };
       h.run(`
         var helperCalls = [];
-        ps = async (args) => { helperCalls.push(args.slice()); return 'VOXDEN_OK'; };
+        ps = async (args) => { helperCalls.push(args.slice()); return 'VELL_OK'; };
         // The harness's own timers, so the test decides when each wait ends.
         clipboardPaste = createClipboardPaste(fakeClip, { delay: setTimeout, cancel: clearTimeout });
         lastHwnd = '9';

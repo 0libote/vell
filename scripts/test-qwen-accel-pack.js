@@ -90,11 +90,11 @@ function packZip(kind) {
 function makeFetch(kind, zipBytes, options) {
   const opts = options || {};
   const specAsset = kind === 'rocm'
-    ? 'voxden-qwen-rocm-pack-win-x64.zip'
-    : 'voxden-qwen-cuda-pack-win-x64.zip';
+    ? 'vell-qwen-rocm-pack-win-x64.zip'
+    : 'vell-qwen-cuda-pack-win-x64.zip';
   const specManifest = kind === 'rocm'
-    ? 'voxden-qwen-rocm-pack.json'
-    : 'voxden-qwen-cuda-pack.json';
+    ? 'vell-qwen-rocm-pack.json'
+    : 'vell-qwen-cuda-pack.json';
   const id = kind === 'rocm' ? 'qwen-rocm-win-x64-v1' : 'qwen-cuda-win-x64-v1';
   const sha = opts.sha256 || digest(zipBytes);
   const manifest = Buffer.from(JSON.stringify({
@@ -142,7 +142,7 @@ function makeFetch(kind, zipBytes, options) {
 }
 
 async function testKind(kind) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'voxden-qwen-' + kind + '-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vell-qwen-' + kind + '-'));
   const zipBytes = packZip(kind);
   try {
     const manager = new QwenAccelPackManager({
@@ -177,14 +177,14 @@ async function testKind(kind) {
   await ok('8. valid ROCm pack installs atomically', () => testKind('rocm'));
 
   await ok('7c. split CUDA pack parts assemble and verify', async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'voxden-qwen-split-'));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vell-qwen-split-'));
     const zipBytes = packZip('cuda');
     const mid = Math.max(1, Math.floor(zipBytes.length / 2));
     const part1 = Buffer.from(zipBytes.subarray(0, mid));
     const part2 = Buffer.from(zipBytes.subarray(mid));
     const sha = digest(zipBytes);
-    const specAsset = 'voxden-qwen-cuda-pack-win-x64.zip';
-    const specManifest = 'voxden-qwen-cuda-pack.json';
+    const specAsset = 'vell-qwen-cuda-pack-win-x64.zip';
+    const specManifest = 'vell-qwen-cuda-pack.json';
     const parts = [
       { asset: specAsset + '.part01', size: part1.length, sha256: digest(part1) },
       { asset: specAsset + '.part02', size: part2.length, sha256: digest(part2) },
@@ -236,7 +236,7 @@ async function testKind(kind) {
   });
 
   await ok('9. missing pack is not installed', async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'voxden-qwen-missing-'));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vell-qwen-missing-'));
     try {
       const manager = new QwenAccelPackManager({ kind: 'cuda', root });
       assert.strictEqual(manager.installed(), null);
@@ -247,7 +247,7 @@ async function testKind(kind) {
   });
 
   await ok('10. invalid receipt is not an install', async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'voxden-qwen-receipt-'));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vell-qwen-receipt-'));
     try {
       const manager = new QwenAccelPackManager({ kind: 'cuda', root });
       fs.writeFileSync(path.join(root, 'current-qwen-cuda-pack.json'), JSON.stringify({
@@ -263,7 +263,7 @@ async function testKind(kind) {
   });
 
   await ok('11b. invalid manifest JSON is rejected', async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'voxden-qwen-manifest-'));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vell-qwen-manifest-'));
     const zipBytes = packZip('cuda');
     try {
       const sha = digest(zipBytes);
@@ -276,8 +276,8 @@ async function testKind(kind) {
           if (href.includes('api.github.com')) {
             return new Response(JSON.stringify({
               assets: [
-                { name: 'voxden-qwen-cuda-pack.json', browser_download_url: 'https://x/voxden-qwen-cuda-pack.json', url: 'https://x/voxden-qwen-cuda-pack.json', size: 12 },
-                { name: 'voxden-qwen-cuda-pack-win-x64.zip', browser_download_url: 'https://x/voxden-qwen-cuda-pack-win-x64.zip', url: 'https://x/voxden-qwen-cuda-pack-win-x64.zip', size: zipBytes.length, digest: 'sha256:' + sha },
+                { name: 'vell-qwen-cuda-pack.json', browser_download_url: 'https://x/vell-qwen-cuda-pack.json', url: 'https://x/vell-qwen-cuda-pack.json', size: 12 },
+                { name: 'vell-qwen-cuda-pack-win-x64.zip', browser_download_url: 'https://x/vell-qwen-cuda-pack-win-x64.zip', url: 'https://x/vell-qwen-cuda-pack-win-x64.zip', size: zipBytes.length, digest: 'sha256:' + sha },
               ],
             }), { status: 200, headers: { 'Content-Type': 'application/json' } });
           }
@@ -296,7 +296,7 @@ async function testKind(kind) {
   });
 
   await ok('11. invalid checksum is rejected', async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'voxden-qwen-sum-'));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vell-qwen-sum-'));
     const zipBytes = packZip('cuda');
     try {
       const manager = new QwenAccelPackManager({
@@ -321,8 +321,8 @@ async function testKind(kind) {
   });
 
   await ok('13. atomic rollback leaves CPU paths untouched', async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'voxden-qwen-rollback-'));
-    const sentinel = path.join(os.tmpdir(), 'voxden-cpu-sentinel-' + process.pid);
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vell-qwen-rollback-'));
+    const sentinel = path.join(os.tmpdir(), 'vell-cpu-sentinel-' + process.pid);
     try {
       fs.writeFileSync(sentinel, 'cpu-runtime-intact');
       const manager = new QwenAccelPackManager({
@@ -348,7 +348,7 @@ async function testKind(kind) {
   });
 
   await ok('14. pack removal deletes runtime and receipt', async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'voxden-qwen-rm-'));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vell-qwen-rm-'));
     try {
       const manager = new QwenAccelPackManager({
         kind: 'cuda',
@@ -366,7 +366,7 @@ async function testKind(kind) {
   });
 
   await ok('12. interrupted leftover pending is not a receipt', async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'voxden-qwen-int-'));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vell-qwen-int-'));
     try {
       fs.mkdirSync(path.join(root, 'runtime.pending'), { recursive: true });
       fs.writeFileSync(path.join(root, 'runtime.pending', 'python.exe'), 'partial');

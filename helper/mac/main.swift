@@ -198,7 +198,7 @@ func paste(into id: CGWindowID) throws -> String {
   // kVK_ANSI_V. Command shortcuts match on the key, so this is Paste on every
   // layout that keeps V in the ANSI position.
   postKey(9, flags: .maskCommand)
-  return "VOXDEN_OK"
+  return "VELL_OK"
 }
 
 // --- Push-to-talk chord ------------------------------------------------------

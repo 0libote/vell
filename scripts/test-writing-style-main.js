@@ -131,7 +131,7 @@ const harness = require('./asr-test-harness');
     assert.strictEqual(JSON.parse(fs.readFileSync(settingsFile, 'utf8')).autoSend, undefined);
     h.run(`var pasteCalls = [];
       clipboardPaste = { paste: async (text, action) => { pasteCalls.push(['clipboard', text]); return action(); } };
-      ps = async args => { pasteCalls.push(args); return 'VOXDEN_OK'; };
+      ps = async args => { pasteCalls.push(args); return 'VELL_OK'; };
       settings.autoSend = { work: 'enter', email: 'ctrl-enter' };
       prepareCorrectionLearning = async () => null;`);
     await h.run("pasteDictation('A draft to review.', 'work')");

@@ -1,6 +1,6 @@
 'use strict';
 
-// Builds the self-contained speech runtime that ships inside Voxden: on
+// Builds the self-contained speech runtime that ships inside Vell: on
 // Windows an embeddable CPython with the DirectML build of ONNX Runtime, on
 // macOS arm64 a python-build-standalone CPython. Each platform builds on its
 // own machine, and dependency resolution happens here, never on a user's PC.
@@ -351,7 +351,7 @@ async function buildWindows(ctx) {
 async function resolveMacPython() {
   const headers = {
     Accept: 'application/vnd.github+json',
-    'User-Agent': 'Voxden-Asr-Runtime-Build',
+    'User-Agent': 'Vell-Asr-Runtime-Build',
   };
   const token = String(process.env.GITHUB_TOKEN || '').trim();
   if (token) headers.Authorization = 'Bearer ' + token;
@@ -503,7 +503,7 @@ async function buildMac(ctx) {
 
 async function main() {
   const outDir = path.resolve(arg('out', 'dist-runtime'));
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'voxden-runtime-'));
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'vell-runtime-'));
 
   try {
     fs.mkdirSync(outDir, { recursive: true });

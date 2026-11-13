@@ -1,13 +1,13 @@
 'use strict';
 
-// Launches a built Voxden.app the way Finder would run it -- its own signed
+// Launches a built Vell.app the way Finder would run it -- its own signed
 // executable, not `electron .` -- and proves it came up: both windows loaded
 // their pages, the main process answers the dashboard over IPC as a packaged
 // macOS app, and the Swift helper is running from the bundle. The macOS
 // counterpart of test-packaged-startup.js, for the real bundle. macOS only;
 // anywhere else it says so and exits 0.
 //
-//   node scripts/smoke-mac-app.js --app dist/mac-verify/Voxden.app [--log temp/mac-smoke.log]
+//   node scripts/smoke-mac-app.js --app dist/mac-verify/Vell.app [--log temp/mac-smoke.log]
 //
 // Nothing is typed, recorded or pasted. The app runs against the runner
 // account's own profile, which on a CI runner is empty.

@@ -51,7 +51,7 @@ const NAMES = README
   : { dictation: 'dashboard-dictation', dictionary: 'dashboard-dictionary',
     writing: 'dashboard-writing-style', insights: 'dashboard-insights' };
 
-app.setPath('userData', fs.mkdtempSync(path.join(os.tmpdir(), 'voxden-site-shots-')));
+app.setPath('userData', fs.mkdtempSync(path.join(os.tmpdir(), 'vell-site-shots-')));
 app.disableHardwareAcceleration();
 app.on('window-all-closed', () => {});
 
@@ -265,7 +265,7 @@ const base = {
   understandingProfile: 'personalized',
   understandingProfileName: 'Personalized',
   understandingNextProfileName: 'Attuned',
-  understandingCopy: 'Fix a misspelled word in a transcript. Voxden saves that spelling for next time.',
+  understandingCopy: 'Fix a misspelled word in a transcript. Vell saves that spelling for next time.',
   understandingGoal: 2500,
   wordCount: 1560,
   // A healthy install: nothing to download, so no setup banner and no welcome.
@@ -498,7 +498,7 @@ async function captureReadmePages(win, run) {
   await pause(SETTLE_MS);
   await shoot(win, 'help');
 
-  // Settings on Speech engines: how Voxden listens, and the four models. The
+  // Settings on Speech engines: how Vell listens, and the four models. The
   // category is picked before the dialog opens, because opening it on General
   // refreshes the microphone list.
   await run('setView("dictation"); setSettingsCat("speech-engines"); openSettings(); document.activeElement && document.activeElement.blur(); true');

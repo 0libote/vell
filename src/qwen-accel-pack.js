@@ -33,8 +33,8 @@ const { catalogFor, catalog } = require('./qwen-accel');
 
 const fsPromises = fs.promises;
 const RECEIPT_SCHEMA = 1;
-const DEFAULT_REPOSITORY = 'sounak1125/voxden';
-const MARKER_NAME = 'voxden-qwen-accel.json';
+const DEFAULT_REPOSITORY = '0libote/vell';
+const MARKER_NAME = 'vell-qwen-accel.json';
 
 function downloadSizeLabel(min, max = min) {
   const divisor = max >= 1e9 ? 1e9 : max >= 1e6 ? 1e6 : max >= 1e3 ? 1e3 : 1;
@@ -118,7 +118,7 @@ class QwenAccelPackManager {
       releaseTag: this.releaseTag,
       releaseApiUrl: opts.releaseApiUrl,
       fetchImpl: opts.fetchImpl,
-      userAgent: 'Voxden-Qwen-Accel-' + kind,
+      userAgent: 'Vell-Qwen-Accel-' + kind,
       cancelLabel: this.label,
       segmentSize: opts.segmentSize,
       segmentThreshold: opts.segmentThreshold,
@@ -564,7 +564,7 @@ class QwenAccelPackManager {
           );
         }
       } else {
-        throw new ReleaseError('GPU support could not be verified. Restart Voxden and retry.', 'PACK_UNHEALTHY');
+        throw new ReleaseError('GPU support could not be verified. Restart Vell and retry.', 'PACK_UNHEALTHY');
       }
 
       checkCancelled(signal);

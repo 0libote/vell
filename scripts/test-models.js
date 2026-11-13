@@ -16,7 +16,7 @@ function check(name, got, expected) {
   }
 }
 
-const root = fs.mkdtempSync(path.join(os.tmpdir(), 'voxden-models-'));
+const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vell-models-'));
 const tunedDir = path.join(root, models.TUNED_MODEL_DIR);
 
 function writeModel(files) {
@@ -84,9 +84,9 @@ check(
   true
 );
 
-// --- the model Voxden hosts itself ------------------------------------------
+// --- the model Vell hosts itself ------------------------------------------
 const hosted = path.join(root, 'hosted', 'whisper-large-v3');
-const bare = fs.mkdtempSync(path.join(os.tmpdir(), 'voxden-models-'));
+const bare = fs.mkdtempSync(path.join(os.tmpdir(), 'vell-models-'));
 
 check('the hosted model is used when nothing else applies', models.resolveModel(bare, {}, {}, hosted), hosted);
 check('without a hosted model the bare name is used', models.resolveModel(bare, {}, {}, null), 'large-v3');

@@ -1,12 +1,12 @@
 ; Native fonts scale with Windows DPI. Do not bake lettering into installer BMPs.
 SetFont "Segoe UI" 10
 
-Var VoxdenSmallFont
-Var VoxdenWordmarkFont
-Var VoxdenTaglineFont
-Var VoxdenTitleFont
+Var VellSmallFont
+Var VellWordmarkFont
+Var VellTaglineFont
+Var VellTitleFont
 
-!macro VoxdenCreateFont HANDLE POINTS WEIGHT FACE
+!macro VellCreateFont HANDLE POINTS WEIGHT FACE
   Push $0
   Push $1
   Push $2
@@ -26,7 +26,7 @@ Var VoxdenTitleFont
   Pop $0
 !macroend
 
-!macro VoxdenSidebarLabel COLOR FONT
+!macro VellSidebarLabel COLOR FONT
   ${NSD_AddStyle} $0 ${SS_CENTER}
   ${NSD_AddExStyle} $0 ${WS_EX_TRANSPARENT}
   SetCtlColors $0 "${COLOR}" transparent
@@ -35,51 +35,51 @@ Var VoxdenTitleFont
   System::Call 'user32::SetWindowPos(p r0, p 0, i 0, i 0, i 0, i 0, i 0x13)'
 !macroend
 
-!macro VoxdenSidebarText
+!macro VellSidebarText
   ; Cache handles across Back/Next navigation; the setup process owns them.
-  ${If} $VoxdenSmallFont == ""
-    !insertmacro VoxdenCreateFont $VoxdenSmallFont 10 400 "Segoe UI"
-    !insertmacro VoxdenCreateFont $VoxdenWordmarkFont 21 600 "Segoe UI Semibold"
-    !insertmacro VoxdenCreateFont $VoxdenTaglineFont 11 400 "Segoe UI"
-    !insertmacro VoxdenCreateFont $VoxdenTitleFont 14 700 "Segoe UI"
+  ${If} $VellSmallFont == ""
+    !insertmacro VellCreateFont $VellSmallFont 10 400 "Segoe UI"
+    !insertmacro VellCreateFont $VellWordmarkFont 21 600 "Segoe UI Semibold"
+    !insertmacro VellCreateFont $VellTaglineFont 11 400 "Segoe UI"
+    !insertmacro VellCreateFont $VellTitleFont 14 700 "Segoe UI"
   ${EndIf}
 
   ${NSD_CreateLabel} 5u 11u 99u 12u "FOR WINDOWS"
   Pop $0
-  !insertmacro VoxdenSidebarLabel "A9C5B7" $VoxdenSmallFont
+  !insertmacro VellSidebarLabel "A9C5B7" $VellSmallFont
 
-  ${NSD_CreateLabel} 5u 96u 99u 24u "Voxden"
+  ${NSD_CreateLabel} 5u 96u 99u 24u "Vell"
   Pop $0
-  !insertmacro VoxdenSidebarLabel "F1F7F4" $VoxdenWordmarkFont
+  !insertmacro VellSidebarLabel "F1F7F4" $VellWordmarkFont
 
   ${NSD_CreateLabel} 5u 124u 99u 30u "Your voice.$\r$\nIn writing."
   Pop $0
-  !insertmacro VoxdenSidebarLabel "C3D8CD" $VoxdenTaglineFont
+  !insertmacro VellSidebarLabel "C3D8CD" $VellTaglineFont
 
   ${NSD_CreateLabel} 5u 172u 99u 12u "Private by design"
   Pop $0
-  !insertmacro VoxdenSidebarLabel "A9C5B7" $VoxdenSmallFont
+  !insertmacro VellSidebarLabel "A9C5B7" $VellSmallFont
 !macroend
 
 !macro customWelcomePage
-  !define MUI_PAGE_CUSTOMFUNCTION_SHOW VoxdenWelcomeShow
+  !define MUI_PAGE_CUSTOMFUNCTION_SHOW VellWelcomeShow
   !define MUI_WELCOMEPAGE_TITLE "Your voice, ready anywhere"
-  !define MUI_WELCOMEPAGE_TEXT "Set up Voxden, a private dictation workspace built for Windows.$\r$\n$\r$\nPress Ctrl+Shift+Space in any app to speak. Your words are transcribed locally and pasted where you were working.$\r$\n$\r$\nNo account. No telemetry. No API key."
+  !define MUI_WELCOMEPAGE_TEXT "Set up Vell, a private dictation workspace built for Windows.$\r$\n$\r$\nPress Ctrl+Shift+Space in any app to speak. Your words are transcribed locally and pasted where you were working.$\r$\n$\r$\nNo account. No telemetry. No API key."
   !insertmacro MUI_PAGE_WELCOME
 
-  Function VoxdenWelcomeShow
-    !insertmacro VoxdenSidebarText
-    SendMessage $mui.WelcomePage.Title ${WM_SETFONT} $VoxdenTitleFont 1
-    SendMessage $mui.WelcomePage.Text ${WM_SETFONT} $VoxdenSmallFont 1
+  Function VellWelcomeShow
+    !insertmacro VellSidebarText
+    SendMessage $mui.WelcomePage.Title ${WM_SETFONT} $VellTitleFont 1
+    SendMessage $mui.WelcomePage.Text ${WM_SETFONT} $VellSmallFont 1
   FunctionEnd
 !macroend
 
 !macro customFinishPage
-  !define MUI_FINISHPAGE_TITLE "Voxden is ready"
+  !define MUI_FINISHPAGE_TITLE "Vell is ready"
   !define MUI_FINISHPAGE_TEXT "Press Ctrl+Shift+Space to dictate in any app.$\r$\n$\r$\nChoose your microphone and speech engine in Settings."
   !define MUI_FINISHPAGE_TEXT_LARGE
 
-  !define MUI_PAGE_CUSTOMFUNCTION_SHOW VoxdenFinishShow
+  !define MUI_PAGE_CUSTOMFUNCTION_SHOW VellFinishShow
 
   Function StartApp
     ${if} ${isUpdated}
@@ -91,43 +91,43 @@ Var VoxdenTitleFont
   FunctionEnd
 
   !define MUI_FINISHPAGE_RUN
-  !define MUI_FINISHPAGE_RUN_TEXT "Launch Voxden"
+  !define MUI_FINISHPAGE_RUN_TEXT "Launch Vell"
   !define MUI_FINISHPAGE_RUN_FUNCTION "StartApp"
   !insertmacro MUI_PAGE_FINISH
 
   ; Keep the credit below the launch option, including on the reboot page.
-  Function VoxdenFinishShow
-    !insertmacro VoxdenSidebarText
-    SendMessage $mui.FinishPage.Title ${WM_SETFONT} $VoxdenTitleFont 1
-    SendMessage $mui.FinishPage.Text ${WM_SETFONT} $VoxdenSmallFont 1
-    SendMessage $mui.FinishPage.Run ${WM_SETFONT} $VoxdenSmallFont 1
+  Function VellFinishShow
+    !insertmacro VellSidebarText
+    SendMessage $mui.FinishPage.Title ${WM_SETFONT} $VellTitleFont 1
+    SendMessage $mui.FinishPage.Text ${WM_SETFONT} $VellSmallFont 1
+    SendMessage $mui.FinishPage.Run ${WM_SETFONT} $VellSmallFont 1
     ${NSD_CreateLabel} 120u 158u 195u 12u "Made by Sounak"
     Pop $0
     SetCtlColors $0 "5E726A" "${MUI_BGCOLOR}"
-    SendMessage $0 ${WM_SETFONT} $VoxdenSmallFont 1
+    SendMessage $0 ${WM_SETFONT} $VellSmallFont 1
   FunctionEnd
 !macroend
 
 !macro customUnWelcomePage
-  !define MUI_PAGE_CUSTOMFUNCTION_SHOW un.VoxdenWelcomeShow
-  !define MUI_WELCOMEPAGE_TITLE "Remove Voxden"
-  !define MUI_WELCOMEPAGE_TEXT "This will remove the Voxden app from your computer.$\r$\n$\r$\nYour dictation history and local preferences are kept on this PC. You can remove them separately from Voxden's data folder."
+  !define MUI_PAGE_CUSTOMFUNCTION_SHOW un.VellWelcomeShow
+  !define MUI_WELCOMEPAGE_TITLE "Remove Vell"
+  !define MUI_WELCOMEPAGE_TEXT "This will remove the Vell app from your computer.$\r$\n$\r$\nYour dictation history and local preferences are kept on this PC. You can remove them separately from Vell's data folder."
   !insertmacro MUI_UNPAGE_WELCOME
 
-  Function un.VoxdenWelcomeShow
-    !insertmacro VoxdenSidebarText
-    SendMessage $mui.WelcomePage.Title ${WM_SETFONT} $VoxdenTitleFont 1
-    SendMessage $mui.WelcomePage.Text ${WM_SETFONT} $VoxdenSmallFont 1
+  Function un.VellWelcomeShow
+    !insertmacro VellSidebarText
+    SendMessage $mui.WelcomePage.Title ${WM_SETFONT} $VellTitleFont 1
+    SendMessage $mui.WelcomePage.Text ${WM_SETFONT} $VellSmallFont 1
   FunctionEnd
 !macroend
 
 !macro customUninstallPage
-  !define MUI_PAGE_CUSTOMFUNCTION_SHOW un.VoxdenFinishShow
+  !define MUI_PAGE_CUSTOMFUNCTION_SHOW un.VellFinishShow
   !insertmacro MUI_UNPAGE_FINISH
 
-  Function un.VoxdenFinishShow
-    !insertmacro VoxdenSidebarText
-    SendMessage $mui.FinishPage.Title ${WM_SETFONT} $VoxdenTitleFont 1
-    SendMessage $mui.FinishPage.Text ${WM_SETFONT} $VoxdenSmallFont 1
+  Function un.VellFinishShow
+    !insertmacro VellSidebarText
+    SendMessage $mui.FinishPage.Title ${WM_SETFONT} $VellTitleFont 1
+    SendMessage $mui.FinishPage.Text ${WM_SETFONT} $VellSmallFont 1
   FunctionEnd
 !macroend

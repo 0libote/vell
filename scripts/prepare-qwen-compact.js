@@ -117,7 +117,7 @@ async function main() {
   const inventory = { schemaVersion: 1, id: spec.id, baseRuntimeId: baseManifest.runtime.id, files };
   await fs.promises.writeFile(path.join(source, INVENTORY), JSON.stringify(inventory));
   const inventorySha256 = await sha256File(path.join(source, INVENTORY));
-  const stem = 'voxden-qwen-' + kind + '-pack-win-x64-compact-v1';
+  const stem = 'vell-qwen-' + kind + '-pack-win-x64-compact-v1';
   const level = arg('level', '5');
   if (!/^[0-9]$/.test(level)) throw new Error('Invalid compression level');
   const descriptions = {};

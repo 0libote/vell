@@ -324,5 +324,5 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, '127.0.0.1', () => {
-  process.stdout.write('Voxden landing preview: http://127.0.0.1:' + PORT + '/src/app.html\n');
+  process.stdout.write('Vell landing preview: http://127.0.0.1:' + PORT + '/src/app.html\n');
 });

@@ -206,7 +206,7 @@ async function mainTests() {
     });
     assert.strictEqual(launch.args[2].windowsHide, true);
     assert.strictEqual(quitTimers(h).length, 0, 'nothing quits while Windows is asking');
-    launch.callback(null, 'VOXDEN_OK\r\n', '');
+    launch.callback(null, 'VELL_OK\r\n', '');
     assert.deepStrictEqual(plain(await reply), { ok: true });
     assert.strictEqual(h.run('quits'), 0, 'the reply goes back before the quit');
     quitTimers(h).forEach(t => t.fn());
@@ -231,13 +231,13 @@ async function mainTests() {
       cwd: 'C:\\dev\\my projects\\speakbar',
       verb: 'runas',
     });
-    launch.callback(null, 'VOXDEN_OK\n', '');
+    launch.callback(null, 'VELL_OK\n', '');
     assert.deepStrictEqual(plain(await reply), { ok: true });
   }));
 
   for (const [name, stdout, error, reason, warned] of [
-    ['a no at the Windows prompt', 'VOXDEN_CANCELLED\r\n', null, elevation.CANCELLED, []],
-    ['Windows refusing', 'VOXDEN_FAILED The system cannot find the file specified\r\n', null, elevation.FAILED,
+    ['a no at the Windows prompt', 'VELL_CANCELLED\r\n', null, elevation.CANCELLED, []],
+    ['Windows refusing', 'VELL_FAILED The system cannot find the file specified\r\n', null, elevation.FAILED,
       ['Restart as administrator failed: The system cannot find the file specified']],
     ['a PowerShell that never answered', '', Object.assign(new Error('killed'), { killed: true }), elevation.FAILED, []],
   ]) {
@@ -255,7 +255,7 @@ async function mainTests() {
       const again = h.handlers.get('restart-as-admin')();
       await tick();
       assert.strictEqual(h.launches.filter(l => isPowerShell(l.args[0])).length, 2, 'a second try asks Windows again');
-      restartLaunch(h).launch.callback(null, 'VOXDEN_OK\n', '');
+      restartLaunch(h).launch.callback(null, 'VELL_OK\n', '');
       assert.deepStrictEqual(plain(await again), { ok: true });
     }));
   }
@@ -351,9 +351,9 @@ async function unitTests() {
   });
 
   await test('what the script printed becomes the reply', async () => {
-    assert.deepStrictEqual(elevation.startResult('VOXDEN_OK\r\n'), { ok: true });
-    assert.deepStrictEqual(elevation.startResult('noise\nVOXDEN_CANCELLED\n'), { ok: false, reason: elevation.CANCELLED });
-    assert.deepStrictEqual(elevation.startResult('VOXDEN_FAILED Access is denied'), { ok: false, reason: elevation.FAILED, detail: 'Access is denied' });
+    assert.deepStrictEqual(elevation.startResult('VELL_OK\r\n'), { ok: true });
+    assert.deepStrictEqual(elevation.startResult('noise\nVELL_CANCELLED\n'), { ok: false, reason: elevation.CANCELLED });
+    assert.deepStrictEqual(elevation.startResult('VELL_FAILED Access is denied'), { ok: false, reason: elevation.FAILED, detail: 'Access is denied' });
     assert.deepStrictEqual(elevation.startResult(''), { ok: false, reason: elevation.FAILED, detail: '' });
     assert.deepStrictEqual(elevation.startResult(undefined), { ok: false, reason: elevation.FAILED, detail: '' });
   });
@@ -391,7 +391,7 @@ async function unitTests() {
   const inert = text => text.replace(VERB, "$psi.Verb = ''");
 
   await test('the script hands Windows the right exe, arguments, folder and verb', async () => {
-    const dump = script.replace(START, '$null = 0').replace("[Console]::Out.WriteLine('VOXDEN_OK')",
+    const dump = script.replace(START, '$null = 0').replace("[Console]::Out.WriteLine('VELL_OK')",
       "[Console]::Out.WriteLine([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((@{ file = $psi.FileName; args = $psi.Arguments; cwd = $psi.WorkingDirectory; verb = $psi.Verb; shell = $psi.UseShellExecute } | ConvertTo-Json -Compress))))");
     const fields = JSON.parse(Buffer.from(powershell(dump).trim(), 'base64').toString('utf8'));
     assert.deepStrictEqual(fields, { file: cmd.file, args: elevation.commandLine(tricky), cwd: cmd.cwd, verb: 'runas', shell: true });
@@ -400,14 +400,14 @@ async function unitTests() {
   await test('the script says FAILED with the reason when Windows cannot start it', async () => {
     const missing = inert(elevation.elevatedStartScript({ file: 'C:\\voxden-test-missing\\nothing.exe', args: ['--x'], cwd: 'C:\\' }));
     const out = powershell(missing).trim();
-    assert.match(out, /^VOXDEN_FAILED .+/);
+    assert.match(out, /^VELL_FAILED .+/);
     assert.strictEqual(elevation.startResult(out).reason, elevation.FAILED);
   });
 
   await test('the script says CANCELLED for a no at the prompt (error 1223), in any language', async () => {
     const no = inert(script).replace(START,
       "throw (New-Object System.Management.Automation.MethodInvocationException 'Exception calling Start', (New-Object System.ComponentModel.Win32Exception 1223))");
-    assert.strictEqual(powershell(no).trim(), 'VOXDEN_CANCELLED');
+    assert.strictEqual(powershell(no).trim(), 'VELL_CANCELLED');
   });
 }
 

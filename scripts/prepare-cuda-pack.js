@@ -30,8 +30,8 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const ASSET_NAME = 'voxden-cuda-pack-win-x64.zip';
-const MANIFEST_NAME = 'voxden-cuda-pack.json';
+const ASSET_NAME = 'vell-cuda-pack-win-x64.zip';
+const MANIFEST_NAME = 'vell-cuda-pack.json';
 const PACK_ID = 'cuda-win-x64-v1';
 const PIP_PACKAGE = 'nvidia-cublas-cu12';
 
@@ -90,7 +90,7 @@ async function main() {
     );
   }
   const outDir = path.resolve(arg('out', 'dist-cuda-pack'));
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'voxden-cuda-'));
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'vell-cuda-'));
   // The layout pip would have produced, which is the layout the sidecar scans.
   const stage = path.join(work, 'pack');
   const binDir = path.join(stage, 'nvidia', 'cublas', 'bin');

@@ -16,7 +16,7 @@ async function main() {
       include: /^(config\.json|vocab\.txt|encoder-model\.onnx(\.data)?|decoder_joint-model\.onnx)$/ },
     // Whisper turbo is the same CTranslate2 format large-v3 ships in, so it
     // loads through faster-whisper with nothing but a different directory.
-    // Unlike large-v3 it is not hosted on a Voxden release: it is an optional
+    // Unlike large-v3 it is not hosted on a Vell release: it is an optional
     // engine, and the release a first run depends on stays one model.
     { id: 'whisper-turbo', name: 'Whisper large-v3 turbo', repo: 'deepdml/faster-whisper-large-v3-turbo-ct2',
       include: /^(config\.json|model\.bin|preprocessor_config\.json|tokenizer\.json|vocabulary\.json)$/ },

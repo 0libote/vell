@@ -147,7 +147,7 @@ console.log('ok the platform defaults to the one this is running on');
 async function testDownloadPath() {
   const crypto = require('crypto');
   const zlib = require('zlib');
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'voxden-cuda-dl-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vell-cuda-dl-'));
   try {
     // A zip carrying the one file the install checks for.
     const entryName = 'nvidia/cublas/bin/cublas64_12.dll';
@@ -182,20 +182,20 @@ async function testDownloadPath() {
 
     const manifest = JSON.stringify({
       schemaVersion: 1,
-      pack: { id: 'cuda-win-x64-v1', asset: 'voxden-cuda-pack-win-x64.zip', sha256: sha, size: zipBytes.length },
+      pack: { id: 'cuda-win-x64-v1', asset: 'vell-cuda-pack-win-x64.zip', sha256: sha, size: zipBytes.length },
     });
     const release = {
       assets: [
         {
-          name: 'voxden-cuda-pack.json',
-          browser_download_url: 'https://x/voxden-cuda-pack.json',
-          url: 'https://x/voxden-cuda-pack.json',
+          name: 'vell-cuda-pack.json',
+          browser_download_url: 'https://x/vell-cuda-pack.json',
+          url: 'https://x/vell-cuda-pack.json',
           size: manifest.length,
         },
         {
-          name: 'voxden-cuda-pack-win-x64.zip',
-          browser_download_url: 'https://x/voxden-cuda-pack-win-x64.zip',
-          url: 'https://x/voxden-cuda-pack-win-x64.zip',
+          name: 'vell-cuda-pack-win-x64.zip',
+          browser_download_url: 'https://x/vell-cuda-pack-win-x64.zip',
+          url: 'https://x/vell-cuda-pack-win-x64.zip',
           size: zipBytes.length,
           digest: 'sha256:' + sha,
         },
@@ -209,7 +209,7 @@ async function testDownloadPath() {
         if (href.includes('api.github.com')) {
           return new Response(release_json(), { status: 200, headers: { 'Content-Type': 'application/json' } });
         }
-        if (href.endsWith('voxden-cuda-pack.json')) return new Response(manifest, { status: 200 });
+        if (href.endsWith('vell-cuda-pack.json')) return new Response(manifest, { status: 200 });
         if (href.endsWith('.zip')) return new Response(zipBytes, { status: 200 });
         return new Response('missing', { status: 404 });
       },
@@ -233,7 +233,7 @@ async function testDownloadPath() {
   }
 }
 
-const root = fs.mkdtempSync(path.join(os.tmpdir(), 'voxden-cuda-test-'));
+const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vell-cuda-test-'));
 try {
   const manager = new CudaPackManager({ root });
   assert.strictEqual(manager.installed(), null, 'nothing is installed yet');

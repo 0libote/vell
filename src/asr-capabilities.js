@@ -45,7 +45,7 @@ const ENGINE_CAPABILITIES = Object.freeze({
       note: 'Whisper takes vocabulary as an initial prompt, capped near 200 tokens.',
     }),
     // Whisper large-v3 recognises about a hundred languages. This is the
-    // intersection Voxden offers, which is what routing may rely on.
+    // intersection Vell offers, which is what routing may rely on.
     languages: Object.freeze(['en', 'hi', 'de', 'fr', 'es', 'pt', 'it', 'nl']),
     autoDetectLanguage: true,
     segments: true,

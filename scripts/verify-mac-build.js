@@ -9,7 +9,7 @@
 //
 //   node scripts/verify-mac-build.js [--dist dist] [--extract dist/mac-verify]
 //
-// The unpacked app is left at <extract>/Voxden.app for smoke-mac-app.js.
+// The unpacked app is left at <extract>/Vell.app for smoke-mac-app.js.
 
 const crypto = require('crypto');
 const fs = require('fs');

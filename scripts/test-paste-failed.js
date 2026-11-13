@@ -131,7 +131,7 @@ async function main() {
     const clip = fakeClipboard(Object.assign({}, files));
     const h = setup(clip);
     try {
-      await dictate(h, 'VOXDEN_OK');
+      await dictate(h, 'VELL_OK');
       assertKept(h);
       assert.deepStrictEqual(failures(h), [{ event: 'paste-failed',
         reason: 'Clipboard contains content that cannot be safely restored', exe: 'winword.exe', formats: ['text/uri-list'] }]);
@@ -236,7 +236,7 @@ async function main() {
     const h = setup(fakeClipboard(Object.assign({}, USER_COPY)));
     try {
       h.run(`history.entries = [{ id: 'last', text: words }]; mode = 'idle';`);
-      await dictate(h, 'VOXDEN_OK', 'Promise.all([pasteLastDictation(), pasteLastDictation(), pasteLastDictation()])');
+      await dictate(h, 'VELL_OK', 'Promise.all([pasteLastDictation(), pasteLastDictation(), pasteLastDictation()])');
       assert.strictEqual(requests(h).filter(a => a === 'paste').length, 1);
     } finally { await h.close(); }
   });

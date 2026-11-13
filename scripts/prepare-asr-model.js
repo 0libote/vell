@@ -1,6 +1,6 @@
 'use strict';
 
-// Builds the Whisper model assets Voxden downloads on first run, so the whole
+// Builds the Whisper model assets Vell downloads on first run, so the whole
 // first-run experience comes from one release we control rather than from
 // Hugging Face.
 //
@@ -134,7 +134,7 @@ function verifyModel(python, modelDir) {
   ].join('\n');
   // A two-second tone: enough to run the whole decode path without depending on
   // a speech fixture in the repo.
-  const wav = path.join(os.tmpdir(), 'voxden-model-check.wav');
+  const wav = path.join(os.tmpdir(), 'vell-model-check.wav');
   writeToneWav(wav);
   const out = execFileSync(python, ['-c', code, modelDir, wav], {
     encoding: 'utf8',
@@ -175,7 +175,7 @@ function main() {
   const repo = arg('repo', DEFAULT_REPO);
   const outDir = path.resolve(arg('out', 'dist-model'));
   const modelId = arg('id', modelIdFor(repo));
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'voxden-model-'));
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'vell-model-'));
 
   try {
     fs.mkdirSync(outDir, { recursive: true });
@@ -212,12 +212,12 @@ function main() {
     const weightsSha = sha256File(weights);
 
     log('Splitting model.bin into parts under GitHub\'s 2 GB asset limit…');
-    const parts = splitFile(weights, outDir, 'voxden-' + modelId + '.bin');
+    const parts = splitFile(weights, outDir, 'vell-' + modelId + '.bin');
 
     const extras = [];
     for (const name of files) {
       if (name === 'model.bin') continue;
-      const assetName = 'voxden-' + modelId + '-' + name;
+      const assetName = 'vell-' + modelId + '-' + name;
       fs.copyFileSync(path.join(staged, name), path.join(outDir, assetName));
       extras.push({
         asset: assetName,

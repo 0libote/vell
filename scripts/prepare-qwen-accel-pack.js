@@ -20,7 +20,7 @@ const { pathWithRuntimeBins } = require('../src/qwen-accel-pack');
 const DEFAULT_PYTHON_VERSION = catalog.python || '3.12.10';
 const VC_RUNTIME_DLLS = ['MSVCP140.dll', 'MSVCP140_1.dll'];
 const PRUNE_DIRS = new Set(['__pycache__', 'pip', 'wheel', 'hf_xet']);
-const MARKER_NAME = 'voxden-qwen-accel.json';
+const MARKER_NAME = 'vell-qwen-accel.json';
 const ROOT = path.join(__dirname, '..');
 // GitHub refuses a release asset over 2 GiB. Same split size as the Whisper model.
 const PART_BYTES = 1800 * 1000 * 1000;
@@ -310,7 +310,7 @@ async function main() {
     return;
   }
 
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'voxden-qwen-' + kind + '-'));
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'vell-qwen-' + kind + '-'));
   const stage = path.join(work, 'runtime');
   const skipProbe = hasFlag('skip-probe');
 

@@ -5,7 +5,7 @@ const path = require('path');
 const { archivePath } = require('./seven-zip');
 const { sha256File, normalizeSha256, ReleaseError, DownloadCancelledError } = require('./release-download');
 
-const INVENTORY = 'voxden-pack-files.json';
+const INVENTORY = 'vell-pack-files.json';
 
 function checkCancelled(signal) {
   if (signal?.aborted) throw new DownloadCancelledError('GPU support');

@@ -8,7 +8,7 @@ const { SpeechModelsManager } = require('../src/speech-models');
 const { ReleaseDownloader } = require('../src/release-download');
 
 async function main() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'voxden-models-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vell-models-'));
   const bytes = Buffer.from('a complete model');
   const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
   const packs = [{ id: 'qwen3-asr', name: 'Qwen test', revision: 'pinned', repository: 'test/model',

@@ -26,7 +26,7 @@ const sizingSource = fs.readFileSync(path.join(__dirname, '../src/main.js'), 'ut
   .match(/function overlaySize\(\) \{[\s\S]*?\n\}/);
 if (!sizingSource) throw new Error('Could not find production overlay sizing');
 const sizeFor = mode => vm.runInNewContext('(' + sizingSource[0] + ')()', { mode, overlayEditing: false });
-app.setPath('userData', fs.mkdtempSync(path.join(os.tmpdir(), 'voxden-flow-bench-')));
+app.setPath('userData', fs.mkdtempSync(path.join(os.tmpdir(), 'vell-flow-bench-')));
 if (!gpu) app.disableHardwareAcceleration();
 const pause = ms => new Promise(done => setTimeout(done, ms));
 const sampleMs = 550;

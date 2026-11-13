@@ -28,7 +28,7 @@ async function main() {
       ps = async args => {
         fixture.helperCalls.push(Array.from(args));
         const hwnd = args[2] || fixture.focused;
-        return args[0] === 'info' ? hwnd + '\\tvoxden.exe\\tVoxden' : 'VOXDEN_OK';
+        return args[0] === 'info' ? hwnd + '\\tvell.exe\\tVell' : 'VELL_OK';
       };
       clipboardPaste = { paste: async (text, send) => { fixture.clipboardTexts.push(text); await send(); } };
     `);
@@ -42,7 +42,7 @@ async function main() {
     h.run("lastHwnd = '100';");
     await h.run('rememberFocus()');
     assert.strictEqual(h.run('lastHwnd'), '200', 'start-time focus refresh selects the dashboard');
-    assert.strictEqual(h.run('lastTarget.exe'), 'voxden.exe', 'destination metadata refreshes too');
+    assert.strictEqual(h.run('lastTarget.exe'), 'vell.exe', 'destination metadata refreshes too');
     assert.strictEqual((await h.run('captureTargetInfo()')).hwnd, '100', 'Capture retains its previous external destination');
     assert.strictEqual(h.run('lastHwnd'), '200', 'reading the Capture destination preserves the dashboard dictation target');
     assert.strictEqual(h.run('correctionLearningWanted()'), false, 'no OS correction watcher for an internal field');

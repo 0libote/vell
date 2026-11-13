@@ -12,7 +12,7 @@ const run = promisify(execFile);
 
 async function main() {
   const root = path.resolve(__dirname, '../temp/speech-smoke');
-  const cacheRoot = path.join(process.env.APPDATA, 'Voxden', 'models');
+  const cacheRoot = path.join(process.env.APPDATA, 'Vell', 'models');
   let last = '';
   const progress = state => {
     const key = state.message + ':' + Math.floor((state.progress || 0) / 10);
@@ -47,7 +47,7 @@ async function main() {
       'sys.path.insert(0, ' + JSON.stringify(path.resolve(__dirname, '../sidecar')) + ')',
       'import transcribe as t',
       'b = t.load_selected_backend()',
-      'produced = b.transcribe(' + JSON.stringify(sample) + ', prompt="Voxden", language="en")',
+      'produced = b.transcribe(' + JSON.stringify(sample) + ', prompt="Vell", language="en")',
       'record = produced if isinstance(produced, dict) else {"text": produced, "engine": t._runtime.get("engine"), "vocabulary": ""}',
       'text = str(record.get("text") or "").strip()',
       'assert text, "empty transcript"',

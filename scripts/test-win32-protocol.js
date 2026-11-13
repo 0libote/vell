@@ -127,7 +127,7 @@ foreach ($scenario in @('focused','second','third','refused','closed','closes-du
 const result = spawnSync('powershell.exe', ['-NoProfile','-EncodedCommand',encoded(checks)], {encoding:'utf8',windowsHide:true,timeout:20000});
 assert.strictEqual(result.status,0,result.stderr);
 const { baseline: data, retryCases } = JSON.parse(result.stdout.trim());
-assert.strictEqual(data.paste,'VOXDEN_OK');
+assert.strictEqual(data.paste,'VELL_OK');
 assert.strictEqual(data.failed,true);
 assert.strictEqual(data.pastes,1);
 console.log('ok B09 paste acknowledges delivery and rejects an unfocused target');
@@ -143,7 +143,7 @@ assert.match(data.rejected, /Paste input was not accepted/);
 console.log('ok a held paste-last chord or rejected input produces no success acknowledgement');
 assert.strictEqual(data.overFullscreen, 'A fullscreen app is in front');
 assert.strictEqual(data.fullscreenForced, 0, 'nothing is pulled over a fullscreen game or film');
-assert.strictEqual(data.overWindows, 'VOXDEN_OK', "Windows' own surfaces are not a fullscreen app");
+assert.strictEqual(data.overWindows, 'VELL_OK', "Windows' own surfaces are not a fullscreen app");
 console.log('ok an ordinary paste never covers a fullscreen app in front');
 assert.strictEqual(data.gameCopied, 'Clipboard changed before paste');
 assert.strictEqual(data.gameCopiedPastes, 0);
@@ -153,7 +153,7 @@ for (const row of retryCases) {
   assert.strictEqual(row.pastes, success ? 1 : 0, row.name + ' pastes at most once');
   assert.strictEqual(row.pasteCalls, success || row.name === 'input-rejected' ? 1 : 0,
     row.name + ' never retries rejected or partially delivered input');
-  assert.strictEqual(row.answer, success ? 'VOXDEN_OK' : '', row.name + ' acknowledges only a successful paste');
+  assert.strictEqual(row.answer, success ? 'VELL_OK' : '', row.name + ' acknowledges only a successful paste');
   const attempts = { focused: 0, second: 2, third: 3, refused: 3, closed: 0,
     'closes-during-focus': 1, 'clipboard-changed': 1, 'keys-held': 1, 'input-rejected': 2 }[row.name];
   assert.strictEqual(row.forced, attempts, row.name + ' retries focus only within the limit');

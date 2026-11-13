@@ -26,7 +26,7 @@ check('serve reads QUIT', /if line == "QUIT" \{ break \}/.test(src));
 check('serve answers with the request id', /\["id": id, "out": out\]/.test(src));
 check('get returns a window id', /case "get":\s*\n\s*return String\(currentWindow\(\)\.id\)/.test(src));
 check('info is tab separated', /"\\\(info\.id\)\\t\\\(ownerName\(info\.pid\)\)\\t\\\(title\)"/.test(src));
-check('paste reports VOXDEN_OK', /return "VOXDEN_OK"/.test(src));
+check('paste reports VELL_OK', /return "VELL_OK"/.test(src));
 check('paste refuses without Accessibility', /guard AXIsProcessTrusted\(\) else \{ throw HelperError\.accessibility \}/.test(src));
 check('paste waits for the chord to be released', /waitModifiersUp\(\)\s*\n\s*try bringToFront/.test(src));
 check('paste posts Command+V', /postKey\(9, flags: \.maskCommand\)/.test(src));

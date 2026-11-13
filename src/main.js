@@ -3458,7 +3458,7 @@ async function pasteText(text, { game = false, pasteLast = false } = {}) {
       if (chord) args.push('-Vks', chord);
     }
     const pasted = await ps(args);
-    if (!String(pasted).split(/\r?\n/).includes('VOXDEN_OK')) {
+    if (!String(pasted).split(/\r?\n/).includes('VELL_OK')) {
       // What came back goes in the error, for the flow bar log. Nothing at all
       // is a helper that timed out or died; win32.ps1 answers a failed paste
       // with its reason, a window that would not come forward among them.
@@ -3493,7 +3493,7 @@ async function pasteCapturePayload(value, hwnd, valid, image) {
   const send = async () => {
     if (!valid() || !hwnd || hwnd === '0' || isOurHwnd(hwnd)) throw new Error('Choose the destination app again.');
     const pasted = await ps(['paste', '-Hwnd', hwnd]);
-    if (!String(pasted).split(/\r?\n/).includes('VOXDEN_OK')) throw new Error('Paste failed. Click your chat box and retry.');
+    if (!String(pasted).split(/\r?\n/).includes('VELL_OK')) throw new Error('Paste failed. Click your chat box and retry.');
   };
   if (image) return clipboardPaste.pasteImage(value, send);
   return clipboardPaste.paste(value, send);

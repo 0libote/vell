@@ -221,7 +221,7 @@ eq('45d. CPU fallback reason survives an empty GPU report', accel.sidecarDiagnos
 }).fallbackReason, 'CUDA out of memory');
 
 const persisted = vocab.makeEntry('PersistMe', { language: 'en' });
-const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'voxden-qwen-dict-'));
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vell-qwen-dict-'));
 const dictFile = path.join(tmpDir, 'dictionary.json');
 vocab.saveState(dictFile, {
   entries: [persisted],

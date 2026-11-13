@@ -29,7 +29,7 @@ async function statOrNull(file) {
 }
 
 function archiveName(name, kind) {
-  const stem = 'voxden-qwen-' + kind + '-pack-win-x64';
+  const stem = 'vell-qwen-' + kind + '-pack-win-x64';
   return name === stem + '.zip' || new RegExp('^' + stem + '\\.zip\\.part[0-9]+$').test(name)
     || new RegExp('^' + stem + '-compact-v[0-9]+-(core|shared)\\.7z(?:\\.part[0-9]+)?$').test(name);
 }

@@ -868,7 +868,7 @@ function Invoke-VoxdenSelectBack {
   }
   [VoxdenWin]::SelectLeft($n)
   [VoxdenWin]::CopyInsertKeys()
-  return "VOXDEN_SENT"
+  return "VELL_SENT"
 }
 
 # Another copy of what the field has selected. A rich editor (Claude's)
@@ -880,7 +880,7 @@ function Invoke-VoxdenCopyKeys {
   $h = [IntPtr][int64]$Hwnd
   if ($h -eq [IntPtr]::Zero -or [VoxdenWin]::GetForegroundWindow() -ne $h) { return "VOXDEN_UNSUPPORTED" }
   [VoxdenWin]::CopyInsertKeys()
-  return "VOXDEN_SENT"
+  return "VELL_SENT"
 }
 
 # After a select-back whose copy was not the dictation: Right collapses the
@@ -890,7 +890,7 @@ function Invoke-VoxdenCollapseRight {
   $h = [IntPtr][int64]$Hwnd
   if ($h -eq [IntPtr]::Zero -or [VoxdenWin]::GetForegroundWindow() -ne $h) { return "VOXDEN_UNSUPPORTED" }
   [VoxdenWin]::CollapseRight()
-  return "VOXDEN_OK"
+  return "VELL_OK"
 }
 
 function Invoke-VoxdenAction {
@@ -957,7 +957,7 @@ switch ($Action) {
       # that time is theirs, and Ctrl+V would paste it instead of the words.
       if ([VoxdenWin]::GetClipboardSequenceNumber() -ne $pasteClipboardSequence) { throw "Clipboard changed before paste" }
       [VoxdenWin]::PasteKeys()
-      Write-Output "VOXDEN_OK"
+      Write-Output "VELL_OK"
       return
     }
     if (-not [VoxdenWin]::WaitPasteKeysUp([string]$Vks, $true)) { throw "Paste keys are still held" }
@@ -987,7 +987,7 @@ switch ($Action) {
     }
     if ([VoxdenWin]::GetClipboardSequenceNumber() -ne $pasteClipboardSequence) { throw "Clipboard changed before paste" }
     [VoxdenWin]::PasteKeys()
-    Write-Output "VOXDEN_OK"
+    Write-Output "VELL_OK"
   }
   "foreground-watch" {
     # Long-lived: streams the foreground window handle whenever it changes,
