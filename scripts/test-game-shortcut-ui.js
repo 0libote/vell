@@ -76,7 +76,7 @@ app.whenReady().then(async () => {
       hidden: row.hidden,
     };
   })()`);
-  const hint = 'Dictate into a game’s chat without leaving the game. While on, its key works only for Voxden.';
+  const hint = 'Dictate into a game’s chat without leaving the game. While on, its key works only for Vell.';
   // Off by default: the key is not shown, because nothing is taken.
   assert.deepStrictEqual(await readRow(), {
     open: true, label: 'Game shortcut', hint, on: false, keys: null, change: false, hidden: false,

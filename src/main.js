@@ -1010,6 +1010,14 @@ function vocabularyForDictation(language) {
   });
 }
 
+// Spoken corrections are still being worked on, so a release leaves them out:
+// no switch in Settings, nothing applied, nothing sent, whatever a settings
+// file says. A development build (npm start) has them, and so does a packaged
+// one started with VOXDEN_SPOKEN_CORRECTIONS=1.
+function spokenCorrectionsAvailable() {
+  return !app.isPackaged || process.env.VOXDEN_SPOKEN_CORRECTIONS === '1';
+}
+
 function snapshot() {
   const usageStats = historyUsage.getStats(history, historyAnalyticsRevision);
   const wordCount = usageStats.wordCount;

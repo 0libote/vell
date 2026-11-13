@@ -863,6 +863,7 @@
               <div class="setting-row speech-section" id="speech-mode-section">
                 <span class="setting-label" id="speech-mode-label">How Vell listens</span>
                 <span class="setting-hint">Dictation runs on this PC. Nothing is uploaded.</span>
+              </div>
               <div class="setting-row speech-section" id="speech-model-section">
                 <div class="setting-copy">
                   <span class="setting-label" id="speech-model-label">Model</span>
@@ -1303,6 +1304,85 @@
       <button type="button" class="btn-primary" id="mic-dialog-close">Done</button>
     </div>
   </dialog>
+  <dialog id="confirm-dialog" class="shortcuts-dialog confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-body">
+    <h2 class="settings-panel-title" id="confirm-title"></h2>
+    <p class="setting-hint confirm-body" id="confirm-body"></p>
+    <div class="speech-setup-actions lang-dialog-actions">
+      <button type="button" class="btn-secondary" id="confirm-cancel">Cancel</button>
+      <button type="button" class="btn-primary" id="confirm-ok">OK</button>
+    </div>
+  </dialog>
+  <dialog id="shortcuts-dialog" class="shortcuts-dialog" aria-labelledby="shortcuts-title">
+    <h2 class="settings-panel-title" id="shortcuts-title">Shortcuts</h2>
+    <div class="setting-row">
+      <div class="setting-copy">
+        <span class="setting-label">Dictation shortcut</span>
+        <span class="setting-hint">Global shortcut to start and finish dictation.</span>
+      </div>
+      <div class="setting-control setting-control-shortcut">
+        <span id="shortcut-display" class="shortcut-display"><kbd>Ctrl</kbd>+<kbd>Win</kbd></span>
+        <button type="button" class="btn-secondary" id="shortcut-change" aria-label="Change dictation shortcut" autofocus>Change</button>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-copy">
+        <span class="setting-label">Paste last dictation</span>
+        <span class="setting-hint">Pastes your most recent transcript at the cursor.</span>
+      </div>
+      <div class="setting-control setting-control-shortcut">
+        <span id="paste-last-shortcut-display" class="shortcut-display"><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>V</kbd></span>
+        <button type="button" class="btn-secondary" id="paste-last-shortcut-change" aria-label="Change paste last dictation shortcut">Change</button>
+      </div>
+    </div>
+    <div class="setting-row" id="game-shortcut-row">
+      <div class="setting-copy">
+        <label class="setting-label" for="set-game-shortcut">Game shortcut</label>
+        <span class="setting-hint" id="game-shortcut-hint">Dictate into a game’s chat without leaving the game. While on, its key works only for Vell.</span>
+      </div>
+      <div class="setting-control setting-control-shortcut">
+        <span id="game-shortcut-display" class="shortcut-display" hidden><kbd>F8</kbd></span>
+        <button type="button" class="btn-secondary" id="game-shortcut-change" aria-label="Change game shortcut" hidden>Change</button>
+        <label class="toggle">
+          <input type="checkbox" id="set-game-shortcut" aria-describedby="game-shortcut-hint" />
+          <span class="toggle-track" aria-hidden="true"></span>
+        </label>
+      </div>
+    </div>
+    <p id="shortcut-capture-hint" class="shortcut-capture-hint" role="status" hidden>Press a new shortcut. Escape to cancel.</p>
+    <button type="button" class="settings-close" id="shortcuts-close" aria-label="Close shortcuts">×</button>
+  </dialog>
+  <div id="dict-vocab-overlay" class="vocab-overlay" hidden>
+    <div class="vocab-dialog" role="dialog" aria-modal="true" aria-labelledby="vocab-title">
+      <h2 id="vocab-title">Add to vocabulary</h2>
+      <label class="vocab-option">
+        <span>Correct a misspelling</span>
+        <span class="toggle">
+          <input type="checkbox" id="vocab-misspell" />
+          <span class="toggle-track" aria-hidden="true"></span>
+        </span>
+      </label>
+      <form id="dict-form" class="vocab-form" autocomplete="off">
+        <label class="vocab-field" id="vocab-word-field">
+          <input type="text" id="dict-to" class="setting-input dict-input" placeholder="Add a new word" spellcheck="false" autocomplete="off" />
+        </label>
+        <div class="vocab-mapping" id="vocab-mapping-fields" hidden>
+          <label class="vocab-field">
+            <span class="dict-label">If Vell writes</span>
+            <input type="text" id="dict-from" class="setting-input dict-input" placeholder="vel" spellcheck="false" autocomplete="off" />
+          </label>
+          <label class="vocab-field">
+            <span class="dict-label">Use this spelling</span>
+            <input type="text" id="dict-to-map" class="setting-input dict-input" placeholder="Vell" spellcheck="false" autocomplete="off" />
+          </label>
+        </div>
+        <p id="dict-error" class="dict-error" hidden></p>
+        <div class="vocab-actions">
+          <button type="button" class="btn-secondary" id="vocab-cancel">Cancel</button>
+          <button type="submit" class="btn-primary" id="dict-submit">Add word</button>
+        </div>
+      </form>
+    </div>
+  </div>
   <dialog id="model-welcome" class="model-welcome" aria-labelledby="model-welcome-title" aria-describedby="model-welcome-description">
     <div class="model-welcome-heading">
       <span class="model-welcome-kicker">WELCOME TO VELL</span>
