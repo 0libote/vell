@@ -1,77 +1,51 @@
-# Voxden privacy policy
+# Vell privacy notice
 
-Last updated: 17 September 2026
+Last updated: 13 November 2026
 
-Voxden is a dictation app for Windows made by Sounak. This page says what it
-keeps, where, and what you can do about it. It is written to match what the
-software does; if the software changes, this page changes with it.
+Vell is a local-first dictation app for Windows and macOS. Your voice is
+turned into text by a speech model installed on your computer and never
+leaves it. There is no account, no sign-in, no cloud transcription, no
+advertising, no analytics, and no crash reporting.
 
-## On your PC
+## On your computer
 
-Dictation on the Free plan runs entirely on your computer. Your voice is
-turned into text by a speech model installed on your PC and never leaves it.
-
-Voxden keeps these on your PC, in its own data folder, and nowhere else:
+Vell keeps these on your computer, in its own data folder, and nowhere else:
 
 - Your dictation history, so you can copy or review what you said.
 - Your personal dictionary and the words it learns from your corrections.
-- Audio recordings while "Keep recordings" is on, which it is by default: the
-  clip behind each dictation for 14 days, so you can replay it, save it, or
-  transcribe it again. Audio from a dictation that failed to transcribe is kept
-  the same way, so you can recover the words from the Dictation page; those
-  clips are transcribed only when you press Recover, using the speech engine
-  you have selected at the time. Turning "Keep recordings" off deletes all of
-  it and stops recovery. "Keep audio for training" is a separate setting and is
-  off by default. You can delete the recordings from Settings at any time.
+- Audio recordings only while "Keep recordings" is on, which it is **off**
+  by default: the clip behind each dictation for 14 days, so you can replay
+  it or transcribe it again. Audio from a dictation that failed to transcribe
+  is kept the same way, so you can recover the words from the Dictation page;
+  those clips are transcribed only when you press Recover, using the speech
+  engine you have selected at the time. Turning "Keep recordings" off deletes
+  all of it. You can delete recordings from Settings at any time.
 - Your settings.
 
-## Your account
+## Model downloads
 
-Voxden asks you to sign in. You can sign in with an emailed code or with
-Google. Either way, the account service stores:
+Speech models, the Python speech runtime and GPU packs are downloaded only
+when you choose them in Settings → Speech engines, from GitHub releases and
+Hugging Face. Each download is hash-verified. No other network access happens
+without you asking for it. See `docs/NETWORK.md` for the full inventory.
 
-- Your email address.
-- Which plan you are on and until when.
-- A session token for each PC you signed in on, stored as a hash.
-- If you pay for Pro, the subscription's provider, status and renewal date.
-  Payments are handled by Razorpay; Voxden never sees your card details.
+## What Vell does not do
 
-Signing in with Google asks Google only for your email address and basic
-profile. Voxden stores the email address and nothing else from Google. It does
-not read your Gmail, contacts, calendar or files.
-
-## Voxden Cloud
-
-If you turn on Voxden Cloud, audio of what you dictate is sent to the account
-service and forwarded to a third-party speech recognition provider to be
-turned into text. The service records how many seconds were transcribed, to
-count against your plan. Audio is not stored by the account service after the
-text comes back. Voxden Cloud is off unless you turn it on.
-
-## Feedback
-
-If you send feedback from the Help menu, the message you wrote is stored by
-the account service and forwarded to a private Discord channel that only the
-developer can see. App details (version, engine, plan) are attached only if
-you leave that option on. Your email address is included only if you are
-signed in or type it in.
-
-## What Voxden does not do
-
-- No advertising, and no data is sold or shared for advertising.
+- No accounts, subscriptions, word limits or paid features.
+- No sending of audio or transcripts anywhere, ever.
 - No analytics or tracking of what you type or where you dictate.
 - No reading of the apps you dictate into beyond placing the text there.
 
+## Desert Ant Labs (future)
+
+Vell's planned on-device engine (Voz) has not been integrated yet, so this
+build sends nothing to Desert Ant Labs. When Voz ships, its SDK reports a
+minimal device count (monthly active devices) as its licence requires: an
+SDK-generated identifier, no audio, no text, no account linkage. That
+telemetry cannot be disabled, and it will be disclosed here before any Voz
+build ships. Full terms: https://license.desertant.com/1.0
+
 ## Deleting your data
 
-Sign out from Settings to remove the session from your PC. Uninstalling
-Voxden and deleting its data folder removes everything it kept locally. To
-delete your account and everything the account service holds about it, use
-**Delete account** in Settings. A Pro subscription is cancelled first, so you
-are not charged again. If you can no longer sign in, send a request from the
-Help menu or open an issue at https://github.com/sounak1125/voxden/issues.
-
-## Contact
-
-Questions about this policy: open an issue at
-https://github.com/sounak1125/voxden/issues.
+Uninstalling Vell and deleting its data folder removes everything it kept.
+There is no server copy of anything because there is no server.

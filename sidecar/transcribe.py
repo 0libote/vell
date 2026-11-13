@@ -50,7 +50,7 @@ VAD_PARAMETERS = {
 DEFAULT_MODEL = "large-v3"
 DEFAULT_QWEN_MODEL = "Qwen/Qwen3-ASR-1.7B"
 DEFAULT_PARAKEET_MODEL = "nemo-parakeet-tdt-0.6b-v3"
-ENGINE_IDS = frozenset({"whisper", "whisper-turbo", "qwen3-asr", "parakeet"})
+ENGINE_IDS = frozenset({"whisper", "whisper-turbo", "qwen3-asr", "parakeet", "voz"})
 
 # What each engine can actually do. The JavaScript side keeps the same table in
 # src/asr-capabilities.js; scripts/test-asr-capabilities.js asserts the two
@@ -338,6 +338,19 @@ def backend_probe(engine, env=None):
     engine = normalize_engine(engine)
     if engine == "parakeet":
         return parakeet_probe()
+    if engine == "voz":
+        return {
+            "available": False,
+            "engine": "voz",
+            "label": "Voz",
+            "model": "desert-ant-labs/voz v0.5.0",
+            "missing": ["voz-worker"],
+            "error": (
+                "Voz is not installed yet (missing voz-worker). "
+                "The Desert Ant worker lands next; see docs/DESERT-ANT.md. "
+                "Pick Parakeet, Whisper or Qwen3-ASR for now."
+            ),
+        }
     if engine == "qwen3-asr":
         missing = [name for name in ("torch", "qwen_asr") if not module_available(name)]
         model = env.get("VOXDEN_QWEN_ASR_MODEL") or DEFAULT_QWEN_MODEL
@@ -1424,6 +1437,21 @@ class ParakeetBackend:
         )
 
 
+class VozBackend:
+    """Placeholder for the Desert Ant Voz worker (not yet installed)."""
+
+    engine_id = "voz"
+
+    def __init__(self):
+        raise RuntimeError(
+            "Voz is not installed yet (missing voz-worker). "
+            "See docs/DESERT-ANT.md for the integration plan."
+        )
+
+    def transcribe(self, path, prompt=None, vad=None, language="en", quality=None):
+        raise RuntimeError("Voz is not installed yet (missing voz-worker).")
+
+
 def _engine_id_of(backend):
     named = getattr(backend, "engine_id", None)
     if named in ENGINE_IDS:
@@ -1582,6 +1610,8 @@ def load_selected_backend():
             backend = QwenBackend()
         elif requested == "parakeet":
             backend = ParakeetBackend(as_primary=True)
+        elif requested == "voz":
+            backend = VozBackend()
         else:
             backend = WhisperBackend(requested)
         _backend_warning = gpu_mismatch_note(requested)
