@@ -43,19 +43,12 @@ const ASR_DEVICES = Object.freeze(['auto', 'cuda', 'directml', 'cpu']);
 
 // The languages dictation is offered in.
 //
-// Local engines always hear English. Extra languages belong to Voxden Cloud,
-// whose recognizer is AssemblyAI Universal-3.5 Pro: 18 languages, plus
-// Hinglish as a Voxden overlay. Every code below was sent to the model through
-// OpenRouter on 2026-10-14 and accepted with HTTP 200. The same run refused
-// nb, iw, zh-CN and bn with a 400, so Norwegian is sent as 'no' (its `engine`
-// code) while its saved id stays 'nb', and settings files keep working.
-// Hinglish is Hindi to the recognizer and Latin letters to the user; Hindi
-// keeps the script. The two cannot both be on.
-//
-// The relay keeps its own copy of the 18 codes (ASSEMBLYAI_LANGUAGES in
-// server/cloud.js) and refuses anything else; scripts/test-asr.js fails if the
-// two lists drift apart. A language dropped from this table leaves saved
-// settings cleanly: normalizeDictationLanguages discards it, and an empty
+// Local engines hear English plus the additional languages in
+// DICTATION_LANGUAGES below. Hinglish is Hindi to the recognizer and Latin
+// letters to the user; Hindi keeps the script. The two cannot both be on.
+// Norwegian is sent as 'no' (its engine code) while its saved id stays 'nb',
+// and settings files keep working. A language dropped from this table
+// leaves saved settings cleanly: normalizeDictationLanguages discards it, and an empty
 // selection becomes English.
 function dictationLanguageEntry(id, name, native, engine) {
   return Object.freeze({ id, name, native: native || name, engine: engine || id });
