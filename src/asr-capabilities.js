@@ -251,7 +251,7 @@ const ENGINE_LABELS = Object.freeze({
   'whisper-turbo': 'Whisper turbo',
   'qwen3-asr': 'Qwen3-ASR',
   parakeet: 'Parakeet',
-  voz: 'Voz (preview)',
+  voz: 'Voz',
 });
 
 function engineLabel(engine) {

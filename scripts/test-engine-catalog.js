@@ -18,7 +18,7 @@ function ok(label, value) {
 
 const engineIds = Object.keys(asr.ASR_ENGINES);
 ok('four-plus-one engines listed', engineIds.includes('parakeet') && engineIds.includes('voz'));
-ok('voz marked preview', /preview/i.test(asr.ASR_ENGINES.voz.name + asr.ASR_ENGINES.voz.description));
+ok('voz is listed by name', asr.ASR_ENGINES.voz.name === 'Voz');
 
 for (const id of engineIds) {
   const c = caps.capabilitiesFor(id);

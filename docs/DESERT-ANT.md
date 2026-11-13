@@ -2,9 +2,11 @@
 
 ## Status
 
-Not yet integrated. Local Python sidecar (Parakeet/Whisper/Qwen) is the
-temporary backend. `src/transcription-provider.js` is the seam; `voz` is a
-hidden, non-default capability row until the worker lands.
+Voz is integrated at the provider layer and PoC-verified (see
+`docs/VOZ-SPIKE.md`: correct transcript + word timestamps on a real
+fixture). The Python sidecar (Parakeet/Whisper/Qwen) remains the live
+in-app backend until the Electron worker lands (native module rebuild +
+download-progress UI — buildable only on target hardware).
 
 ## Voz facts
 
@@ -49,9 +51,12 @@ hidden, non-default capability row until the worker lands.
 
 ## Next steps (in order)
 
-1. Spike outside app: Node `Voz.load({ort: onnxruntime-node})` on fixture WAV;
-   record CPU RTF + memory.
-2. `voz` hidden engine + capability row — DONE (this repo). Parity green.
+1. ~~Spike: Node `Voz.load()` on a fixture WAV; record CPU RTF + memory.~~
+   DONE 2026-11-13 — correct transcript, 80ms timestamps, 0.5–1x RTF on
+   container CPU, ~10s first load. Runner: `node scripts/voz-poc.js <wav>`.
+2. `voz` capability row + real `VozProvider` (lazy-load, singleton, wav/PCM
+   in, normalized result out) — DONE. Parity green. `MockVozProvider`
+   stays for model-free tests.
 3. Sidecar `VozBackend` behind env flag, `--check`-only; one manual WAV via
    JSON-line; verify `words→segments` + Ear gate for `auto`/non-Voz langs.
 4. Model pack entry (`desert-ant-labs/voz`), Settings opt-in, onboarding

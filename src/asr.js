@@ -27,9 +27,9 @@ const ASR_ENGINES = Object.freeze({
   }),
   voz: Object.freeze({
     id: 'voz',
-    name: 'Voz (preview)',
+    name: 'Voz',
     advertisedSize: '~0.4 GB',
-    description: 'Desert Ant on-device engine (preview, hidden until the worker lands).',
+    description: 'Desert Ant on-device engine. PoC-verified; desktop worker lands next.',
   }),
 });
 

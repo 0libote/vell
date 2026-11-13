@@ -25,6 +25,17 @@ async function main() {
   ok('engine tagged', result.engine === 'voz-mock');
   ok('vocabulary via repair', result.vocabularyVia === 'repair');
 
+  ok('lists real voz provider', provider.listProviders().includes('voz'));
+  const real = provider.createProvider('voz');
+  ok('real voz provider builds without loading a model', !!real && real.id === 'voz');
+  let wavOk = false;
+  try {
+    provider.readWavMono16k(Buffer.from('RIFF----WAVEfmt '));
+  } catch (e) {
+    wavOk = /fmt\/data|not a WAV/.test(e.message);
+  }
+  ok('wav reader rejects garbage cleanly', wavOk);
+
   const empty = provider.wordsToSegments([]);
   ok('empty maps cleanly', empty.text === '' && empty.segments.length === 0);
 
