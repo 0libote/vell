@@ -1,7 +1,7 @@
 'use strict';
 
 (async function() {
-  const api = window.capture, geometry = window.voxdenCaptureGeometry;
+  const api = window.capture, geometry = window.vellCaptureGeometry;
   const $ = id => document.getElementById(id);
   const canvas = $('image-canvas'), context = canvas.getContext('2d');
   let stage = 'selecting', revision = 0, original = null, marks = [], redo = [], drawing = null;

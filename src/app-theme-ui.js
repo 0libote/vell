@@ -3,7 +3,7 @@
   const theme = window.VoxdenAppTheme;
   const cards = [...document.querySelectorAll('.app-theme-card')];
   const status = document.getElementById('app-theme-status');
-  let saved = theme.normalize(window.voxden?.initialAppTheme);
+  let saved = theme.normalize(window.vell?.initialAppTheme);
   let pending = null, saving = false;
   let displayed;
 
@@ -42,7 +42,7 @@
       const choice = pending;
       pending = null;
       try {
-        const result = await window.voxden.setSettings({ appTheme: choice });
+        const result = await window.vell.setSettings({ appTheme: choice });
         saved = theme.normalize(result.appTheme);
       } catch (_) {
         if (pending === null) {
@@ -72,7 +72,7 @@
       choose(cards[next].dataset.appTheme);
     });
   });
-  window.voxden?.onAppTheme?.(value => render({ appTheme: value }));
+  window.vell?.onAppTheme?.(value => render({ appTheme: value }));
   window.VoxdenThemeSettings = { render };
   show(saved);
 })();

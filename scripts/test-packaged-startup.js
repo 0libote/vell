@@ -112,7 +112,7 @@ app.whenReady().then(async () => {
     url: w.webContents.getURL(), loading: w.webContents.isLoading(), shown: shown.has(w), visible: w.isVisible(),
   })));
   assert(window && shown.has(window), 'manual startup opens the dashboard');
-  const state = await window.webContents.executeJavaScript('window.voxden.loadApp()');
+  const state = await window.webContents.executeJavaScript('window.vell.loadApp()');
   const packagedInfo = require(path.join(appRoot, 'package.json'));
   const version = packagedInfo.version;
   assert.strictEqual(state.version, version, 'startup harness uses the Voxden version');
@@ -145,7 +145,7 @@ app.whenReady().then(async () => {
     assert.strictEqual(saved.entries.length, 1000);
     assert.strictEqual(saved.archived.length, 5);
     assert.deepStrictEqual(saved, JSON.parse(fs.readFileSync(path.join(root, 'data/history.json.bak'), 'utf8')));
-    const reply = await window.webContents.executeJavaScript("window.voxden.historyInsights({range:'all'})");
+    const reply = await window.webContents.executeJavaScript("window.vell.historyInsights({range:'all'})");
     const expected = require(path.join(appRoot, 'src/insights')).computeInsights(existingHistory, state.phrases, 'all', reply.computedAt);
     assert.deepStrictEqual(reply.result, expected, 'actual startup IPC preserves every Insight');
   }

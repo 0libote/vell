@@ -80,8 +80,8 @@ async function main() {
   const base = path.join(work, 'base');
   const rebuilt = path.join(work, 'verified-runtime');
   const legacyArchive = path.join(out, spec.asset);
-  const baseArchive = path.join(ROOT, 'dist-runtime-v3/voxden-asr-runtime-win-x64.zip');
-  const baseManifest = JSON.parse(await fs.promises.readFile(path.join(ROOT, 'dist-runtime-v3/voxden-asr-runtime.json'), 'utf8'));
+  const baseArchive = path.join(ROOT, 'dist-runtime-v3/vell-asr-runtime-win-x64.zip');
+  const baseManifest = JSON.parse(await fs.promises.readFile(path.join(ROOT, 'dist-runtime-v3/vell-asr-runtime.json'), 'utf8'));
   const manifest = JSON.parse(await fs.promises.readFile(path.join(out, spec.manifest), 'utf8'));
   console.log('Verifying original ' + kind + ' and CPU archives...');
   if (manifest.pack.id !== spec.id || manifest.pack.sha256 !== spec.sha256

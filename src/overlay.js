@@ -193,7 +193,7 @@ function playCue(kind) {
 // play is reported at once.
 function reportStartCue(token, endsAt) {
   const tell = () => {
-    if (window.voxden && typeof window.voxden.startCueHeard === 'function') window.voxden.startCueHeard(token);
+    if (window.vell && typeof window.vell.startCueHeard === 'function') window.vell.startCueHeard(token);
   };
   const ctx = sfxCtx;
   if (!endsAt || !ctx || typeof ctx.getOutputTimestamp !== 'function') return tell();
@@ -224,10 +224,10 @@ function inHoverZone(x, y) {
 }
 
 function setIgnoreMouse(ignore) {
-  if (!window.voxden || typeof window.voxden.setIgnoreMouse !== 'function') return;
+  if (!window.vell || typeof window.vell.setIgnoreMouse !== 'function') return;
   if (ignoreMouse === ignore) return;
   ignoreMouse = ignore;
-  window.voxden.setIgnoreMouse(ignore);
+  window.vell.setIgnoreMouse(ignore);
 }
 
 // Island draws settings and the screenshot inside its capsule, so the capsule's
@@ -409,7 +409,7 @@ function popOut() {
   if (!document.body.classList.contains('shown')) {
     document.body.classList.remove('hiding', 'entering');
     syncOrbControls();
-    window.voxden.hudHidden();
+    window.vell.hudHidden();
     return;
   }
   const token = ++hideToken;
@@ -432,7 +432,7 @@ function popOut() {
       hideFallback = 0;
     }
     document.body.classList.remove('hiding');
-    window.voxden.hudHidden();
+    window.vell.hudHidden();
   }
   pill.addEventListener('animationend', finish);
   hideFallback = setTimeout(() => finish(), 360);
@@ -446,7 +446,7 @@ function popOut() {
 // mouse events cannot be trusted to arrive at all.
 function startFlowDrag(pointerId, handle) {
   if (dragging) return false;
-  if (!window.voxden || typeof window.voxden.overlayDragStart !== 'function') return false;
+  if (!window.vell || typeof window.vell.overlayDragStart !== 'function') return false;
   dragging = true;
   dragPointerId = pointerId === undefined ? null : pointerId;
   dragCapture = handle || null;
@@ -457,14 +457,14 @@ function startFlowDrag(pointerId, handle) {
     if (dragCapture && dragPointerId !== null) dragCapture.setPointerCapture(dragPointerId);
   } catch (_) {}
   syncFlowVisual();
-  window.voxden.overlayDragStart();
+  window.vell.overlayDragStart();
   return true;
 }
 
 // Orb's grip: a press on it is a drag from the first pixel.
 function beginFlowDrag(e) {
   if (dragging || e.button !== 0) return;
-  if (!window.voxden || typeof window.voxden.overlayDragStart !== 'function') return;
+  if (!window.vell || typeof window.vell.overlayDragStart !== 'function') return;
   e.preventDefault();
   e.stopPropagation();
   startFlowDrag(e.pointerId, dragHandle);
@@ -488,8 +488,8 @@ function endFlowDrag() {
   }
   document.body.classList.remove('flow-dragging');
   syncFlowVisual();
-  if (window.voxden && typeof window.voxden.overlayDragEnd === 'function') {
-    window.voxden.overlayDragEnd();
+  if (window.vell && typeof window.vell.overlayDragEnd === 'function') {
+    window.vell.overlayDragEnd();
   }
 }
 
@@ -529,8 +529,8 @@ function followBarPress(e) {
 }
 
 function releaseOverlayHold() {
-  if (window.voxden && typeof window.voxden.overlayRelease === 'function') {
-    window.voxden.overlayRelease();
+  if (window.vell && typeof window.vell.overlayRelease === 'function') {
+    window.vell.overlayRelease();
   }
 }
 
@@ -540,7 +540,7 @@ function syncLearnedHold() {
   if (hold === learnedHeld) return;
   learnedHeld = hold;
   if (hold) {
-    if (window.voxden && typeof window.voxden.overlayHold === 'function') window.voxden.overlayHold();
+    if (window.vell && typeof window.vell.overlayHold === 'function') window.vell.overlayHold();
   } else {
     releaseOverlayHold();
   }
@@ -562,8 +562,8 @@ function beginSuccessEdit() {
   // the words take that layout at once, to be revealed as the room opens.
   measureEditLine();
   rewrapLine(true);
-  if (window.voxden && typeof window.voxden.overlayHold === 'function') {
-    window.voxden.overlayHold();
+  if (window.vell && typeof window.vell.overlayHold === 'function') {
+    window.vell.overlayHold();
   }
   setIgnoreMouse(false);
   syncFlowVisual();
@@ -589,8 +589,8 @@ function commitSuccessEdit() {
     lastSuccessText = next;
     if (label) label.textContent = next;
     const id = successEntryId;
-    if (window.voxden && id && typeof window.voxden.editEntry === 'function') {
-      window.voxden.editEntry(id, next).finally(releaseOverlayHold);
+    if (window.vell && id && typeof window.vell.editEntry === 'function') {
+      window.vell.editEntry(id, next).finally(releaseOverlayHold);
     } else {
       releaseOverlayHold();
     }
@@ -925,7 +925,7 @@ function enqueueSlice(pcm, gen, final) {
     pcm = padded;
   }
   if (pcm.length < MIN_SLICE_SAMPLES) return;
-  if (!window.voxden || typeof window.voxden.transcribeLocal !== 'function') return;
+  if (!window.vell || typeof window.vell.transcribeLocal !== 'function') return;
   const wav = encodeWav(pcm, OUT_RATE);
   const index = chunkJobs.length;
   chunkSlices.push(pcm);
@@ -938,7 +938,7 @@ function enqueueSlice(pcm, gen, final) {
     // Main picks the lane from these: a piece cut while the user talks goes
     // to the body lane, the tail and anything sent after stop to the tail.
     if (lanes) { options.piece = index; options.final = piece.final; }
-    return window.voxden.transcribeLocal(wav, options);
+    return window.vell.transcribeLocal(wav, options);
   };
   if (cloud && !cloudQueue) {
     cloudQueue = globalThis.voxdenCloudSegments.createCloudQueue(lanes ? { concurrency: lanes.bodyConcurrency } : undefined);
@@ -946,7 +946,7 @@ function enqueueSlice(pcm, gen, final) {
   const answered = () => { piece.done = true; piece.doneAt = performance.now(); };
   const request = cloud ? cloudQueue.enqueue(recognize, lanes && final ? { now: true } : undefined).then(result => {
     answered();
-    if (gen === captureGen && window.voxden.diag) window.voxden.diag('cloud-segment', {
+    if (gen === captureGen && window.vell.diag) window.vell.diag('cloud-segment', {
       index, audioMs: Math.round(pcm.length / OUT_RATE * 1000), queueMs: result.queueMs, requestMs: result.requestMs,
     });
     return result.value;
@@ -1560,7 +1560,7 @@ function encodePcm(float32) {
 
 function maybeFlushLive() {
   if (!keepLiveAudio || !capturing) return;
-  if (!window.voxden || typeof window.voxden.flushAudio !== 'function') return;
+  if (!window.vell || typeof window.vell.flushAudio !== 'function') return;
   const local = wantsLocalAsr();
   const chunks = local ? dsPcmChunks : pcmChunks;
   const rate = local ? OUT_RATE : inputSampleRate;
@@ -1579,7 +1579,7 @@ function maybeFlushLive() {
   liveCursor = chunks.length;
   liveSamples += pending;
   try {
-    window.voxden.flushAudio(encodePcm(block), rate);
+    window.vell.flushAudio(encodePcm(block), rate);
   } catch (_) {
     // A failed hand-off must never take the dictation down with it. The next
     // block carries on from the same cursor.
@@ -1599,8 +1599,8 @@ function stopWebSpeech() {
 function announceCaptureReady() {
   if (readyReported || mediaHold || !micLive || !capturing) return;
   readyReported = true;
-  if (capMarks && window.voxden && typeof window.voxden.diag === 'function') {
-    window.voxden.diag('capture-startup', {
+  if (capMarks && window.vell && typeof window.vell.diag === 'function') {
+    window.vell.diag('capture-startup', {
       getUserMediaMs: capMarks.deviceReady - capMarks.requested,
       contextMs: capMarks.contextReady - capMarks.deviceReady,
       firstBufferMs: capMarks.firstAudio - capMarks.graphReady,
@@ -1609,9 +1609,9 @@ function announceCaptureReady() {
     });
   }
   setHud('recording');
-  if (window.voxden && typeof window.voxden.captureReady === 'function') {
+  if (window.vell && typeof window.vell.captureReady === 'function') {
     const marks = capMarks || {};
-    window.voxden.captureReady({
+    window.vell.captureReady({
       micMs: marks.requested && marks.firstAudio ? marks.firstAudio - marks.requested : -1,
       // How long a live microphone waited for the pause. Zero: the pause was
       // already done by the time the first buffer arrived.
@@ -1806,7 +1806,7 @@ async function startCapture(useEngine, hold) {
       };
       recognition.onerror = (ev) => {
         if (ev.error === 'not-allowed') {
-          window.voxden.captureFailed('Mic blocked — allow microphone access');
+          window.vell.captureFailed('Mic blocked — allow microphone access');
         }
       };
       try { recognition.start(); } catch (_) {}
@@ -1818,8 +1818,8 @@ async function startCapture(useEngine, hold) {
 
 function failCapture(gen, message) {
   if (gen !== captureGen || !capturing) return;
-  if (typeof window.voxden.diag === 'function') {
-    window.voxden.diag('capture-failed', { mode: hudMode, audioState: audioCtx && audioCtx.state, reason: message });
+  if (typeof window.vell.diag === 'function') {
+    window.vell.diag('capture-failed', { mode: hudMode, audioState: audioCtx && audioCtx.state, reason: message });
   }
   capturing = false;
   captureGen += 1;
@@ -1828,7 +1828,7 @@ function failCapture(gen, message) {
   stopWebSpeech();
   teardownAudio(false);
   setHud('error', message);
-  window.voxden.captureFailed(message);
+  window.vell.captureFailed(message);
 }
 
 function teardownAudio(reuse = true) {
@@ -1902,7 +1902,7 @@ async function reconcileChunks(texts, sliceOf, gen) {
     const bridge = mergePcm([head, tail]);
     if (bridge.length < MIN_SLICE_SAMPLES) continue;
     try {
-      const text = await window.voxden.transcribeLocal(
+      const text = await window.vell.transcribeLocal(
         encodeWav(bridge, OUT_RATE), { park: false, vad: false }
       );
       if (chunkingApi().shouldIgnoreGeneration(gen, captureGen)) return '';
@@ -1932,9 +1932,9 @@ function mergedCapturePcm(chunks) {
 // engine is the one case where the user has no other copy of their words.
 async function keepForRecovery(pcm) {
   if (!pcm || !pcm.length) return;
-  if (!window.voxden || typeof window.voxden.parkAudio !== 'function') return;
+  if (!window.vell || typeof window.vell.parkAudio !== 'function') return;
   try {
-    await window.voxden.parkAudio(encodeWav(pcm, OUT_RATE));
+    await window.vell.parkAudio(encodeWav(pcm, OUT_RATE));
   } catch (_) {}
 }
 
@@ -1960,14 +1960,14 @@ async function finishCapture(shouldTranscribe) {
   teardownAudio();
   // Other apps only need to stay silent while their sound can reach the open
   // microphone. Let main restore output before local transcription finishes.
-  if (window.voxden && typeof window.voxden.captureEnded === 'function') {
-    window.voxden.captureEnded();
+  if (window.vell && typeof window.vell.captureEnded === 'function') {
+    window.vell.captureEnded();
   }
 
   if (!shouldTranscribe) {
     captureGen += 1;
     resetChunkState();
-    window.voxden.cancelled();
+    window.vell.cancelled();
     return;
   }
 
@@ -1988,8 +1988,8 @@ async function finishCapture(shouldTranscribe) {
       if (pcm.length < MIN_SLICE_SAMPLES) {
         captureGen += 1;
         resetChunkState();
-        if (webFallback) window.voxden.transcript(webFallback);
-        else window.voxden.captureFailed(nothingHeardMessage());
+        if (webFallback) window.vell.transcript(webFallback);
+        else window.vell.captureFailed(nothingHeardMessage());
         return;
       }
       // A recording nobody spoke into goes no further. Every engine writes
@@ -1997,7 +1997,7 @@ async function finishCapture(shouldTranscribe) {
       // the slices already sent are abandoned with the generation bump, so
       // whatever they come back with is never read either.
       const gate = speechGateApi() ? speechGateApi().analyseSpeech(pcm, { sampleRate: OUT_RATE }) : null;
-      if (gate && typeof window.voxden.diag === 'function') window.voxden.diag('speech-gate', gate);
+      if (gate && typeof window.vell.diag === 'function') window.vell.diag('speech-gate', gate);
       if (gate && !gate.speech) {
         captureGen += 1;
         resetChunkState();
@@ -2005,7 +2005,7 @@ async function finishCapture(shouldTranscribe) {
         // speaker can fall under it while the user was talking the whole time.
         // Keep the clip: being wrong here used to cost them the dictation.
         await keepForRecovery(pcm);
-        window.voxden.captureFailed(nothingHeardMessage());
+        window.vell.captureFailed(nothingHeardMessage());
         return;
       }
       // The recording is real speech and the user is waiting. With lanes,
@@ -2015,7 +2015,7 @@ async function finishCapture(shouldTranscribe) {
       let hurried = 0;
       if (cloudCapture && cloudLanes && cloudQueue) {
         hurried = cloudPieces.filter(piece => piece && piece.started && !piece.done && !piece.final).length;
-        if (typeof window.voxden.cloudFinishing === 'function') window.voxden.cloudFinishing();
+        if (typeof window.vell.cloudFinishing === 'function') window.vell.cloudFinishing();
         for (const piece of cloudPieces) if (piece && !piece.started) piece.final = true;
         cloudQueue.release();
       }
@@ -2023,17 +2023,17 @@ async function finishCapture(shouldTranscribe) {
       let trimmed = '';
       if (chunkJobs.length) {
         const saveStarted = performance.now();
-        if (cloudCapture && window.voxden.parkAudio) await window.voxden.parkAudio(encodeWav(pcm, OUT_RATE));
-        if (cloudCapture && window.voxden.diag) window.voxden.diag('cloud-finish', {
+        if (cloudCapture && window.vell.parkAudio) await window.vell.parkAudio(encodeWav(pcm, OUT_RATE));
+        if (cloudCapture && window.vell.diag) window.vell.diag('cloud-finish', {
           segments: chunkJobs.length, audioMs: Math.round(pcm.length / OUT_RATE * 1000),
           saveMs: Math.round(performance.now() - saveStarted),
         });
         const results = await Promise.all(chunkJobs);
         if (ignore && ignore(gen, captureGen)) return;
         // From stop to the last piece's answer: the wait lanes exist to cut.
-        if (cloudCapture && window.voxden.diag) {
+        if (cloudCapture && window.vell.diag) {
           const lastAnswer = cloudPieces.reduce((latest, piece) => Math.max(latest, (piece && piece.doneAt) || 0), stopAt);
-          window.voxden.diag('cloud-wait', {
+          window.vell.diag('cloud-wait', {
             ms: Math.round(lastAnswer - stopAt), pendingAtStop, hurried, lanes: !!cloudLanes,
           });
         }
@@ -2063,30 +2063,30 @@ async function finishCapture(shouldTranscribe) {
           trimmed = joined.trim();
           if (!cloudCapture && !(ignore && ignore(gen, captureGen))) {
             const fullWav = encodeWav(pcm, OUT_RATE);
-            if (window.voxden.parkAudio) window.voxden.parkAudio(fullWav);
+            if (window.vell.parkAudio) window.vell.parkAudio(fullWav);
           }
         }
       }
       if (!trimmed && !(cloudCapture && chunkJobs.length)) {
         const wav = encodeWav(pcm, OUT_RATE);
-        trimmed = String((await window.voxden.transcribeLocal(wav, { cloud: cloudCapture })) || '').trim();
+        trimmed = String((await window.vell.transcribeLocal(wav, { cloud: cloudCapture })) || '').trim();
       }
       if (ignore && ignore(gen, captureGen)) return;
       resetChunkState();
       if (trimmed) {
-        window.voxden.transcript(trimmed);
+        window.vell.transcript(trimmed);
       } else if (webFallback) {
-        window.voxden.transcript(webFallback);
+        window.vell.transcript(webFallback);
       } else {
-        window.voxden.captureFailed('No speech');
+        window.vell.captureFailed('No speech');
       }
     } catch (err) {
       if (chunkingApi() && chunkingApi().shouldIgnoreGeneration(gen, captureGen)) return;
       resetChunkState();
       if (webFallback) {
-        window.voxden.transcript(webFallback);
+        window.vell.transcript(webFallback);
       } else {
-        window.voxden.captureFailed((err && err.message) || 'Transcribe failed');
+        window.vell.captureFailed((err && err.message) || 'Transcribe failed');
       }
     }
     return;
@@ -2098,7 +2098,7 @@ async function finishCapture(shouldTranscribe) {
   resetChunkState();
 
   if (webFallback) {
-    window.voxden.transcript(webFallback);
+    window.vell.transcript(webFallback);
     return;
   }
 
@@ -2107,48 +2107,48 @@ async function finishCapture(shouldTranscribe) {
   // point at Settings, where the actual missing package is named.
   if (engineStatus === 'unavailable') {
     await keepForRecovery(tailPcm);
-    window.voxden.captureFailed('Speech engine not set up');
+    window.vell.captureFailed('Speech engine not set up');
     return;
   }
 
   await keepForRecovery(tailPcm);
-  window.voxden.captureFailed(hasPcm ? 'No speech' : nothingHeardMessage());
+  window.vell.captureFailed(hasPcm ? 'No speech' : nothingHeardMessage());
 }
 
 if (btnCancel) {
   btnCancel.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (window.voxden) window.voxden.cancel();
+    if (window.vell) window.vell.cancel();
   });
 }
 
 function finishOrbRecording(e) {
   e.preventDefault();
   e.stopPropagation();
-  if (flowBarStyle === 'orb' && hudMode === 'recording' && window.voxden) window.voxden.confirm();
+  if (flowBarStyle === 'orb' && hudMode === 'recording' && window.vell) window.vell.confirm();
 }
 if (orbFinish) orbFinish.addEventListener('click', finishOrbRecording);
 if (orbDiscard) orbDiscard.addEventListener('click', e => {
   e.preventDefault();
   e.stopPropagation();
-  if (flowBarStyle === 'orb' && hudMode === 'recording' && window.voxden) window.voxden.cancel();
+  if (flowBarStyle === 'orb' && hudMode === 'recording' && window.vell) window.vell.cancel();
 });
 if (orbTrigger) orbTrigger.addEventListener('click', e => {
   if (hudMode === 'recording') return finishOrbRecording(e);
   e.preventDefault();
   e.stopPropagation();
-  if (flowBarStyle !== 'orb' || hudMode !== 'idle' || !window.voxden) return;
-  window.voxden.toggle();
+  if (flowBarStyle !== 'orb' || hudMode !== 'idle' || !window.vell) return;
+  window.vell.toggle();
 });
 
 if (btnConfirm) {
   btnConfirm.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!window.voxden) return;
+    if (!window.vell) return;
     if (editingSuccess) return;
-    window.voxden.confirm();
+    window.vell.confirm();
   });
 }
 
@@ -2159,11 +2159,11 @@ if (btnPolish) {
     e.preventDefault();
     e.stopPropagation();
     if (hudMode !== 'success' || !successEntryId || !polishOffer || editingSuccess || polishPending
-      || !window.voxden || typeof window.voxden.polishEntry !== 'function') return;
+      || !window.vell || typeof window.vell.polishEntry !== 'function') return;
     polishPending = true;
     syncFlowVisual();
     // Main shows the progress and the outcome on this bar.
-    window.voxden.polishEntry(successEntryId).catch(() => {}).finally(() => { polishPending = false; });
+    window.vell.polishEntry(successEntryId).catch(() => {}).finally(() => { polishPending = false; });
   });
 }
 
@@ -2176,13 +2176,13 @@ if (btnUndo) {
     e.preventDefault();
     e.stopPropagation();
     if (hudMode !== 'learned' || !learnedUndoToken || learnedUndoPending
-      || !window.voxden || typeof window.voxden.undoAutoLearn !== 'function') return;
+      || !window.vell || typeof window.vell.undoAutoLearn !== 'function') return;
     const token = learnedUndoToken;
     learnedUndoPending = true;
     btnUndo.disabled = true;
     syncLearnedHold();
     try {
-      const result = await window.voxden.undoAutoLearn(token);
+      const result = await window.vell.undoAutoLearn(token);
       if ((!result || !result.ok) && hudMode === 'learned' && learnedUndoToken === token) {
         setHud('learned', (result && result.error) || 'Could not undo. Try again.');
       }
@@ -2239,7 +2239,7 @@ function onIdleDictate(e) {
   if (!pill.classList.contains('idle')) return;
   e.preventDefault();
   e.stopPropagation();
-  if (window.voxden) window.voxden.toggle();
+  if (window.vell) window.vell.toggle();
 }
 
 // Listen on the document, not just the pill: the window only captures the mouse
@@ -2287,8 +2287,8 @@ if (settingsBtn) {
   settingsBtn.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (window.voxden && typeof window.voxden.overlaySettings === 'function') {
-      window.voxden.overlaySettings();
+    if (window.vell && typeof window.vell.overlaySettings === 'function') {
+      window.vell.overlaySettings();
     }
   });
 }
@@ -2297,12 +2297,12 @@ if (captureScreenBtn) {
   captureScreenBtn.addEventListener('click', e => {
     e.preventDefault();
     e.stopPropagation();
-    if (window.voxden && window.voxden.captureScreen) window.voxden.captureScreen();
+    if (window.vell && window.vell.captureScreen) window.vell.captureScreen();
   });
 }
 
-if (window.voxden) {
-  window.voxden.onState((s) => {
+if (window.vell) {
+  window.vell.onState((s) => {
     let revealAfterState = !!s.reveal;
     if (s.flowBarMotion !== undefined) window.VoxdenFlowMotion.setPreference(s.flowBarMotion);
     engine = s.engine || engine;
@@ -2426,27 +2426,27 @@ if (window.voxden) {
     syncFlowVisual();
   });
 
-  if (typeof window.voxden.onCursor === 'function') {
-    window.voxden.onCursor(onCursor);
+  if (typeof window.vell.onCursor === 'function') {
+    window.vell.onCursor(onCursor);
   }
 
   // Main owns the end of a drag as well as the middle of it: if the OS takes
   // the pointer capture away without a pointerup ever reaching us, this is the
   // only signal that the bar has been put down. endFlowDrag self-guards on
   // `dragging`, so the echo it sends back to main is a no-op.
-  if (typeof window.voxden.onDragEnd === 'function') {
-    window.voxden.onDragEnd(() => endFlowDrag());
+  if (typeof window.vell.onDragEnd === 'function') {
+    window.vell.onDragEnd(() => endFlowDrag());
   }
 
   // Main checks both the event loop and frame delivery. IPC can remain alive
   // while Chromium's compositor stops animating; the second acknowledgement
   // lets main recover that native surface without discarding the recording.
-  if (typeof window.voxden.onPing === 'function' && typeof window.voxden.pong === 'function') {
+  if (typeof window.vell.onPing === 'function' && typeof window.vell.pong === 'function') {
     let frameProbe = 0;
     let frameProbeSeq = 0;
-    window.voxden.onPing((seq) => {
-      window.voxden.pong(seq);
-      if (typeof window.voxden.frame !== 'function') return;
+    window.vell.onPing((seq) => {
+      window.vell.pong(seq);
+      if (typeof window.vell.frame !== 'function') return;
       frameProbeSeq = seq;
       // One frame per slow health ping, never an idle animation loop. When
       // Chromium stops rendering, retain just one callback for the latest
@@ -2454,12 +2454,12 @@ if (window.voxden) {
       if (frameProbe) return;
       frameProbe = requestAnimationFrame(() => {
         frameProbe = 0;
-        window.voxden.frame(frameProbeSeq);
+        window.vell.frame(frameProbeSeq);
       });
     });
   }
 
-  window.voxden.ready();
+  window.vell.ready();
   syncFlowVisual();
   setTimeout(() => { if (soundsEnabled) ensureSfxContext(); }, 1000);
 }

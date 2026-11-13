@@ -57,18 +57,6 @@ app.whenReady().then(async () => {
     return require('../src/style').applyStyleWithTone(clean === true ? require('../src/auto-cleanup').autoCleanup(sample) : sample, String(tone || ''));
   });
   ipcMain.handle('toggle', () => { toggles++; return { mode: 'idle' }; });
-  // Polishing a dictation from its card: the reply comes after a moment, and
-  // the history broadcast carries the polished version.
-  const polishCalls = [];
-  ipcMain.handle('polish-quote', () => ({ words: 0, credits: 0, label: '', ok: false, reason: 'empty' }));
-  ipcMain.handle('polish-entry', async (_event, id, mode) => {
-    polishCalls.push([id, mode]);
-    await new Promise(resolve => setTimeout(resolve, 200));
-    snapshot = { ...snapshot, entries: snapshot.entries.map(entry => entry.id === id
-      ? { ...entry, polished: { text: 'Let’s keep the next version simple.', at: Date.now(), credits: 0.25, mode } } : entry) };
-    win.webContents.send('history-updated', snapshot);
-    return { ok: true, text: 'Let’s keep the next version simple.', credits: 0.25, mode, placed: 'none' };
-  });
   ipcMain.handle('settings-set', (_event, patch) => {
     saves.push(patch);
     snapshot = { ...snapshot, ...patch, writingStyles: { ...snapshot.writingStyles, ...patch.writingStyles } };
@@ -154,7 +142,7 @@ app.whenReady().then(async () => {
       icon: card.querySelector('.card-app-icon').tagName, time: !!card.querySelector('.card-head .time'),
       copyBg: getComputedStyle(copy).backgroundColor, copyInk: getComputedStyle(copy).color, copyLabel: copy.textContent.trim(),
       play: play ? play.getAttribute('aria-label') : null, wave: play ? play.querySelectorAll('.wave rect').length : 0,
-      polish: polish.textContent.trim(), more: card.querySelectorAll('.card-more').length };
+      polish: polish ? polish.textContent.trim() : null, more: card.querySelectorAll('.card-more').length };
   })()`);
   assert.deepStrictEqual([lead.id, lead.latest, lead.first, lead.radius, lead.pad, lead.font, lead.line],
     ['one', 1, true, '18px', '16px 20px 18px', '17px', '27.2px'], 'the newest dictation of today is the one lead card: ' + JSON.stringify(lead));
@@ -162,8 +150,8 @@ app.whenReady().then(async () => {
   assert.deepStrictEqual([lead.app, lead.windowTitle, lead.icon, lead.time], ['Slack', 'Slack | #product', 'SPAN', true],
     'the header names the app and the window, with a neutral mark for an app without one: ' + JSON.stringify(lead));
   assert.deepStrictEqual([lead.copyBg, lead.copyInk, lead.copyLabel, lead.play, lead.wave, lead.polish, lead.more],
-    ['rgb(156, 243, 196)', 'rgb(14, 36, 25)', 'Copy', 'Play recording, 0:10', 11, 'Polish', 1],
-    'Copy, a Play pill with its bars and a duration, and Polish: ' + JSON.stringify(lead));
+    ['rgb(156, 243, 196)', 'rgb(14, 36, 25)', 'Copy', 'Play recording, 0:10', 11, null, 1],
+    'Copy and a Play pill with its bars and a duration, no Polish: ' + JSON.stringify(lead));
   const second = await evaluate(`(() => {
     const card = document.querySelector('#groups .card:not(.is-latest)'), cs = getComputedStyle(card), words = card.querySelector('.text');
     const actions = card.querySelector('.card-actions');
@@ -196,32 +184,6 @@ app.whenReady().then(async () => {
     'each day is its own section: ' + JSON.stringify(feedShape));
   assert.ok(feedShape.sticky.every(value => value === 'sticky:0px'), 'every day header sticks to the top of the feed: ' + JSON.stringify(feedShape));
   assert.strictEqual(feedShape.counts.join('|'), feedShape.cards.map(n => n === 1 ? '1 dictation' : n + ' dictations').join('|'), 'the headers count their cards');
-
-  // Polish from the lead card: a free account is taken to the Polish page, a Pro
-  // account polishes in place (the card shows the work and then the result).
-  await click('#groups .card.is-latest .pill-polish');
-  await pause(120);
-  assert.strictEqual(await evaluate(`document.getElementById('view-polish').hidden`), false, 'Polish on a free account opens the Polish page');
-  await click('#nav-dictation');
-  await pause(120);
-  snapshot = { ...snapshot, account: { signedIn: true, plan: 'pro', cloud: { creditsCap: 900, creditsUsed: 0 } } };
-  win.webContents.send('history-updated', snapshot);
-  await pause(120);
-  await click('#groups .card.is-latest .pill-polish');
-  await pause(60);
-  assert.deepStrictEqual(await evaluate(`(() => { const pill = document.querySelector('#groups .card.is-latest .pill-polish');
-    return [pill.textContent.trim(), pill.disabled, document.querySelector('#groups .card.is-latest .text').classList.contains('is-polishing')]; })()`),
-    ['Polishing', true, true], 'the pill and the words show that a polish is running');
-  await pause(300);
-  assert.deepStrictEqual(polishCalls, [['one', 'polish']], 'the pill polishes this dictation through the entry channel');
-  assert.deepStrictEqual(await evaluate(`(() => { const card = document.querySelector('#groups .card.is-latest');
-    return [card.querySelector('.pill-polish').textContent.trim(), card.querySelector('.card-polished-text').textContent,
-      card.querySelector('.pill-polish').disabled, card.querySelector('.text').classList.contains('is-polishing')]; })()`),
-    ['Polish again', 'Let’s keep the next version simple.', false, false], 'the polished version appears under the words');
-  const { account: _proAccount, ...freeSnapshot } = snapshot;
-  snapshot = freeSnapshot;
-  win.webContents.send('history-updated', snapshot);
-  await pause(120);
 
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
   const todayEntries = snapshot.entries.filter(entry => entry.ts >= todayStart.getTime() && entry.ts < todayStart.getTime() + 86400000);

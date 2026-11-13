@@ -141,7 +141,7 @@ class ReleaseDownloader {
     this.repository = String(opts.repository || '');
     this.releaseTag = String(opts.releaseTag || '');
     this.fetch = opts.fetchImpl || globalThis.fetch;
-    this.userAgent = String(opts.userAgent || 'Voxden');
+    this.userAgent = String(opts.userAgent || 'Vell');
     this.cancelLabel = String(opts.cancelLabel || 'Download');
     this.releaseApiUrl = opts.releaseApiUrl
       || 'https://api.github.com/repos/' + this.repository + '/releases/tags/' + encodeURIComponent(this.releaseTag);
@@ -174,7 +174,7 @@ class ReleaseDownloader {
       signal,
     });
     if (response && response.status === 404) {
-      throw new ReleaseError('That Voxden release has not been published yet.', 'RELEASE_NOT_FOUND');
+      throw new ReleaseError('That Vell release has not been published yet.', 'RELEASE_NOT_FOUND');
     }
     if (!response || !response.ok) {
       throw new ReleaseError('GitHub could not provide the release.', 'RELEASE_UNAVAILABLE');

@@ -14,7 +14,7 @@ const SEVEN_ZIP = {
 async function main() {
   const root = path.join(__dirname, '../dist-runtime-v3');
   const spec = runtimeSpec();
-  const manifest = JSON.parse(fs.readFileSync(path.join(root, 'voxden-asr-runtime.json'), 'utf8'));
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, 'vell-asr-runtime.json'), 'utf8'));
   const runtime = manifest.runtime;
   if (!runtime || !['whisper', 'qwen3-asr', 'parakeet'].every(id => runtime.engines?.includes(id))) {
     throw new Error('Build the complete speech runtime first: npm run prepare:asr-runtime');

@@ -1,7 +1,7 @@
 'use strict';
 
 // Native dialog provides focus containment and keyboard radio navigation.
-window.VoxdenOnboarding = (() => {
+window.VellOnboarding = (() => {
   const dialog = document.getElementById('model-welcome');
   const choices = document.getElementById('model-welcome-choices');
   const start = document.getElementById('model-welcome-start');
@@ -9,7 +9,6 @@ window.VoxdenOnboarding = (() => {
   const status = document.getElementById('model-welcome-status');
   const progress = document.getElementById('model-welcome-progress');
   const meter = document.getElementById('model-welcome-meter');
-  const pro = document.getElementById('island-pro');
   const names = { parakeet: 'Parakeet v3', 'whisper-turbo': 'Whisper turbo', 'qwen3-asr': 'Qwen3-ASR', whisper: 'Whisper large-v3' };
   let latest = {}, callbacks, deferred = false, pending = false, finished = false;
   const selected = () => choices.querySelector('input:checked').value;
@@ -64,7 +63,7 @@ window.VoxdenOnboarding = (() => {
     if (!pending && !latest.asrOperation) return close();
     later.disabled = true;
     try {
-      const next = await window.voxden.cancelAsrRuntime();
+      const next = await window.vell.cancelAsrRuntime();
       if (next) callbacks.render(next);
     } catch (error) { status.textContent = error.message; }
     finally { later.disabled = false; }
@@ -75,7 +74,7 @@ window.VoxdenOnboarding = (() => {
     pending = true;
     paint();
     try {
-      const next = await window.voxden.setupLocalModel(selected());
+      const next = await window.vell.setupLocalModel(selected());
       if (next) {
         finished = next.asrRuntimeState?.status === 'installed' && next.modelPlan?.ready === true;
         callbacks.render(next);
@@ -84,15 +83,12 @@ window.VoxdenOnboarding = (() => {
       latest = { ...latest, asrRuntimeState: { status: 'error', message: error.message || 'Setup failed. Try again.' } };
     } finally { pending = false; paint(); }
   });
-  pro.addEventListener('click', () => callbacks.openBilling());
   return {
     render(data, actions) {
       latest = data;
       callbacks = actions;
       offerChoices(data);
-      pro.hidden = data.account?.plan === 'pro' || data.localModelChosen === false;
-      // The sign-in gate comes first; the model choice waits behind it.
-      if (data.localModelChosen === false && !deferred && !dialog.open && data.signInRequired !== true) dialog.showModal();
+      if (data.localModelChosen === false && !deferred && !dialog.open) dialog.showModal();
       if (dialog.open) paint();
     },
     open() { deferred = false; finished = false; dialog.showModal(); paint(); },

@@ -149,7 +149,7 @@ async function main() {
     // The first snapshot sets the platform attribute; give the page a moment.
     await sleep(3000);
     try {
-      const state = await evaluate(dashboard.webSocketDebuggerUrl, `window.voxden.loadApp().then((s) => ({
+      const state = await evaluate(dashboard.webSocketDebuggerUrl, `window.vell.loadApp().then((s) => ({
         version: s.version, platform: s.platform, packaged: s.packaged, updateStatus: s.status,
         availableEngines: s.availableEngines, engineStatus: s.engineStatus, shortcut: s.shortcut,
         shortcutLabel: s.shortcutLabel, runtimeBundled: !!(s.asrRuntime && s.asrRuntime.bundled),

@@ -48,7 +48,7 @@ app.whenReady().then(async () => {
   });
 
   // What the two buttons are for is an IPC message, so watch the real channels
-  // rather than the window.voxden bridge -- contextBridge objects are frozen,
+  // rather than the window.vell bridge -- contextBridge objects are frozen,
   // and stubbing one only proves that the stub was called.
   const sent = [];
   ipcMain.on('overlay-settings', () => sent.push('overlaySettings'));

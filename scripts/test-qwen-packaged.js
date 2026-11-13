@@ -43,7 +43,7 @@ ok('40. the main installer extraResources do not bundle the Qwen CUDA pack zip',
 ok('40b. the main installer extraResources do not bundle the Qwen ROCm pack zip',
   !/qwen-rocm-pack-win-x64\.zip/.test(extra));
 ok('40c. the CPU speech runtime zip is still bundled',
-  extra.includes('voxden-asr-runtime-win-x64.zip'));
+  extra.includes('vell-asr-runtime-win-x64.zip'));
 
 const catalog = require('../src/qwen-accel-catalog.json');
 if (catalog.cuda && catalog.cuda.sha256) {

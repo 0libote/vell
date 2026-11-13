@@ -94,10 +94,10 @@ app.whenReady().then(async () => {
     current: [...document.querySelectorAll('[aria-current="page"]')].map(b => b.id),
     sidebar: !!document.querySelector('.sidebar, #sidebar, #sidebar-toggle, #sidebar-credits, #sidebar-pro'),
     buttons: [...document.querySelectorAll('#island button, .titlebar-end button')].every(b => b.tagName === 'BUTTON' && b.type === 'button'),
-    names: ['nav-settings', 'nav-help', 'notif-btn', 'account-btn'].map(id => document.getElementById(id).getAttribute('aria-label') || document.getElementById(id).title),
+    names: ['nav-settings', 'nav-help', 'notif-btn'].map(id => document.getElementById(id).getAttribute('aria-label') || document.getElementById(id).title),
   })`);
   assert.deepStrictEqual(markup.sections, [['nav-dictation', 'dictation', 'Dictation'], ['nav-dictionary', 'dictionary', 'Dictionary'],
-    ['nav-writing-style', 'writing-style', 'Writing style'], ['nav-polish', 'polish', 'Polish PRO'], ['nav-insights', 'insights', 'Insights']]);
+    ['nav-writing-style', 'writing-style', 'Writing style'], ['nav-insights', 'insights', 'Insights']]);
   assert.strictEqual(markup.tag, 'NAV');
   assert.strictEqual(markup.label, 'Sections');
   assert.deepStrictEqual(markup.current, ['nav-dictation'], 'the section on screen is the current page');
@@ -131,12 +131,9 @@ app.whenReady().then(async () => {
     const look = await run(`(() => { const c = s => getComputedStyle(document.querySelector(s));
       return { island: c('#island').backgroundColor, edge: c('#island').borderTopColor, active: c('.island-link.is-active').backgroundColor,
         text: c('.island-link:not(.is-active)').color, icon: c('.island-link.is-active .island-icon').color,
-        edgeOfPanel: c('main').borderTopColor, ringTrack: c('.island-ring-track').stroke, ring: c('.island-ring-arc').stroke,
-        avatar: c('#account-btn').boxShadow }; })()`);
+        edgeOfPanel: c('main').borderTopColor }; })()`);
     assert.deepStrictEqual([look.island, look.edge, look.active, look.text, look.icon],
       ['rgb(0, 0, 0)', 'rgba(255, 255, 255, 0.3)', 'rgb(44, 44, 46)', 'rgba(235, 235, 245, 0.68)', 'rgb(156, 243, 196)'], theme + ' capsule');
-    assert.deepStrictEqual([look.ringTrack, look.ring], ['rgb(38, 48, 44)', 'rgb(156, 243, 196)'], theme + ' ring');
-    assert.ok(look.avatar.includes('201, 162, 75'), theme + ' gives a Pro avatar its gold ring: ' + look.avatar);
     assert.strictEqual(look.edgeOfPanel, theme === 'white' ? 'rgba(0, 0, 0, 0)' : 'rgba(255, 255, 255, 0.06)', theme + ' panel edge');
   }
   await show('pro');
@@ -147,8 +144,8 @@ app.whenReady().then(async () => {
   await run(`openSettings(); true`);
   assert.deepStrictEqual(await run(`[...document.querySelectorAll('[aria-current="page"]')].map(b => b.id)`), ['nav-settings'], 'Settings takes the highlight while its sheet is up');
   assert.strictEqual(await run(`document.getElementById('nav-settings').classList.contains('is-active') && !document.querySelector('.island-link.is-active')`), true);
-  await run(`document.getElementById('nav-polish').click(); true`);
-  assert.deepStrictEqual(await run(`[settingsOpen, document.getElementById('nav-polish').getAttribute('aria-current')]`), [false, 'page'], 'a section closes Settings and lights itself');
+  await run(`document.getElementById('nav-dictionary').click(); true`);
+  assert.deepStrictEqual(await run(`[settingsOpen, document.getElementById('nav-dictionary').getAttribute('aria-current')]`), [false, 'page'], 'a section closes Settings and lights itself');
   await run(`setView('help'); true`);
   assert.deepStrictEqual(await run(`[...document.querySelectorAll('[aria-current="page"]')].map(b => b.id)`), ['nav-help'], 'the guide lights Help');
   await run(`setView('dictation'); true`);
@@ -158,11 +155,6 @@ app.whenReady().then(async () => {
   const panel = await run(`(() => { const r = document.getElementById('notif-panel').getBoundingClientRect(); return [r.top, innerWidth - r.right]; })()`);
   assert.ok(panel[0] >= 60 && panel[1] >= 8, 'the notification panel opens under the header, inside the window: ' + panel);
   await run(`closeNotifications(); true`);
-  await run(`document.getElementById('account-btn').hidden = false; openAccountMenu(); true`);
-  const menu = await run(`(() => { const m = document.getElementById('account-menu').getBoundingClientRect(), b = document.getElementById('account-btn').getBoundingClientRect();
-    return m.top >= b.bottom && m.right <= innerWidth; })()`);
-  assert.strictEqual(menu, true, 'the account sheet drops below the avatar');
-  await run(`closeAccountMenu(); true`);
 
   // --- Keyboard focus -----------------------------------------------------------
   const dbg = win.webContents.debugger;
@@ -170,7 +162,7 @@ app.whenReady().then(async () => {
   await dbg.sendCommand('DOM.enable');
   await dbg.sendCommand('CSS.enable');
   const { root } = await dbg.sendCommand('DOM.getDocument');
-  for (const selector of ['#nav-dictionary', '#island-credits', '#nav-settings', '#nav-help', '#notif-btn', '#account-btn']) {
+  for (const selector of ['#nav-dictionary', '#nav-settings', '#nav-help', '#notif-btn']) {
     const { nodeId } = await dbg.sendCommand('DOM.querySelector', { nodeId: root.nodeId, selector });
     await dbg.sendCommand('CSS.forcePseudoState', { nodeId, forcedPseudoClasses: ['focus-visible'] });
     const ring = await run(`(() => { const c = getComputedStyle(document.querySelector(${JSON.stringify(selector)})); return [c.outlineStyle, c.outlineWidth, c.outlineColor]; })()`);
@@ -212,7 +204,7 @@ app.whenReady().then(async () => {
         assert.ok(m.island.right <= m.endLeft - 8, where + ': the island clears the buttons at the right: ' + m.island.right + ' vs ' + m.endLeft);
         assert.ok(m.parts.every(p => p.left >= m.island.left && p.right <= m.island.right && p.top >= m.island.top && p.bottom <= m.island.bottom),
           where + ': everything in the island is inside it');
-        assert.deepStrictEqual(m.links.map(link => link.name), ['Dictation', 'Dictionary', 'Writing style', 'Polish PRO', 'Insights'],
+        assert.deepStrictEqual(m.links.map(link => link.name), ['Dictation', 'Dictionary', 'Writing style', 'Insights'],
           where + ': every section keeps its name for a screen reader');
         assert.ok(m.rung >= previousRung, where + ': a narrower window never brings a label back');
         previousRung = m.rung;
@@ -243,12 +235,6 @@ app.whenReady().then(async () => {
   await show('pro');
   await resize(1200, 780);
   assert.strictEqual((await measure()).rung, 0, 'the default window shows every label');
-  // A narrow window with the gold dot standing in for the Pro tag.
-  await show('free');
-  await resize(640);
-  const narrow = await run(`(() => { const dot = document.querySelector('#nav-polish .nav-pro').getBoundingClientRect(); const link = document.getElementById('nav-polish').getBoundingClientRect();
-    return { dot: dot.width <= 8, inside: dot.right <= link.right && dot.top >= link.top, named: document.getElementById('nav-polish').textContent.replace(/\\s+/g, ' ').trim() }; })()`);
-  assert.deepStrictEqual(narrow, { dot: true, inside: true, named: 'Polish PRO' }, 'icon-only Polish keeps its tag as a dot and its name');
 
   // Reduced motion hands every property a ten-microsecond transition
   // (refinement.css); measuring right after a class change must not see it.

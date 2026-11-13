@@ -100,7 +100,7 @@ app.whenReady().then(async () => {
   for (const launchAtLogin of [false, true]) {
     for (const alwaysShowFlowBar of [false, true]) {
       const flags = { launchAtLogin, alwaysShowFlowBar };
-      const saved = await run('window.voxden.setSettings(' + JSON.stringify(flags) + ')');
+      const saved = await run('window.vell.setSettings(' + JSON.stringify(flags) + ')');
       assert.strictEqual(saved.launchAtLogin, launchAtLogin);
       assert.strictEqual(saved.alwaysShowFlowBar, alwaysShowFlowBar);
       assert.strictEqual(loginCalls.at(-1).openAtLogin, launchAtLogin);
@@ -135,7 +135,7 @@ app.whenReady().then(async () => {
   }
   // Exercise the ON -> OFF transition, including more than one native recovery
   // poll. A bar deliberately hidden by the user must remain hidden.
-  await run('window.voxden.setSettings({ launchAtLogin: false, alwaysShowFlowBar: false })');
+  await run('window.vell.setSettings({ launchAtLogin: false, alwaysShowFlowBar: false })');
   await until(() => !overlay.isVisible(), 'switching OFF hides the idle bar');
   await pause(1300);
   assert.strictEqual(overlay.isVisible(), false, 'visibility polling does not resurrect an intentionally hidden bar');

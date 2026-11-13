@@ -61,7 +61,7 @@ app.whenReady().then(async () => {
   console.log(JSON.stringify({ phase: 'startup', startupMs, mainMaxDelayMs: +(lag.max / 1e6).toFixed(2),
     softwareRequested: process.argv.includes('--software') }));
   await pause(1500);
-  await page('window.performanceSnapshots = 0; window.voxden.onHistory(() => window.performanceSnapshots++); true');
+  await page('window.performanceSnapshots = 0; window.vell.onHistory(() => window.performanceSnapshots++); true');
 
   for (const state of ['hidden', 'minimized']) {
     if (state === 'hidden') dashboard.hide();
@@ -70,7 +70,7 @@ app.whenReady().then(async () => {
     await pause(100);
     await page('window.performanceSnapshots = 0; true');
     for (let i = 0; i < 5; i++) {
-      await bar('window.voxden.setSettings({ displayName: ' + JSON.stringify(state + '-' + i) + ' })');
+      await bar('window.vell.setSettings({ displayName: ' + JSON.stringify(state + '-' + i) + ' })');
     }
     await pause(100);
     assert.strictEqual(await page('window.performanceSnapshots'), 0, state + ' dashboard receives no background history broadcasts');
@@ -82,7 +82,7 @@ app.whenReady().then(async () => {
 
   dashboard.hide();
   for (const style of ['island', 'orb']) {
-    await bar('window.voxden.setSettings({ flowBarStyle: ' + JSON.stringify(style) + ' })');
+    await bar('window.vell.setSettings({ flowBarStyle: ' + JSON.stringify(style) + ' })');
     await pause(500);
     lag.reset(); app.getAppMetrics();
     await pause(1800);
@@ -93,7 +93,7 @@ app.whenReady().then(async () => {
       mainMaxDelayMs: +(lag.max / 1e6).toFixed(2), processes }));
     assert.strictEqual(await bar('hudMode'), 'idle');
   }
-  await bar('window.voxden.setSettings({alwaysShowFlowBar:false})');
+  await bar('window.vell.setSettings({alwaysShowFlowBar:false})');
   await until(() => !overlay.isVisible(), 'idle overlay can sleep while disabled');
   assert.deepStrictEqual(errors, []);
   console.log('Native performance: hidden/minimized dashboards receive no broadcasts, show/restore catches up once, all idle styles remain healthy.');

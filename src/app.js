@@ -6,7 +6,6 @@ const panes = {
   dictation: document.getElementById('view-dictation'),
   dictionary: document.getElementById('view-dictionary'),
   'writing-style': document.getElementById('view-writing-style'),
-  polish: document.getElementById('view-polish'),
   insights: document.getElementById('view-insights'),
   help: document.getElementById('view-help'),
 };
@@ -399,10 +398,8 @@ function engineOffered(data, engine) {
 // as app.html writes it. A value containing '<' is markup the element has to
 // keep (the sign-in bullets carry their own icon, the help steps their keycaps).
 const MAC_COPY = {
-  'signin-kicker': 'DICTATION FOR MAC',
   'help-step-paste': 'Need them again? <kbd>Cmd</kbd> + <kbd>Option</kbd> + <kbd>V</kbd> pastes your last dictation.',
-  'signin-point-local': '<i></i>Stays on this Mac until you choose the cloud',
-  'launch-login-hint': 'Start Voxden when you log in to your Mac.',
+  'launch-login-hint': 'Start Vell when you log in to your Mac.',
   'flow-motion-system-option': 'Follow macOS',
   'speech-mode-local-name': 'On this Mac',
   'speech-mode-local-line': 'Your audio stays on this Mac.',
@@ -410,14 +407,10 @@ const MAC_COPY = {
   'auto-add-dictionary-scope': 'Learns on this Mac in supported apps. Undo from the flow bar.',
   'privacy-store-label': 'Store data on this Mac',
   'privacy-training-hint': 'Keeps audio behind corrected dictations to train on your voice. Stays on this Mac, off by default.',
-  'billing-free-copy': 'Keep your dictation on this Mac.',
-  'billing-pro-no-limit': 'No weekly word limit on this Mac',
-  'billing-faq-model': 'Cloud dictation needs the Voxden app and an internet connection. The Free plan uses a speech model installed on your Mac.',
-  'billing-faq-limit': 'The Free plan dictates 3,000 words in any seven days, on the speech model you chose for this Mac. The week starts with your first dictation and the words come back seven days later. Voxden Pro has no weekly word limit and adds cloud dictation.',
-  'help-engines-hint': 'Choose your model when you first open Voxden. Parakeet v3 is recommended for a small, fast start. <b>To use the words in your dictionary, try Whisper</b> under Settings › Speech engines. These models run on your Mac.',
+  'help-engines-hint': 'Choose your model when you first open Vell. Parakeet v3 is recommended for a small, fast start. <b>To use the words in your dictionary, try Whisper</b> under Settings › Speech engines. These models run on your Mac.',
   'help-engine-whisper-lead': 'Uses the words in your dictionary. A larger download than Parakeet, and slower.',
-  'help-engines-note': 'On this Mac, dictation is in English whichever model you use. Hindi, Hinglish and other languages need Voxden Cloud on a Pro plan: pick up to three under Settings › General, and Voxden Cloud works out which one each dictation is in. Hinglish writes Hindi in English letters.',
-  'help-privacy-note': 'Only if you turn on Voxden Cloud, which needs a Pro plan. With it off, your audio stays on this Mac and dictation works offline once your model is downloaded. With it on, your audio is sent to Voxden Cloud to be transcribed.',
+  'help-engines-note': 'On this Mac, dictation is in English whichever model you use.',
+  'help-privacy-note': 'Your audio stays on this Mac and dictation works offline once your model is downloaded.',
   'model-welcome-description': 'Choose a free speech model to get started. It runs on this Mac, in English.',
 };
 
@@ -453,7 +446,7 @@ function applyPlatformCopy(platform) {
     const el = document.getElementById(id);
     if (el) el.hidden = true;
   }
-  // No Dock to keep Voxden in: floating the flow bar over full-screen apps
+  // No Dock to keep Vell in: floating the flow bar over full-screen apps
   // makes it a menu-bar app on a Mac (ApplicationType UIElement, seen on the
   // CI runner), so the taskbar switch would do nothing there. The row sets its
   // own display, which outranks the hidden attribute.
@@ -485,12 +478,6 @@ const SPEECH_DOWNLOAD_MODELS = Object.freeze([
 // so a double-click on "Download and use" cannot cancel the download it started.
 const SPEECH_ARM_MS = 500;
 
-const speechModeOptionsEl = document.getElementById('speech-mode-options');
-const speechModeLocalEl = document.getElementById('speech-mode-local');
-const speechModeCloudEl = document.getElementById('speech-mode-cloud');
-const speechModeBadgeEl = document.getElementById('speech-mode-cloud-badge');
-const speechModeCreditsEl = document.getElementById('speech-mode-cloud-credits');
-const speechModeErrorEl = document.getElementById('speech-mode-cloud-error');
 const speechModelNoticeEl = document.getElementById('speech-model-notice');
 // Always in the page, so the notice is announced the moment its text arrives;
 // a live region that appears already full is often not announced.
@@ -525,8 +512,6 @@ const speechProcessorOptions = settingInputs.asrDevice
   ? Object.fromEntries(Array.from(settingInputs.asrDevice.options, (opt) => [opt.value, opt]))
   : {};
 
-let pendingListenMode = null;      // true | false | null
-let savingListenMode = false;
 const speechPending = new Set();   // action keys a click has started and not yet settled
 let speechOp = null;               // { kind: 'install'|'repair'|'remove'|'remove-all', row?, component?, key?, pending, localError }
 let speechActiveRow = null;        // engine id the running install is drawn on
@@ -545,13 +530,10 @@ let clearingRecordings = false;
 const trainingClearBtn = document.getElementById('training-clear');
 
 const appVersionDisplayEl = document.getElementById('app-version-display');
-const updateStatusHintEl = document.getElementById('update-status-hint');
-const updateCheckBtn = document.getElementById('update-check-btn');
-const updateRestartBtn = document.getElementById('update-restart-btn');
 const runAsAdminHintEl = document.getElementById('run-as-admin-hint');
 const runAsAdminErrorEl = document.getElementById('run-as-admin-error');
 const runAsAdminBtn = document.getElementById('run-as-admin-btn');
-// The hint app.html gives the row, put back once Voxden is not elevated.
+// The hint app.html gives the row, put back once Vell is not elevated.
 const runAsAdminHint = runAsAdminHintEl ? runAsAdminHintEl.textContent : '';
 // Set while Windows' prompt is up, so a second click cannot ask twice.
 let restartingAsAdmin = false;
@@ -612,7 +594,6 @@ function setView(name) {
   }
   // Opening the pane is the one moment its numbers count up and its cards
   // settle in; every later render while it stays open lands silently.
-  if (name === 'polish') schedulePolishQuote(0);
   if (name === 'insights') {
     insightsReveal = true;
     renderInsights(null);
@@ -776,19 +757,6 @@ function closeHelpMenu(restoreFocus = false) {
   if (restoreFocus) navHelpBtn.focus({ preventScroll: true });
 }
 
-if (helpMenuEl) {
-  const changelogLink = document.getElementById('help-whats-new');
-  if (['127.0.0.1', 'localhost'].includes(window.location.hostname)) {
-    changelogLink.href = 'http://127.0.0.1:4174/changelog';
-  }
-  changelogLink.addEventListener('click', event => {
-    closeHelpMenu();
-    if (!window.voxden?.openChangelog) return; // Normal link in the web preview.
-    event.preventDefault();
-    window.voxden.openChangelog().catch(() => {
-      window.alert('Could not open your browser. Please try What’s new again.');
-    });
-  });
   const actions = {
     'help-shortcuts': () => openShortcutsDialog(),
     'help-microphone': () => openMicCheck(),
@@ -797,7 +765,6 @@ if (helpMenuEl) {
       else openSettingsTarget('general#dictation-language');
     },
     'help-guide': () => setView('help'),
-    'help-feedback': () => openFeedbackDialog(navHelpBtn),
   };
   for (const [id, action] of Object.entries(actions)) {
     const item = document.getElementById(id);
@@ -825,127 +792,6 @@ if (helpMenuEl) {
     if (helpMenuEl.contains(event.target) || navHelpBtn.contains(event.target)) return;
     closeHelpMenu();
   });
-}
-
-// --- The account button and its sheet ------------------------------------------
-// The avatar at the header's right end, beside the bell. Its sheet drops below
-// it with who is signed in, the plan, and the three things worth doing from
-// there.
-const headerAccountBtn = document.getElementById('account-btn');
-const headerAccountImg = document.getElementById('account-btn-img');
-const headerAccountInitials = document.getElementById('account-btn-initials');
-const accountMenuEl = document.getElementById('account-menu');
-let accountMenuOpen = false;
-
-function accountDisplayName(account) {
-  const profile = (account && account.profile) || {};
-  const full = [profile.firstName, profile.lastName].map((s) => String(s || '').trim()).filter(Boolean).join(' ');
-  return full || String((account && account.email) || '').split('@')[0] || 'Your account';
-}
-
-function renderHeaderAccount(data) {
-  if (!headerAccountBtn) return;
-  const account = (data && data.account) || null;
-  const signedIn = !!(account && account.signedIn);
-  headerAccountBtn.hidden = !signedIn;
-  if (!signedIn) { if (accountMenuOpen) closeAccountMenu(); return; }
-  const photo = (data && data.accountAvatar) || '';
-  const pro = account.plan === 'pro';
-  if (photo) { headerAccountImg.src = photo; headerAccountImg.hidden = false; }
-  else { headerAccountImg.removeAttribute('src'); headerAccountImg.hidden = true; }
-  headerAccountBtn.classList.toggle('has-photo', !!photo);
-  headerAccountBtn.classList.toggle('is-pro', pro);
-  headerAccountInitials.textContent = profileInitials(account.profile, account.email);
-  headerAccountBtn.title = accountDisplayName(account) + (pro ? ' · Voxden Pro' : '');
-  // The initials alone would be the button's name.
-  headerAccountBtn.setAttribute('aria-label', 'Account, ' + headerAccountBtn.title);
-  if (accountMenuOpen) renderAccountMenu(data);
-}
-
-function renderAccountMenu(data) {
-  if (!accountMenuEl) return;
-  const account = (data && data.account) || {};
-  const pro = account.plan === 'pro';
-  const photo = (data && data.accountAvatar) || '';
-  document.getElementById('account-menu-banner').classList.toggle('is-pro', pro);
-  const avatar = document.getElementById('account-menu-avatar');
-  const img = document.getElementById('account-menu-img');
-  if (photo) { img.src = photo; img.hidden = false; } else { img.removeAttribute('src'); img.hidden = true; }
-  avatar.classList.toggle('has-photo', !!photo);
-  document.getElementById('account-menu-initials').textContent = profileInitials(account.profile, account.email);
-  document.getElementById('account-menu-name').textContent = accountDisplayName(account);
-  document.getElementById('account-menu-email').textContent = account.email || '';
-  const meter = pro ? cloudMeterFromAccount(account) : null;
-  document.getElementById('account-menu-plan').textContent = pro
-    ? 'VOXDEN PRO' + (meter ? ' · ' + Math.max(0, Math.round(meter.creditsCap - meter.creditsUsed)).toLocaleString() + ' credits left' : '')
-    : 'FREE PLAN';
-}
-
-function positionAccountMenu() {
-  if (!accountMenuOpen || !headerAccountBtn || !accountMenuEl) return;
-  const anchor = headerAccountBtn.getBoundingClientRect();
-  const height = accountMenuEl.offsetHeight;
-  const width = accountMenuEl.offsetWidth;
-  const top = Math.max(8, Math.min(anchor.bottom + 8, window.innerHeight - height - 8));
-  const left = Math.max(8, Math.min(anchor.right - width, window.innerWidth - width - 8));
-  accountMenuEl.style.left = Math.round(left) + 'px';
-  accountMenuEl.style.top = Math.round(top) + 'px';
-}
-
-function openAccountMenu() {
-  if (accountMenuOpen || !accountMenuEl) return;
-  closeAllCustomSelects();
-  if (helpMenuOpen) closeHelpMenu();
-  accountMenuOpen = true;
-  renderAccountMenu(lastPayload || {});
-  accountMenuEl.hidden = false;
-  headerAccountBtn.classList.add('is-open');
-  headerAccountBtn.setAttribute('aria-expanded', 'true');
-  positionAccountMenu();
-  window.addEventListener('resize', positionAccountMenu);
-  const first = accountMenuEl.querySelector('.help-menu-item');
-  if (first) first.focus({ preventScroll: true });
-}
-
-function closeAccountMenu(restoreFocus = false) {
-  if (!accountMenuOpen) return;
-  accountMenuOpen = false;
-  accountMenuEl.hidden = true;
-  headerAccountBtn.classList.remove('is-open');
-  headerAccountBtn.setAttribute('aria-expanded', 'false');
-  window.removeEventListener('resize', positionAccountMenu);
-  if (restoreFocus) headerAccountBtn.focus({ preventScroll: true });
-}
-
-if (headerAccountBtn && accountMenuEl) {
-  headerAccountBtn.addEventListener('click', () => {
-    if (accountMenuOpen) closeAccountMenu();
-    else openAccountMenu();
-  });
-  document.getElementById('account-menu-manage').addEventListener('click', () => { closeAccountMenu(); openSettingsTarget('account'); });
-  document.getElementById('account-menu-billing').addEventListener('click', () => { closeAccountMenu(); openSettingsTarget('billing'); });
-  document.getElementById('account-menu-signout').addEventListener('click', () => {
-    closeAccountMenu();
-    if (window.voxden && window.voxden.accountSignOut) window.voxden.accountSignOut().then((next) => { if (next) render(next); }).catch(() => {});
-  });
-  accountMenuEl.addEventListener('keydown', (event) => {
-    const items = Array.from(accountMenuEl.querySelectorAll('.help-menu-item'));
-    const index = items.indexOf(document.activeElement);
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      const next = items[(index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length];
-      if (next) next.focus({ preventScroll: true });
-    } else if (event.key === 'Escape') {
-      event.preventDefault();
-      closeAccountMenu(true);
-    }
-  });
-  document.addEventListener('mousedown', (event) => {
-    if (!accountMenuOpen) return;
-    if (accountMenuEl.contains(event.target) || headerAccountBtn.contains(event.target)) return;
-    closeAccountMenu();
-  });
-}
 
 // --- Microphone check --------------------------------------------------------
 // Every microphone at once, each with a live level, so the user can see which
@@ -1112,212 +958,6 @@ if (micDialog) {
   if (micDialogCloseBtn) micDialogCloseBtn.addEventListener('click', () => micDialog.close());
 }
 
-// --- Feedback ----------------------------------------------------------------
-const feedbackDialog = document.getElementById('feedback-dialog');
-const feedbackKindEl = document.getElementById('feedback-kind');
-const feedbackTextEl = document.getElementById('feedback-text');
-const feedbackEmailRowEl = document.getElementById('feedback-email-row');
-const feedbackEmailEl = document.getElementById('feedback-email');
-const feedbackDetailsEl = document.getElementById('feedback-details');
-const feedbackDetailsSummaryEl = document.getElementById('feedback-details-summary');
-const feedbackStatusEl = document.getElementById('feedback-status');
-const feedbackGithubBtn = document.getElementById('feedback-github');
-const feedbackCloseBtn = document.getElementById('feedback-close');
-const feedbackSendBtn = document.getElementById('feedback-send');
-const feedbackSendLabelEl = document.getElementById('feedback-send-label');
-// The message box asks for the thing the chosen kind actually needs.
-const FEEDBACK_ASKS = {
-  bug: 'What were you doing, and what did Voxden do instead?',
-  idea: 'What would make Voxden better for you?',
-  other: 'Go on, we read every one.',
-};
-// Long enough for the paper plane to leave the chip before the tick lands.
-const FEEDBACK_FLY_MS = 520;
-let feedbackKind = 'bug';
-let feedbackSending = false;
-let feedbackOpener = null;
-let feedbackCloseTimer = 0;
-
-function setFeedbackStatus(text, isError) {
-  if (!feedbackStatusEl) return;
-  feedbackStatusEl.textContent = text || '';
-  feedbackStatusEl.hidden = !text;
-  feedbackStatusEl.classList.toggle('is-error', !!isError);
-}
-
-function setFeedbackKind(kind) {
-  feedbackKind = kind;
-  for (const btn of feedbackKindEl.querySelectorAll('.feedback-kind-btn')) {
-    const on = btn.dataset.kind === kind;
-    btn.classList.toggle('is-active', on);
-    btn.setAttribute('aria-checked', on ? 'true' : 'false');
-  }
-  feedbackTextEl.placeholder = FEEDBACK_ASKS[kind] || FEEDBACK_ASKS.bug;
-}
-
-// What travels with the report, one chip each: the build, the recognizer in
-// use, and the plan. Every value comes from the snapshot the app already has.
-function feedbackDetailChips(data) {
-  const d = data || {};
-  const chips = [];
-  if (d.version) chips.push('Voxden v' + d.version);
-  chips.push(d.cloudTranscription === true ? 'Voxden Cloud' : (d.asrEngine || 'local engine'));
-  const account = d.account || null;
-  chips.push(account && account.signedIn && account.plan === 'pro' ? 'Pro' : 'Free');
-  return chips;
-}
-
-function renderFeedbackChips(data) {
-  if (!feedbackDetailsSummaryEl) return;
-  feedbackDetailsSummaryEl.textContent = '';
-  for (const text of feedbackDetailChips(data)) {
-    const chip = document.createElement('span');
-    chip.className = 'feedback-chip';
-    chip.textContent = text;
-    feedbackDetailsSummaryEl.append(chip);
-  }
-}
-
-function syncFeedbackDetails() {
-  const row = feedbackDetailsEl && feedbackDetailsEl.closest('.feedback-details');
-  if (row) row.classList.toggle('is-off', !feedbackDetailsEl.checked);
-}
-
-// idle -> sending -> sent. The plane drifts, flies off, and the tick lands.
-function setFeedbackSendPhase(phase) {
-  feedbackSendBtn.classList.toggle('is-sending', phase === 'sending');
-  feedbackSendBtn.classList.toggle('is-sent', phase === 'sent');
-  feedbackSendLabelEl.textContent = phase === 'sending' ? 'Sending' : phase === 'sent' ? 'Sent' : 'Send';
-}
-
-// The drift is a loop, so it runs only in a visible window, on an open dialog,
-// and never under reduced motion, where every state shows settled instead.
-function syncFeedbackMotion() {
-  if (!feedbackDialog) return;
-  feedbackDialog.classList.toggle('is-still', !feedbackDialog.open || document.hidden || motionStill());
-}
-
-function feedbackReport() {
-  return {
-    kind: feedbackKind,
-    message: feedbackTextEl.value,
-    email: feedbackEmailRowEl.hidden ? '' : feedbackEmailEl.value,
-    includeDetails: feedbackDetailsEl.checked,
-  };
-}
-
-function openFeedbackDialog(opener) {
-  if (!feedbackDialog || feedbackDialog.open) return;
-  closeAllCustomSelects();
-  clearTimeout(feedbackCloseTimer);
-  const data = lastPayload || {};
-  const account = data.account || null;
-  feedbackOpener = opener || (document.activeElement !== document.body ? document.activeElement : null) || navHelpBtn;
-  feedbackEmailRowEl.hidden = !!(account && account.signedIn);
-  renderFeedbackChips(data);
-  syncFeedbackDetails();
-  feedbackGithubBtn.hidden = true;
-  setFeedbackStatus('');
-  feedbackSending = false;
-  feedbackSendBtn.disabled = false;
-  setFeedbackSendPhase('idle');
-  feedbackDialog.showModal();
-  syncFeedbackMotion();
-  feedbackTextEl.focus();
-}
-
-function closeFeedbackDialog() {
-  if (!feedbackDialog || !feedbackDialog.open) return;
-  clearTimeout(feedbackCloseTimer);
-  feedbackDialog.close();
-  setFeedbackSendPhase('idle');
-  syncFeedbackMotion();
-  const opener = feedbackOpener;
-  feedbackOpener = null;
-  if (opener && opener.isConnected && !opener.hidden) opener.focus({ preventScroll: true });
-}
-
-async function sendFeedback() {
-  if (feedbackSending) return;
-  const report = feedbackReport();
-  if (!report.message.trim()) {
-    setFeedbackStatus('Write a few words first.', true);
-    feedbackTextEl.focus();
-    return;
-  }
-  feedbackSending = true;
-  feedbackSendBtn.disabled = true;
-  feedbackGithubBtn.hidden = true;
-  setFeedbackSendPhase('sending');
-  setFeedbackStatus('Sending…');
-  const started = Date.now();
-  let result = null;
-  try {
-    result = window.voxden && window.voxden.sendFeedback ? await window.voxden.sendFeedback(report) : null;
-  } catch (err) {
-    result = { ok: false, error: (err && err.message) || 'Could not send right now.', fallback: true };
-  }
-  feedbackSending = false;
-  feedbackSendBtn.disabled = false;
-  if (result && result.ok) {
-    // Let the plane clear the chip before the tick replaces it, unless motion
-    // is reduced, where the swap is immediate.
-    const left = motionStill() ? 0 : Math.max(0, FEEDBACK_FLY_MS - (Date.now() - started));
-    if (left) await new Promise((resolve) => setTimeout(resolve, left));
-    setFeedbackSendPhase('sent');
-    setFeedbackStatus('Thanks. It is on its way.');
-    feedbackTextEl.value = '';
-    feedbackCloseTimer = setTimeout(() => { if (feedbackDialog.open && !feedbackSending) closeFeedbackDialog(); }, 1100);
-    return;
-  }
-  // A refusal puts the plane back on the pill and says why underneath.
-  setFeedbackSendPhase('idle');
-  const error = (result && result.error) || 'Could not send right now.';
-  setFeedbackStatus(error + (result && result.fallback ? ' You can post it on GitHub instead.' : ''), true);
-  feedbackGithubBtn.hidden = !(result && result.fallback);
-}
-
-if (feedbackDialog) {
-  feedbackKindEl.addEventListener('click', (event) => {
-    const btn = event.target.closest('.feedback-kind-btn');
-    if (btn && btn.dataset.kind) setFeedbackKind(btn.dataset.kind);
-  });
-  // A radio group moves with the arrow keys; Tab still reaches each one.
-  feedbackKindEl.addEventListener('keydown', (event) => {
-    const keys = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 };
-    const step = keys[event.key];
-    if (!step) return;
-    const buttons = Array.from(feedbackKindEl.querySelectorAll('.feedback-kind-btn'));
-    const from = buttons.indexOf(document.activeElement);
-    if (from < 0) return;
-    event.preventDefault();
-    const next = buttons[(from + step + buttons.length) % buttons.length];
-    setFeedbackKind(next.dataset.kind);
-    next.focus();
-  });
-  feedbackDetailsEl.addEventListener('change', syncFeedbackDetails);
-  feedbackSendBtn.addEventListener('click', sendFeedback);
-  feedbackCloseBtn.addEventListener('click', () => closeFeedbackDialog());
-  feedbackGithubBtn.addEventListener('click', async () => {
-    if (!window.voxden || !window.voxden.openFeedbackIssue) return;
-    const result = await window.voxden.openFeedbackIssue(feedbackReport()).catch(() => null);
-    if (result && result.ok) closeFeedbackDialog();
-    else setFeedbackStatus((result && result.error) || 'Could not open GitHub.', true);
-  });
-  feedbackTextEl.addEventListener('keydown', (event) => {
-    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-      event.preventDefault();
-      sendFeedback();
-    }
-  });
-  feedbackDialog.addEventListener('cancel', (event) => { event.preventDefault(); closeFeedbackDialog(); });
-  if (flowMotion) flowMotion.addEventListener('change', syncFeedbackMotion);
-  if (window.matchMedia) {
-    window.matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', syncFeedbackMotion);
-  }
-  syncFeedbackMotion();
-}
-
 function openShortcutsDialog() {
   if (shortcutsDialog.open) return;
   closeAllCustomSelects();
@@ -1414,8 +1054,8 @@ async function refreshMicrophones() {
 // list is ready before anyone opens it -- the tray does not have to wait for a
 // visit to General to know what is plugged in.
 function reportMicDevices() {
-  if (!window.voxden || !window.voxden.reportMicDevices) return;
-  window.voxden.reportMicDevices({
+  if (!window.vell || !window.vell.reportMicDevices) return;
+  window.vell.reportMicDevices({
     defaultId: defaultMicId || '',
     devices: micDevices.map((d) => ({ id: d.deviceId, label: cleanMicLabel(d.label) })),
   });
@@ -1708,8 +1348,8 @@ const STYLE_PREVIEW_SAMPLE = 'um, so I am sending the notes tonight, you know, o
 
 function previewStyledText(sample, tone, clean) {
   try {
-    if (window.voxden && typeof window.voxden.previewStyle === 'function') {
-      return window.voxden.previewStyle(sample, tone, clean);
+    if (window.vell && typeof window.vell.previewStyle === 'function') {
+      return window.vell.previewStyle(sample, tone, clean);
     }
   } catch (_) { /* Keep the original sample if the preview helper is missing. */ }
   return sample;
@@ -1816,105 +1456,6 @@ function renderDictationQuality(data) {
   }
 }
 
-// Why the last restart was refused, shown in place of the usual copy for a
-// few seconds. A refusal that produced no visible change would read as a
-// button that does nothing.
-let updateNotice = '';
-let updateNoticeTimer = null;
-
-function showUpdateNotice(reason) {
-  updateNotice = reason || '';
-  clearTimeout(updateNoticeTimer);
-  if (!updateNotice) return;
-  updateNoticeTimer = setTimeout(() => {
-    updateNotice = '';
-    render();
-  }, 6000);
-  render();
-}
-
-// Whether the running build has a downloaded update waiting or on its way in.
-function updateWaiting(data) {
-  return !!data && data.packaged !== false
-    && (data.status === 'ready' || data.status === 'installing');
-}
-
-function updateVersionLabel(data) {
-  return data && data.availableVersion ? 'Voxden ' + data.availableVersion : 'the new version';
-}
-
-// Ask the main process to restart into the downloaded update. The status
-// changes to 'installing' and comes back through the ordinary broadcast; only
-// a refusal needs handling here, and it carries its own reason.
-function requestUpdateInstall() {
-  if (!window.voxden || !window.voxden.installUpdate) return Promise.resolve(null);
-  return window.voxden.installUpdate()
-    .then((res) => {
-      if (res && res.ok === false) showUpdateNotice(res.reason || 'Voxden could not restart right now.');
-      return res;
-    })
-    .catch(() => {
-      showUpdateNotice('Voxden could not restart right now.');
-      return null;
-    });
-}
-
-function renderUpdateStatus(data) {
-  const version = data && data.version ? data.version : '—';
-  if (appVersionDisplayEl) appVersionDisplayEl.textContent = 'v' + version;
-
-  let hint = 'Updates run automatically when you install Voxden from a release build.';
-  const next = updateVersionLabel(data);
-  if (data && data.packaged === false) {
-    hint = 'Auto-update is disabled in development mode (npm start).';
-  } else if (data) {
-    switch (data.status) {
-      case 'checking':
-        hint = 'Checking for updates…';
-        break;
-      case 'downloading':
-        hint = data.progress != null
-          ? 'Downloading ' + next + '… ' + data.progress + '%'
-          : 'Downloading ' + next + '…';
-        break;
-      case 'ready':
-        hint = next + ' is ready. Restart to finish installing it, or it installs when you next quit.';
-        break;
-      // Only the Mac build reports this: it cannot install its own updates yet,
-      // so the newer version is fetched from the website instead.
-      case 'available':
-        hint = next + ' is out. Download it from voxden.app/download.';
-        break;
-      case 'installing':
-        hint = 'Restarting to install ' + next + '…';
-        break;
-      case 'error':
-        hint = 'Could not check for updates. Try again later.';
-        break;
-      default:
-        hint = data.availableVersion
-          ? 'You are on the latest release.'
-          : 'You are up to date.';
-        break;
-    }
-  }
-  if (updateNotice && updateWaiting(data)) hint = updateNotice;
-  if (data && data.installError) hint = data.installError;
-  if (updateStatusHintEl) updateStatusHintEl.textContent = hint;
-  const waiting = updateWaiting(data);
-  const manual = !!data && data.packaged !== false && data.status === 'available';
-  if (updateRestartBtn) {
-    updateRestartBtn.hidden = !waiting && !manual;
-    updateRestartBtn.disabled = manual ? false : !waiting || data.status === 'installing';
-    updateRestartBtn.textContent = manual ? 'Download'
-      : waiting && data.status === 'installing' ? 'Restarting…' : 'Restart now';
-  }
-  if (updateCheckBtn) {
-    updateCheckBtn.disabled = !data || data.packaged === false
-      || data.status === 'checking' || data.status === 'installing';
-  }
-}
-
 // Settings > System > Run as administrator. Elevated already, there is nothing
 // to offer, and the row says so instead. A restart Windows did not go through
 // with keeps its reason on screen until the next try.
@@ -1924,7 +1465,7 @@ function renderRunAsAdmin(data) {
   runAsAdminBtn.hidden = elevated;
   runAsAdminBtn.disabled = restartingAsAdmin;
   runAsAdminBtn.textContent = restartingAsAdmin ? 'Waiting for Windows…' : 'Restart as administrator';
-  if (runAsAdminHintEl) runAsAdminHintEl.textContent = elevated ? 'Voxden is running as administrator.' : runAsAdminHint;
+  if (runAsAdminHintEl) runAsAdminHintEl.textContent = elevated ? 'Vell is running as administrator.' : runAsAdminHint;
   if (elevated && runAsAdminErrorEl) runAsAdminErrorEl.hidden = true;
 }
 
@@ -2059,7 +1600,7 @@ function speechRowState(data, engine) {
   const selected = asrEngineId(data.asrEngine) === engine;
   const installed = speechRowInstalled(data, engine);
   if (selected && installed) {
-    return data.cloudTranscription !== true && ['loading', 'starting'].includes(data.engineStatus) ? 'loading' : 'in-use';
+    return ['loading', 'starting'].includes(data.engineStatus) ? 'loading' : 'in-use';
   }
   if (installed || !data.modelPlan) return 'use';
   return 'download';
@@ -2125,7 +1666,6 @@ function renderSpeechEngines(data) {
   if (!speechPackBusy(data.qwenCudaPackState) && !speechPackBusy(data.qwenRocmPackState)) speechPending.delete('gpu:qwen-cancel');
   if (data.asrOperation !== 'install') speechPending.delete('cancel');
   updateSpeechActiveRow(data);
-  renderListenMode(data);
   renderSpeechModelSection(data);
   renderSpeechGpuRow(data);
   renderSpeechProcessor(data);
@@ -2135,8 +1675,6 @@ function renderSpeechEngines(data) {
 }
 
 function renderSpeechModelSection(data) {
-  const cloudOnly = data.cloudTranscription === true && !data.asrOperation;
-  speechShow(speechModelListEl, !cloudOnly);
   for (const row of SPEECH_MODEL_ROWS) renderSpeechModelRow(data, row);
   const notice = speechNotice(data);
   speechSetText(speechModelNoticeEl, notice.text || '');
@@ -2162,19 +1700,12 @@ function speechNotice(data) {
   const repairError = speechOp && speechOp.kind === 'repair' && !speechOp.pending ? speechOp.localError : '';
   const u = repairError ? { text: repairError, isError: true }
     : visible ? { text: visible.message || '', isError: visible.status === 'error' } : null;
-  if (data.cloudTranscription === true && !data.asrOperation) {
-    const shown = speechRowInstalled(data, selected) ? selected
-      : (speechModelRows(data).find((row) => speechRowInstalled(data, row.id)) || {}).id;
-    return { text: shown
-      ? speechRowName(shown) + ' stays on ' + thisDevice() + ' and is not used while Voxden Cloud is on.'
-      : 'No model is downloaded on ' + thisDevice() + ', and none is needed while Voxden Cloud is on.' };
-  }
   const st = data.asrRuntimeState || {};
   if (data.asrOperation === 'remove') return { text: st.message || '' };
   if (data.asrOperation === 'install') {
     return { text: speechActiveRow
       ? 'Dictation on ' + thisDevice() + ' is paused until this download finishes.'
-      : 'Dictation on ' + thisDevice() + ' is paused while Voxden checks the speech engine.' };
+      : 'Dictation on ' + thisDevice() + ' is paused while Vell checks the speech engine.' };
   }
   if (data.asrOperation) return { text: '' };
   // Removing the NVIDIA pack stops the engine for a moment; that is not a failure.
@@ -2186,7 +1717,7 @@ function speechNotice(data) {
         : 'Download a model below to start dictating on ' + thisDevice() + '.',
       error: true, detail: u ? u.text : '', detailError: u ? u.isError : true };
     }
-    return { text: 'Voxden could not start dictation on ' + thisDevice() + '.', error: true,
+    return { text: 'Vell could not start dictation on ' + thisDevice() + '.', error: true,
       detail: data.asrEngineError || (u ? u.text : ''), detailError: data.asrEngineError ? true : (u ? u.isError : true),
       repair: !!data.asrRuntime };
   }
@@ -2332,7 +1863,7 @@ function speechQwenPackLine(data, kind) {
   if (plan.recommendedPack !== kind) return '';
   if (plan.uiStatus === 'verified' && plan.backend === kind
       && asrEngineId(data.asrEngine) === 'qwen3-asr' && data.engineStatus === 'ready') return 'Qwen3-ASR is using your GPU.';
-  if (plan.uiStatus === 'installed') return 'Qwen3-ASR stays on the processor until Voxden checks this download on your GPU.';
+  if (plan.uiStatus === 'installed') return 'Qwen3-ASR stays on the processor until Vell checks this download on your GPU.';
   return '';
 }
 
@@ -2461,7 +1992,7 @@ speechModelListEl.addEventListener('click', (event) => {
 async function speechInstallModel(engine, component) {
   const data = lastPayload || {};
   const key = 'install:' + engine;
-  if (data.asrOperation || speechPending.has(key) || !window.voxden || !window.voxden.installSpeechModel) return null;
+  if (data.asrOperation || speechPending.has(key) || !window.vell || !window.vell.installSpeechModel) return null;
   const id = component || speechComponent(engine, speechDevice(data));
   speechDismissError(data);
   const op = { kind: 'install', row: engine, component: id, pending: true, localError: '' };
@@ -2469,7 +2000,7 @@ async function speechInstallModel(engine, component) {
   speechPending.add(key);
   render();
   try {
-    const next = await window.voxden.installSpeechModel(id, { select: true });
+    const next = await window.vell.installSpeechModel(id, { select: true });
     op.pending = false;
     if (next) render(next);
     return next || null;
@@ -2499,7 +2030,7 @@ function speechCancelInstall(engine) {
   if (Date.now() < (speechArmedAt.get(engine) || 0) || speechPending.has('cancel')) return;
   speechPending.add('cancel');
   render();
-  window.voxden.cancelAsrRuntime()
+  window.vell.cancelAsrRuntime()
     .then((next) => { if (next) render(next); })
     .catch(() => {});
   // 'cancel' is cleared in renderSpeechEngines once asrOperation leaves 'install'.
@@ -2508,14 +2039,14 @@ function speechCancelInstall(engine) {
 // The Model notice's repair button and Advanced > Check and repair.
 async function speechRepair() {
   const data = lastPayload || {};
-  if (data.asrOperation || speechPending.has('repair') || !window.voxden) return;
+  if (data.asrOperation || speechPending.has('repair') || !window.vell) return;
   speechDismissError(data);
   const op = { kind: 'repair', pending: true, localError: '' };
   speechOp = op;
   speechPending.add('repair');
   render();
   try {
-    const next = await window.voxden.installAsrRuntime();
+    const next = await window.vell.installAsrRuntime();
     op.pending = false;
     if (next) render(next);
   } catch (err) {
@@ -2539,7 +2070,7 @@ async function speechRemoveDownloaded(key) {
   const data = lastPayload || {};
   const entry = speechDownloadEntries(data).find((e) => e.key === key);
   const pendingKey = 'remove:' + key;
-  if (!entry || entry.inUse || data.asrOperation || speechPending.has(pendingKey) || !window.voxden) return;
+  if (!entry || entry.inUse || data.asrOperation || speechPending.has(pendingKey) || !window.vell) return;
   // Before the prompt: clicks while it is open must not queue removals.
   speechPending.add(pendingKey);
   render();
@@ -2554,9 +2085,9 @@ async function speechRemoveDownloaded(key) {
     op = { kind: 'remove', key, pending: true, localError: '' };
     speechOp = op;
     render();
-    const next = entry.type === 'model' ? await window.voxden.removeSpeechModel(entry.id)
-      : entry.type === 'cuda' ? await window.voxden.removeCudaPack()
-        : await window.voxden.removeQwenAccel(entry.kind);
+    const next = entry.type === 'model' ? await window.vell.removeSpeechModel(entry.id)
+      : entry.type === 'cuda' ? await window.vell.removeCudaPack()
+        : await window.vell.removeQwenAccel(entry.kind);
     op.pending = false;
     if (next) render(next);
   } catch (err) {
@@ -2572,7 +2103,7 @@ async function speechRemoveDownloaded(key) {
 // model stay.
 speechRemoveAllBtn.addEventListener('click', async () => {
   const data = lastPayload || {};
-  if (speechIsDisabled(speechRemoveAllBtn) || data.asrOperation || speechPending.has('remove-all') || !window.voxden) return;
+  if (speechIsDisabled(speechRemoveAllBtn) || data.asrOperation || speechPending.has('remove-all') || !window.vell) return;
   speechPending.add('remove-all');
   render();
   let op = null;
@@ -2590,7 +2121,7 @@ speechRemoveAllBtn.addEventListener('click', async () => {
     op = { kind: 'remove-all', pending: true, localError: '' };
     speechOp = op;
     render();
-    const next = await window.voxden.removeAsrRuntime();
+    const next = await window.vell.removeAsrRuntime();
     op.pending = false;
     if (next) render(next);
   } catch (err) {
@@ -2632,7 +2163,7 @@ function renderEngineBanner(data) {
       : 'The speech engine needs repair. Run setup again to check its files.';
   } else {
     text = data.asrEngineError
-      || ('Voxden could not start its speech engine on ' + thisDevice() + '. Dictation is unavailable.');
+      || ('Vell could not start its speech engine on ' + thisDevice() + '. Dictation is unavailable.');
   }
   if (engineBannerTextEl) engineBannerTextEl.textContent = text;
 
@@ -2675,751 +2206,21 @@ if (engineBannerBtnEl) {
   engineBannerBtnEl.addEventListener('click', () => {
     if (engineBannerBtnEl.disabled) return;
     const action = engineBannerBtnEl.dataset.action;
-    if (action === 'choose') return window.VoxdenOnboarding.open();
-    if (!window.voxden) return;
+    if (action === 'choose') return window.VellOnboarding.open();
+    if (!window.vell) return;
     if (action === 'cancel') {
-      window.voxden.cancelAsrRuntime();
+      window.vell.cancelAsrRuntime();
       return;
     }
     // Disable immediately: install() rejects a second concurrent call, and the
     // first progress event that would repaint the button is a moment away.
     engineBannerBtnEl.disabled = true;
-    window.voxden.installAsrRuntime()
+    window.vell.installAsrRuntime()
       .then((next) => { if (next) render(next); })
       .catch(err => { engineBannerTextEl.textContent = err.message || 'Setup failed. Try again.'; })
       .finally(() => { engineBannerBtnEl.disabled = false; });
   });
 }
-
-// Settings › Account. Three rows, one visible at a time: sign in with an
-// email, enter the code that was sent, or the signed-in summary. Every action
-// answers with a full snapshot, so the panel only ever paints from render().
-const accountSignedOutEl = document.getElementById('account-signed-out');
-const accountPendingEl = document.getElementById('account-pending');
-const accountSignedInEl = document.getElementById('account-signed-in');
-const accountEmailInput = document.getElementById('account-email');
-const accountSendCodeBtn = document.getElementById('account-send-code');
-const accountErrorEl = document.getElementById('account-error');
-const accountPendingHintEl = document.getElementById('account-pending-hint');
-const accountPendingErrorEl = document.getElementById('account-pending-error');
-const accountCodeInput = document.getElementById('account-code');
-const accountVerifyBtn = document.getElementById('account-verify');
-const accountPendingBackBtn = document.getElementById('account-pending-back');
-
-const accountPlanHintEl = document.getElementById('account-plan-hint');
-const accountStatusHintEl = document.getElementById('account-status-hint');
-const accountRefreshBtn = document.getElementById('account-refresh');
-const accountSignOutBtn = document.getElementById('account-sign-out');
-
-function formatAccountDate(value) {
-  const t = Date.parse(value || '');
-  if (!Number.isFinite(t)) return '';
-  return new Date(t).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-}
-
-function renderAccount(data) {
-  if (!accountSignedOutEl || !accountPendingEl || !accountSignedInEl) return;
-  const account = data.account || null;
-  if (!account) {
-    accountSignedOutEl.hidden = false;
-    accountPendingEl.hidden = true;
-    accountSignedInEl.hidden = true;
-    if (accountSendCodeBtn) accountSendCodeBtn.disabled = true;
-    if (accountErrorEl) {
-      accountErrorEl.hidden = false;
-      accountErrorEl.textContent = 'Accounts are not available in this build.';
-    }
-    return;
-  }
-  const busy = !!account.busy;
-  const view = account.signedIn ? 'in' : account.pendingEmail ? 'pending' : 'out';
-  accountSignedOutEl.hidden = view !== 'out';
-  accountPendingEl.hidden = view !== 'pending';
-  accountSignedInEl.hidden = view !== 'in';
-
-  if (view === 'out') {
-    const signInHint = document.getElementById('account-signin-hint');
-    if (signInHint) {
-      signInHint.textContent = 'A code goes to your email; no password to remember. Dictation works the same signed out.';
-    }
-    if (accountSendCodeBtn) {
-      accountSendCodeBtn.disabled = busy;
-      accountSendCodeBtn.textContent = account.busy === 'code' ? 'Sending…' : 'Send code';
-    }
-    if (accountEmailInput) accountEmailInput.disabled = busy;
-    if (accountErrorEl) {
-      accountErrorEl.hidden = !account.lastError;
-      accountErrorEl.textContent = account.lastError || '';
-    }
-    return;
-  }
-  if (view === 'pending') {
-    if (accountPendingHintEl) {
-      accountPendingHintEl.textContent = 'Sent to ' + account.pendingEmail
-        + '. It is six digits and expires in ten minutes. Check spam if it has not arrived.';
-    }
-    if (accountVerifyBtn) {
-      accountVerifyBtn.disabled = busy;
-      accountVerifyBtn.textContent = account.busy === 'verify' ? 'Signing in…' : 'Sign in';
-    }
-    if (accountCodeInput) accountCodeInput.disabled = busy;
-    if (accountPendingBackBtn) accountPendingBackBtn.disabled = busy;
-    if (accountPendingErrorEl) {
-      accountPendingErrorEl.hidden = !account.lastError;
-      accountPendingErrorEl.textContent = account.lastError || '';
-    }
-    return;
-  }
-  renderProfileCard(account, data);
-  if (accountPlanHintEl) {
-    if (account.plan === 'pro') {
-      const cloud = account.cloud || {};
-      const until = formatAccountDate(account.planExpiresAt);
-      accountPlanHintEl.textContent = 'Pro' + (until ? ' until ' + until : '') + '. '
-        + (cloudMeterFromAccount(account)
-          ? (function () {
-            const meter = cloudMeterFromAccount(account);
-            const used = Math.max(0, Math.round(meter.creditsUsed)).toLocaleString();
-            const cap = Math.max(0, Math.round(meter.creditsCap)).toLocaleString();
-            return used + ' of ' + cap + ' cloud credits used'
-              + (meter.reset === 'never' ? '.' : ' this month.');
-          }())
-          : (Number(cloud.hoursUsed) || 0) + ' of ' + (Number(cloud.hoursCap) || 0) + ' hours used this month.');
-    } else if (account.stale) {
-      accountPlanHintEl.textContent = 'Free for now. Your plan could not be checked for over a week; refresh once you are online.';
-    } else {
-      const words = freeWordMeter(data);
-      accountPlanHintEl.textContent = 'Free plan. Everything runs on ' + thisDevice() + '.'
-        + (words
-          ? ' ' + wholeNumber(words.used) + ' of ' + wholeNumber(words.cap) + ' words used this week'
-            + (words.resetsOn ? ', back on ' + words.resetsOn + '.' : '.')
-          : '');
-    }
-  }
-  if (accountStatusHintEl) {
-    let status = '';
-    if (account.busy === 'refresh') status = 'Checking…';
-    else if (account.busy === 'signout') status = 'Signing out…';
-    else if (account.busy === 'profile') status = 'Saving…';
-    else if (account.busy === 'delete') status = 'Deleting your account…';
-    else if (profileSavedAt && Date.now() - profileSavedAt < 4000) status = 'Saved.';
-    else if (account.lastError) status = account.lastError;
-    else if (account.checkedAt) status = 'Checked ' + new Date(account.checkedAt).toLocaleString();
-    if (!account.tokenProtected) {
-      status += (status ? ' ' : '') + (isMacUi() ? 'This Mac' : 'This PC')
-        + ' cannot encrypt the sign-in token, so it is stored as is.';
-    }
-    accountStatusHintEl.textContent = status;
-    accountStatusHintEl.classList.toggle('is-error', !busy && !!account.lastError);
-  }
-  if (accountRefreshBtn) accountRefreshBtn.disabled = busy;
-  if (accountSignOutBtn) accountSignOutBtn.disabled = busy;
-  if (accountDeleteBtn) accountDeleteBtn.disabled = busy;
-}
-
-// --- The profile card ----------------------------------------------------------
-// Names are saved when a field loses focus and its value changed. The photo
-// comes from the main process as a data URL (Google's, fetched once), and
-// initials stand in for it otherwise.
-const profileFirstEl = document.getElementById('profile-first');
-const profileLastEl = document.getElementById('profile-last');
-const profileEmailEl = document.getElementById('profile-email');
-const profileAvatarEl = document.getElementById('profile-avatar');
-const profileAvatarImgEl = document.getElementById('profile-avatar-img');
-const profileAvatarInitialsEl = document.getElementById('profile-avatar-initials');
-const accountDeleteBtn = document.getElementById('account-delete');
-let profileFieldFocused = false;
-let profileSavedAt = 0;
-
-function profileInitials(profile, email) {
-  const first = String((profile && profile.firstName) || '').trim();
-  const last = String((profile && profile.lastName) || '').trim();
-  const letters = (first ? first[0] : '') + (last ? last[0] : '');
-  if (letters) return letters.toUpperCase();
-  const address = String(email || '').trim();
-  return address ? address[0].toUpperCase() : '?';
-}
-
-function renderProfileCard(account, data) {
-  if (!profileFirstEl) return;
-  const profile = account.profile || {};
-  if (!profileFieldFocused) {
-    profileFirstEl.value = profile.firstName || '';
-    profileLastEl.value = profile.lastName || '';
-  }
-  profileEmailEl.textContent = account.email || '';
-  const pro = account.plan === 'pro';
-  const wrap = document.getElementById('profile-avatar-wrap');
-  if (wrap) wrap.classList.toggle('is-pro', pro);
-  const badge = document.getElementById('profile-badge');
-  if (badge) badge.hidden = !pro;
-  const card = profileAvatarEl.closest('.profile-card');
-  if (card) card.classList.toggle('is-pro', pro);
-  const photo = (data && data.accountAvatar) || '';
-  if (photo) {
-    profileAvatarImgEl.src = photo;
-    profileAvatarImgEl.hidden = false;
-  } else {
-    profileAvatarImgEl.removeAttribute('src');
-    profileAvatarImgEl.hidden = true;
-  }
-  profileAvatarEl.classList.toggle('has-photo', !!photo);
-  profileAvatarInitialsEl.textContent = profileInitials(profile, account.email);
-  const busy = !!account.busy;
-  profileFirstEl.disabled = busy;
-  profileLastEl.disabled = busy;
-}
-
-function saveProfileIfChanged() {
-  const account = (lastPayload && lastPayload.account) || null;
-  if (!account || !account.signedIn || !window.voxden || !window.voxden.accountUpdateProfile) return;
-  const profile = account.profile || {};
-  const next = { firstName: profileFirstEl.value.trim().slice(0, 40), lastName: profileLastEl.value.trim().slice(0, 40) };
-  if (next.firstName === (profile.firstName || '') && next.lastName === (profile.lastName || '')) return;
-  window.voxden.accountUpdateProfile(next).then((payload) => {
-    if (payload && payload.account && !payload.account.lastError) profileSavedAt = Date.now();
-    if (payload) render(payload);
-  }).catch(() => {});
-}
-
-for (const input of [profileFirstEl, profileLastEl]) {
-  if (!input) continue;
-  input.addEventListener('focus', () => { profileFieldFocused = true; });
-  input.addEventListener('blur', () => { profileFieldFocused = false; saveProfileIfChanged(); });
-  input.addEventListener('keydown', (event) => { if (event.key === 'Enter') input.blur(); });
-}
-
-if (accountDeleteBtn) {
-  accountDeleteBtn.addEventListener('click', async () => {
-    const account = (lastPayload && lastPayload.account) || null;
-    if (!account || !account.signedIn) return;
-    const yes = await askConfirm({
-      title: 'Delete your account?',
-      body: 'This removes ' + account.email + ', its plan and its cloud usage from Voxden for good. A Pro subscription is cancelled '
-        + 'first, so you are not charged again. Dictation history on ' + thisDevice() + ' stays. This cannot be undone.',
-      confirmLabel: 'Delete account',
-    });
-    if (!yes) return;
-    accountAction(accountDeleteBtn, () => window.voxden.accountDelete());
-  });
-}
-
-// Monthly offers live in Plans & billing. Existing subscriptions use their
-// actual entitlement and paid-through date, not today's advertised price.
-const accountUpgradeEl = document.getElementById('account-upgrade');
-const accountUpgradeHintEl = document.getElementById('account-upgrade-hint');
-const accountUpgradeErrorEl = document.getElementById('account-upgrade-error');
-const accountUpgradeOptionsEl = document.getElementById('account-upgrade-options');
-const accountManageActionsEl = document.getElementById('account-manage-actions');
-const accountManageBillingBtn = document.getElementById('account-manage-billing');
-let billingOptionsRequested = false;
-const billingRegionEl = document.getElementById('billing-region');
-let billingViewData = null;
-// Both price regions pay through Razorpay, so the picker is keyed by region.
-// Each price is fixed here as well as at Razorpay, and checkout refuses a plan
-// that disagrees.
-let billingRegion = 'in';
-const BILLING_PRICES = { in: '₹349 / month', global: '$8 / month' };
-const BILLING_REGION_LABELS = { in: 'India · INR', global: 'Everywhere else' };
-
-// What the Free card promises, and how much of it is left. The cap comes from
-// the account service, so the card never advertises a number the app is not
-// actually enforcing.
-function renderFreePlanWords(data) {
-  const words = freeWordMeter(data);
-  const cap = document.getElementById('billing-free-words');
-  const usage = document.getElementById('billing-free-usage');
-  if (cap) cap.textContent = (words ? wholeNumber(words.cap) : '3,000') + ' words a week';
-  if (!usage) return;
-  if (!words) {
-    usage.hidden = true;
-    usage.textContent = '';
-    return;
-  }
-  usage.hidden = false;
-  usage.classList.toggle('is-error', !!words.exhausted);
-  usage.textContent = words.exhausted
-    ? 'Used up' + (words.resetsOn ? ' until ' + words.resetsOn : '') + '. Dictation is paused until then.'
-    : wholeNumber(words.used) + ' of ' + wholeNumber(words.cap) + ' used'
-      + (words.resetsOn ? ', back on ' + words.resetsOn + '.' : ' this week.');
-}
-
-// The Pro allowance in cloud credits: `monthly` for every credit month,
-// `welcome` for a subscriber's first (0 when there is no offer), and whether
-// this account can still take the offer. The service states them; until it
-// has, these are the defaults it ships with in src/credits.js.
-const PRO_MONTHLY_CREDITS = 900;
-const PRO_WELCOME_CREDITS = 1200;
-
-function cloudCreditFigures(account, group) {
-  const offer = account && account.welcomeOffer;
-  const monthly = group && Number(group.cloudCreditsCap) > 0 ? Number(group.cloudCreditsCap)
-    : offer && Number(offer.monthlyCredits) > 0 ? Number(offer.monthlyCredits)
-      : group && Number(group.cloudHoursCap) > 0 ? Math.round(Number(group.cloudHoursCap) * 60)
-        : PRO_MONTHLY_CREDITS;
-  // A service that answered without a welcome figure predates the offer, and
-  // an offer it does not know about must not be shown.
-  const welcome = group && group.welcomeCreditsCap !== undefined ? Number(group.welcomeCreditsCap) || 0
-    : offer ? Number(offer.credits) || 0
-      : group ? 0 : PRO_WELCOME_CREDITS;
-  return { monthly, welcome, eligible: !(offer && offer.eligible === false) };
-}
-
-// A credit is a minute of cloud audio, so the hours a figure covers are exact.
-function creditHours(credits) {
-  const minutes = Math.max(0, Math.round(Number(credits) || 0));
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  const parts = [];
-  if (hours) parts.push(hours + (hours === 1 ? ' hour' : ' hours'));
-  if (rest || !hours) parts.push(rest + (rest === 1 ? ' minute' : ' minutes'));
-  return parts.join(' ');
-}
-
-// A month's credits spread over thirty days.
-function creditMinutesPerDay(credits) {
-  const minutes = Math.round(Math.max(0, Number(credits) || 0) / 30);
-  return minutes + (minutes === 1 ? ' minute' : ' minutes');
-}
-
-function renderCreditFaq(figures) {
-  const offer = figures.welcome > figures.monthly;
-  const welcomeItem = document.getElementById('billing-faq-welcome-item');
-  if (welcomeItem) welcomeItem.hidden = !offer;
-  const welcome = document.getElementById('billing-faq-welcome');
-  if (welcome && offer) {
-    welcome.textContent = 'Your first month of Voxden Pro comes with ' + wholeNumber(figures.welcome) + ' cloud credits instead of '
-      + wholeNumber(figures.monthly) + '. It runs from the day you subscribe until your first renewal, and each account gets it once. '
-      + 'From your first renewal on, Pro includes ' + wholeNumber(figures.monthly) + ' credits a month.';
-  }
-  const cover = document.getElementById('billing-faq-credits');
-  if (cover) {
-    const amounts = (offer ? [figures.welcome, figures.monthly] : [figures.monthly])
-      .map(value => wholeNumber(value) + ' credits cover up to ' + creditHours(value));
-    cover.textContent = 'One credit is one minute of audio sent to Voxden Cloud, so ' + amounts.join(' and ') + '. '
-      + 'Audio is counted in whole seconds, phrase by phrase, and pauses inside a dictation count too, so the time you spend '
-      + 'actually speaking comes in a little under those hours. Credits refresh on your billing date each month, and unused '
-      + 'credits do not carry over.';
-  }
-}
-
-function renderAccountUpgrade(data) {
-  if (!accountUpgradeEl) return;
-  billingViewData = data;
-  const account = data.account || null;
-  accountUpgradeEl.hidden = false;
-  const busy = !!(account && account.busy);
-  const billing = (account && account.billing) || null;
-  const pending = (account && account.checkoutPending) || null;
-  const isPro = !!(account && account.plan === 'pro');
-  if (account && account.signedIn && !isPro && (!billing || !Array.isArray(billing.options)) && !billingOptionsRequested && window.voxden && window.voxden.accountBillingOptions) {
-    billingOptionsRequested = true;
-    window.voxden.accountBillingOptions().then((next) => { if (next) render(next); }).catch(() => {})
-      .finally(() => { billingOptionsRequested = false; });
-  }
-  if (accountUpgradeErrorEl) {
-    const show = !busy && !!(account && account.lastError) && (pending || !isPro);
-    accountUpgradeErrorEl.hidden = !show;
-    accountUpgradeErrorEl.textContent = show ? account.lastError : '';
-  }
-
-  const welcomeMonth = !!(isPro && account.cloud && account.cloud.welcome);
-  document.getElementById('billing-free-card').hidden = isPro;
-  document.querySelector('.billing-plans').classList.toggle('is-subscribed', isPro);
-  document.getElementById('billing-offer-price').hidden = isPro;
-  document.getElementById('billing-welcome').hidden = true;
-  // Hindi and Hinglish are the point for India. An account placed anywhere
-  // else is told about the cloud's languages without them.
-  document.getElementById('billing-cloud-languages').textContent = account && account.region === 'global'
-    ? '18 languages through the cloud' : '18 languages through the cloud, Hindi and Hinglish included';
-  document.getElementById('billing-plan-badge').textContent = welcomeMonth ? 'WELCOME MONTH' : isPro ? 'YOUR PLAN' : 'FOR YOUR EVERYDAY';
-  document.querySelector('.billing-toolbar').hidden = isPro;
-  const benefit = document.getElementById('billing-cloud-benefit');
-  if (isPro) {
-    const subscription = billing && billing.subscription;
-    const until = formatAccountDate((subscription && subscription.periodEnd) || account.planExpiresAt);
-    const renewalOff = !!(subscription && subscription.renews === false);
-    renderSubscriptionDialog(data);
-    renderCreditFaq(cloudCreditFigures(account, null));
-    benefit.textContent = (function () {
-      const meter = cloudMeterFromAccount(account);
-      if (!meter) return (Number((account.cloud || {}).hoursCap) || 0) + ' cloud hours per month';
-      const next = Number(account.cloud.monthlyCredits);
-      if (welcomeMonth && account.cloud.periodEnd && next > 0) {
-        return wholeNumber(meter.creditsCap) + ' cloud credits this month, then ' + wholeNumber(next)
-          + ' a month from ' + formatAccountDate(account.cloud.periodEnd);
-      }
-      return wholeNumber(meter.creditsCap) + ' cloud credits' + (meter.reset === 'never' ? '' : ' every month')
-        + ', up to ' + creditHours(meter.creditsCap);
-    }());
-    if (accountUpgradeHintEl) {
-      const meter = cloudMeterFromAccount(account);
-      accountUpgradeHintEl.textContent = (meter
-        ? Math.round(meter.creditsUsed).toLocaleString() + ' of ' + Math.round(meter.creditsCap).toLocaleString()
-          + ' cloud credits used' + (meter.reset === 'never' ? '.' : ' this month.')
-        : (Number((account.cloud || {}).hoursUsed) || 0) + ' cloud hours used this month.')
-        + (until ? (renewalOff ? ' Renewal cancelled; paid access through ' : ' Paid access through ') + until + '.' : '');
-    }
-    if (accountUpgradeOptionsEl) { accountUpgradeOptionsEl.replaceChildren(); accountUpgradeOptionsEl.hidden = true; }
-    if (accountManageActionsEl) accountManageActionsEl.hidden = false;
-    if (accountManageBillingBtn) accountManageBillingBtn.disabled = busy;
-    return;
-  }
-
-  if (accountManageActionsEl) accountManageActionsEl.hidden = true;
-  renderFreePlanWords(data);
-  const options = ((billing && billing.options) || []).filter(group => (group.plans || []).some(plan => plan.id === 'monthly'));
-  // The service places a signed-in account in a price region from the country
-  // it first signed in from, and sends only that region's plans. The account
-  // sees that one price and no picker. An account it could not place, and the
-  // signed-out, keep the picker: India always, everywhere else once it is on
-  // sale.
-  const placed = account && account.signedIn && ['in', 'global'].includes(account.region) ? account.region : null;
-  const regions = placed ? [placed] : ['in', ...(options.some(group => group.region === 'global') ? ['global'] : [])];
-  if (!regions.includes(billingRegion)) billingRegion = regions[0];
-  document.querySelector('.billing-region-label').hidden = !!placed;
-  const signature = JSON.stringify(regions);
-  if (billingRegionEl.dataset.options !== signature) {
-    billingRegionEl.replaceChildren(...regions.map(region => {
-      const option = document.createElement('option'); option.value = region; option.textContent = BILLING_REGION_LABELS[region]; return option;
-    }));
-    billingRegionEl.dataset.options = signature;
-  }
-  billingRegionEl.value = billingRegion;
-  billingRegionEl.disabled = busy || !!pending;
-  syncCustomSelect(billingRegionEl);
-  const group = options.find(option => option.region === billingRegion);
-  const plan = group && group.plans.find(option => option.id === 'monthly');
-  // Before a region's payments open, or where Pro is not sold, its price still
-  // shows; the button says it is not available.
-  const label = BILLING_PRICES[billingRegion];
-  const closed = !!(billing && billing.unavailable === 'country');
-  const amount = label.replace(/\s*\/\s*month\s*$/i, '');
-  document.getElementById('billing-price-amount').textContent = amount;
-  document.getElementById('billing-price-caption').textContent = amount + ' billed every month.';
-  // Free costs nothing in the same currency the Pro price is shown in.
-  document.getElementById('billing-free-price').textContent = (amount.match(/^[^\d]*/) || [''])[0] + '0';
-  const figures = cloudCreditFigures(account, group);
-  const offer = figures.welcome > figures.monthly && figures.eligible;
-  document.getElementById('billing-welcome').hidden = !offer;
-  if (offer) {
-    document.getElementById('billing-welcome-credits').textContent = wholeNumber(figures.welcome);
-    document.getElementById('billing-welcome-detail').textContent = 'Up to ' + creditHours(figures.welcome)
-      + ' of cloud dictation, about ' + creditMinutesPerDay(figures.welcome) + ' a day.';
-  }
-  benefit.textContent = (offer ? 'Then ' : '') + wholeNumber(figures.monthly) + ' cloud credits every month, up to '
-    + creditHours(figures.monthly);
-  renderCreditFaq(figures);
-  const priceMatches = !!(plan && plan.label === label);
-  if (accountUpgradeHintEl) {
-    if (pending) {
-      accountUpgradeHintEl.textContent = 'Confirming payment. Your plan updates automatically after your payment is verified.';
-    } else if (!account || !account.signedIn) {
-      accountUpgradeHintEl.textContent = 'Sign in to check availability and upgrade.';
-    } else if (!billing || !Array.isArray(billing.options)) {
-      accountUpgradeHintEl.textContent = 'Checking availability…';
-    } else if (closed) {
-      accountUpgradeHintEl.textContent = 'Voxden Pro is not sold in your country yet.';
-    } else if (!plan || !priceMatches) {
-      accountUpgradeHintEl.textContent = 'Payments for this plan are not open yet.';
-    } else {
-      accountUpgradeHintEl.textContent = 'Cancel renewal anytime. Your paid access continues through the billing period.';
-    }
-  }
-  if (!accountUpgradeOptionsEl) return;
-  accountUpgradeOptionsEl.hidden = false;
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'btn-primary';
-  const region = billingRegion;
-  const provider = (group && group.provider) || 'razorpay';
-  button.dataset.provider = provider;
-  button.dataset.region = region;
-  button.dataset.plan = 'monthly';
-  const signedIn = !!(account && account.signedIn);
-  const purchasable = !!(plan && priceMatches) && !closed;
-  button.disabled = !account || busy || !!pending || (signedIn && !purchasable);
-  button.textContent = pending ? 'Confirming payment…' : signedIn ? (purchasable ? 'Get Pro' : 'Not available yet') : 'Sign in to upgrade';
-  button.addEventListener('click', () => {
-    if (!signedIn) { setSettingsCat('account'); if (accountEmailInput) accountEmailInput.focus(); return; }
-    accountAction(button, () => window.voxden.accountCheckout(provider, 'monthly', region));
-  });
-  accountUpgradeOptionsEl.replaceChildren(button);
-}
-
-if (billingRegionEl) billingRegionEl.addEventListener('change', () => {
-  billingRegion = billingRegionEl.value;
-  if (billingViewData) renderAccountUpgrade(billingViewData);
-});
-document.getElementById('account-open-billing').addEventListener('click', () => setSettingsCat('billing'));
-
-// --- Manage subscription -----------------------------------------------------
-// The facts of the plan in one place, and the way to stop it renewing. The
-// paid period stays paid; only the next charge is cancelled.
-const subscriptionDialog = document.getElementById('subscription-dialog');
-const subscriptionEls = {
-  lead: document.getElementById('subscription-lead'),
-  price: document.getElementById('subscription-price'),
-  through: document.getElementById('subscription-through'),
-  renewal: document.getElementById('subscription-renewal'),
-  credits: document.getElementById('subscription-credits'),
-  provider: document.getElementById('subscription-provider'),
-  email: document.getElementById('subscription-email'),
-  note: document.getElementById('subscription-note'),
-  error: document.getElementById('subscription-error'),
-  portal: document.getElementById('subscription-portal'),
-  cancel: document.getElementById('subscription-cancel'),
-  close: document.getElementById('subscription-close'),
-};
-const PROVIDER_NAMES = { razorpay: 'Razorpay', googleplay: 'Google Play' };
-let subscriptionBusy = false;
-
-function subscriptionOf(data) {
-  const account = (data && data.account) || null;
-  const billing = (account && account.billing) || null;
-  return { account, subscription: (billing && billing.subscription) || null };
-}
-
-function renderSubscriptionDialog(data) {
-  if (!subscriptionDialog || !subscriptionDialog.open) return;
-  const { account, subscription } = subscriptionOf(data || lastPayload || {});
-  const isPro = !!(account && account.signedIn && account.plan === 'pro');
-  const through = formatAccountDate((subscription && subscription.periodEnd) || (account && account.planExpiresAt));
-  const renews = !!(subscription && subscription.renews !== false);
-  const knownPrice = (subscription && subscription.label)
-    || (subscription && subscription.provider === 'razorpay' ? BILLING_PRICES[account && account.region === 'global' ? 'global' : 'in'] : '');
-  subscriptionEls.lead.textContent = isPro
-    ? (subscription && subscription.plan === 'annual' ? 'Voxden Pro, billed yearly.' : 'Voxden Pro, billed monthly.')
-    : 'No active subscription on this account.';
-  subscriptionEls.price.textContent = knownPrice || (isPro ? 'Set by your payment provider' : '—');
-  subscriptionEls.through.textContent = through || '—';
-  subscriptionEls.renewal.textContent = !isPro ? '—' : (subscription
-    ? (renews ? 'Renews automatically' + (through ? ' on ' + through : '') : 'Cancelled. Nothing more will be charged.')
-    : 'Managed by your payment provider');
-  subscriptionEls.renewal.classList.toggle('is-off', isPro && subscription && !renews);
-  const meter = account ? cloudMeterFromAccount(account) : null;
-  subscriptionEls.credits.textContent = meter
-    ? Math.round(meter.creditsUsed).toLocaleString() + ' of ' + Math.round(meter.creditsCap).toLocaleString() + ' used' + (meter.reset === 'never' ? '' : ' this month')
-      + (account.cloud && account.cloud.welcome ? ' · welcome month' : '')
-    : (account && account.cloud && Number(account.cloud.hoursCap) ? (Number(account.cloud.hoursUsed) || 0) + ' of ' + account.cloud.hoursCap + ' hours used' : '—');
-  subscriptionEls.provider.textContent = subscription ? (PROVIDER_NAMES[subscription.provider] || subscription.provider) : '—';
-  subscriptionEls.email.textContent = (account && account.email) || '—';
-  subscriptionEls.note.textContent = !isPro ? ''
-    : (subscription && !renews
-      ? 'You keep everything in Pro until ' + (through || 'the end of the paid period') + '. After that the account goes back to Free on its own.'
-      : 'Cancelling stops the next charge only. Everything you paid for stays yours until ' + (through || 'the end of the period') + '.');
-  const busy = subscriptionBusy || !!(account && account.busy);
-  subscriptionEls.cancel.hidden = !isPro || !subscription || !renews;
-  subscriptionEls.cancel.disabled = busy;
-  subscriptionEls.portal.hidden = !(subscription && subscription.manageUrl);
-  subscriptionEls.portal.disabled = busy;
-  const error = account && account.lastError && subscriptionBusy === false && account.busy === '' ? account.lastError : '';
-  subscriptionEls.error.hidden = !error;
-  subscriptionEls.error.textContent = error;
-}
-
-function setSubscriptionError(text) {
-  subscriptionEls.error.textContent = text || '';
-  subscriptionEls.error.hidden = !text;
-}
-
-function openSubscriptionDialog() {
-  if (!subscriptionDialog || subscriptionDialog.open) return;
-  closeAllCustomSelects();
-  setSubscriptionError('');
-  subscriptionDialog.showModal();
-  renderSubscriptionDialog(lastPayload || {});
-  subscriptionEls.close.focus();
-  // The facts come from the service, so ask it while the dialog is up.
-  if (window.voxden && window.voxden.accountBilling) {
-    window.voxden.accountBilling().then((next) => {
-      if (next) render(next);
-      renderSubscriptionDialog(next || lastPayload || {});
-    }).catch(() => {});
-  }
-}
-
-async function cancelSubscriptionRenewal() {
-  if (subscriptionBusy || !window.voxden || !window.voxden.accountCancelSubscription) return;
-  const { account, subscription } = subscriptionOf(lastPayload || {});
-  const through = formatAccountDate((subscription && subscription.periodEnd) || (account && account.planExpiresAt));
-  const yes = await askConfirm({
-    title: 'Cancel renewal?',
-    body: 'Voxden Pro stays on until ' + (through || 'the end of the paid period') + ', then the account returns to Free. Nothing more is charged.',
-    confirmLabel: 'Cancel renewal',
-  });
-  if (!yes || !subscriptionDialog.open) return;
-  subscriptionBusy = true;
-  setSubscriptionError('');
-  renderSubscriptionDialog(lastPayload || {});
-  try {
-    const next = await window.voxden.accountCancelSubscription();
-    if (next) render(next);
-    const after = subscriptionOf(next || lastPayload || {});
-    if (after.account && after.account.lastError) setSubscriptionError(after.account.lastError);
-  } catch (err) {
-    setSubscriptionError((err && err.message) || 'Could not cancel right now. Try again.');
-  } finally {
-    subscriptionBusy = false;
-    renderSubscriptionDialog(lastPayload || {});
-  }
-}
-
-if (accountManageBillingBtn) {
-  accountManageBillingBtn.addEventListener('click', openSubscriptionDialog);
-}
-if (subscriptionDialog) {
-  subscriptionEls.close.addEventListener('click', () => subscriptionDialog.close());
-  subscriptionDialog.addEventListener('cancel', (event) => { event.preventDefault(); subscriptionDialog.close(); });
-  subscriptionEls.cancel.addEventListener('click', cancelSubscriptionRenewal);
-  subscriptionEls.portal.addEventListener('click', () => {
-    accountAction(subscriptionEls.portal, () => window.voxden.accountManageBilling());
-  });
-}
-
-function accountAction(button, work) {
-  if (!button || button.disabled || !window.voxden) return;
-  button.disabled = true;
-  Promise.resolve().then(work)
-    .then((next) => { if (next) render(next); })
-    .catch(() => {})
-    .finally(() => { button.disabled = false; });
-}
-
-if (accountSendCodeBtn) {
-  accountSendCodeBtn.addEventListener('click', () => {
-    accountAction(accountSendCodeBtn, () => window.voxden.accountRequestCode(accountEmailInput ? accountEmailInput.value : ''));
-  });
-}
-if (accountEmailInput) {
-  accountEmailInput.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' && accountSendCodeBtn) accountSendCodeBtn.click();
-  });
-}
-if (accountVerifyBtn) {
-  accountVerifyBtn.addEventListener('click', () => {
-    accountAction(accountVerifyBtn, () => window.voxden.accountVerifyCode('', accountCodeInput ? accountCodeInput.value : '')
-      .then((next) => {
-        if (next && next.account && next.account.signedIn && accountCodeInput) accountCodeInput.value = '';
-        return next;
-      }));
-  });
-}
-if (accountCodeInput) {
-  accountCodeInput.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' && accountVerifyBtn) accountVerifyBtn.click();
-  });
-}
-if (accountPendingBackBtn) {
-  accountPendingBackBtn.addEventListener('click', () => {
-    accountAction(accountPendingBackBtn, () => window.voxden.accountCancel());
-  });
-}
-if (accountRefreshBtn) {
-  accountRefreshBtn.addEventListener('click', () => {
-    accountAction(accountRefreshBtn, () => window.voxden.accountRefresh());
-  });
-}
-if (accountSignOutBtn) {
-  accountSignOutBtn.addEventListener('click', () => {
-    accountAction(accountSignOutBtn, () => window.voxden.accountSignOut());
-  });
-}
-
-// Why Voxden Cloud did not take the last dictation, shown on the Voxden Cloud card.
-const CLOUD_SKIP_REASONS = {
-  timeout: 'Voxden Cloud waited too long to respond. Retry the dictation.',
-  network: 'Voxden Cloud could not be reached. Check your connection and retry.',
-  upstream: 'Voxden Cloud could not transcribe the last dictation. Try again.',
-  auth: 'The cloud did not accept this sign-in. Sign in again under Account.',
-  plan: 'Voxden Cloud dictation needs a Pro account.',
-  cap: 'Your cloud credits are used up.',
-  'signed-out': 'Sign in under Account to use Voxden Cloud dictation.',
-  unconfigured: 'Voxden Cloud is not configured on the service.',
-};
-
-// Settings > Speech engines > How Voxden listens. Two radio cards writing the
-// one cloudTranscription boolean. Voxden Cloud can be chosen only on a Pro
-// account, but a Cloud setting left on after the plan lapsed stays selectable
-// so it can be turned off.
-function renderListenMode(data) {
-  if (!speechModeLocalEl || !speechModeCloudEl) return;
-  const account = data.account || null;
-  const pro = !!(account && account.signedIn && account.plan === 'pro');
-  const enabled = data.cloudTranscription === true;
-  const on = pendingListenMode !== null ? pendingListenMode : enabled;
-  speechModeLocalEl.setAttribute('aria-checked', on ? 'false' : 'true');
-  speechModeLocalEl.tabIndex = on ? -1 : 0;
-  speechModeCloudEl.setAttribute('aria-checked', on ? 'true' : 'false');
-  speechModeCloudEl.tabIndex = on ? 0 : -1;
-  if (!pro && !enabled) speechModeCloudEl.setAttribute('aria-disabled', 'true');
-  else speechModeCloudEl.removeAttribute('aria-disabled');
-  speechShow(speechModeBadgeEl, !pro);
-  let credits = '';
-  if (pro) {
-    const meter = cloudMeterFromAccount(account);
-    const cloud = account.cloud || {};
-    credits = meter
-      ? Math.round(meter.creditsUsed).toLocaleString() + ' of ' + Math.round(meter.creditsCap).toLocaleString()
-        + ' cloud credits used' + (meter.reset === 'never' ? '.' : ' this month.')
-      : (Number(cloud.hoursUsed) || 0) + ' of ' + (Number(cloud.hoursCap) || 0) + ' hours used this month.';
-  }
-  speechSetText(speechModeCreditsEl, credits);
-  speechShow(speechModeCreditsEl, !!credits);
-  const status = data.cloudStatus || {};
-  const error = enabled && status.lastError && !['cloud', 'cloud-segments'].includes(status.lastResult)
-    ? (CLOUD_SKIP_REASONS[status.lastError] || ('Voxden Cloud could not finish the dictation (' + status.lastError + ').'))
-    : '';
-  speechSetText(speechModeErrorEl, error);
-  speechShow(speechModeErrorEl, !!error);
-  const described = [!pro && 'speech-mode-cloud-badge', 'speech-mode-cloud-line', credits && 'speech-mode-cloud-credits', error && 'speech-mode-cloud-error']
-    .filter(Boolean).join(' ');
-  if (speechModeCloudEl.getAttribute('aria-describedby') !== described) speechModeCloudEl.setAttribute('aria-describedby', described);
-}
-
-function speechCloudSelectable(data) {
-  const account = data.account || null;
-  return !!(account && account.signedIn && account.plan === 'pro') || data.cloudTranscription === true;
-}
-function pickListenMode(mode) {
-  const data = lastPayload || {};
-  const on = mode === 'cloud';
-  const current = pendingListenMode !== null ? pendingListenMode : data.cloudTranscription === true;
-  if (on === current) return;
-  if (on && !speechCloudSelectable(data)) return;
-  pendingListenMode = on;
-  renderListenMode(data);
-  saveListenMode();
-}
-// Same serial save as saveFlowStyle: only the latest choice is kept while a
-// save is in flight, so quick arrow keys cannot persist an earlier one last.
-async function saveListenMode() {
-  if (savingListenMode) return;
-  savingListenMode = true;
-  while (pendingListenMode !== null) {
-    const value = pendingListenMode;
-    await patchSettings({ cloudTranscription: value });
-    if (pendingListenMode !== value) continue;
-    pendingListenMode = null;
-  }
-  savingListenMode = false;
-  render();
-}
-speechModeLocalEl.addEventListener('click', () => pickListenMode('local'));
-speechModeCloudEl.addEventListener('click', () => { if (!speechIsDisabled(speechModeCloudEl)) pickListenMode('cloud'); });
-// Roving tabindex, like the flow-style cards. Arrowing onto a card that needs
-// Pro moves focus there, so it is read out, without selecting it.
-speechModeOptionsEl.addEventListener('keydown', (event) => {
-  if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
-  const cards = [speechModeLocalEl, speechModeCloudEl];
-  const current = cards.indexOf(document.activeElement);
-  if (current < 0) return;
-  event.preventDefault();
-  const next = event.key === 'Home' ? 0 : event.key === 'End' ? cards.length - 1
-    : (current + (event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : -1) + cards.length) % cards.length;
-  cards[next].focus();
-  if (!speechIsDisabled(cards[next])) pickListenMode(cards[next].dataset.listen);
-});
 
 // Dictation languages come from the main-process snapshot (the cloud menu plus
 // Hinglish). The renderer cannot require asr.js, so names live on the payload.
@@ -3633,26 +2434,7 @@ function toggleDictationLangDraft(id) {
 
 function renderDictationLanguageHint(data) {
   if (!dictationLangHintEl) return;
-  const account = data.account || null;
-  const pro = !!(account && account.signedIn && account.plan === 'pro');
-  const unlocked = dictationLanguagesUnlocked(data);
-  const chosen = selectedDictationLanguages(data);
-  const extras = chosen.filter((id) => id !== 'en');
-  let hint;
-  if (unlocked) {
-    hint = 'Choose up to three languages for cloud dictation.';
-    if (chosen.length > 1) {
-      hint = 'Auto-detected. Main language: ' + dictationLanguageLabel(data, chosen[0]) + '.';
-    }
-    if (chosen.includes('hg')) hint += ' Hindi is written in English letters.';
-  } else if (pro) {
-    hint = extras.length
-      ? 'Local dictation is English. Turn on Voxden Cloud to use ' + languageListText(extras, data) + '.'
-      : 'Local dictation is English. More languages with Voxden Cloud.';
-  } else {
-    hint = 'English on ' + thisDevice() + '. More with Voxden Cloud on Pro.';
-  }
-  dictationLangHintEl.textContent = hint;
+  dictationLangHintEl.textContent = 'English on ' + thisDevice() + '.';
 }
 
 function qwenAccelKind(plan) {
@@ -3720,7 +2502,7 @@ function speechGpuModel(data) {
   // click, but the pack reports nothing until the speech process has stopped,
   // so the row stays with its button in place; Cancel has nothing to stop yet.
   if (data.asrOperation === 'gpu-install') return { ...qwenBusy, progress: 0, waiting: true };
-  if (data.cloudTranscription === true || data.asrOperation) return null;
+  if (data.asrOperation) return null;
   const rowState = speechRowState(data, engine);
   if (rowState !== 'in-use' && rowState !== 'loading') return null;
 
@@ -3795,12 +2577,12 @@ function renderSpeechGpuRow(data) {
 // failed lookup is retried only after the delay the payload carries.
 function speechRefreshQwenSize(data, kind) {
   const pack = (kind === 'rocm' ? data.qwenRocmPack : data.qwenCudaPack) || {};
-  if (qwenAccelInfoRequests.has(kind) || !window.voxden || !window.voxden.refreshQwenAccelInfo) return;
+  if (qwenAccelInfoRequests.has(kind) || !window.vell || !window.vell.refreshQwenAccelInfo) return;
   if (pack.downloadSizeStatus === 'idle'
       || (pack.downloadSizeStatus !== 'checking' && Number.isFinite(pack.downloadSizeRefreshAt)
         && Date.now() >= pack.downloadSizeRefreshAt)) {
     qwenAccelInfoRequests.add(kind);
-    window.voxden.refreshQwenAccelInfo(kind).then((next) => { if (next) render(next); })
+    window.vell.refreshQwenAccelInfo(kind).then((next) => { if (next) render(next); })
       .catch(() => {}).finally(() => qwenAccelInfoRequests.delete(kind));
   }
 }
@@ -3816,13 +2598,13 @@ speechGpuActionBtn.addEventListener('click', () => {
   const kind = btn.dataset.kind === 'rocm' ? 'rocm' : 'cuda';
   const key = 'gpu:' + action;
   if (action.endsWith('-cancel') && Date.now() < (speechArmedAt.get('gpu') || 0)) return;
-  if (speechPending.has(key) || !window.voxden) return;
+  if (speechPending.has(key) || !window.vell) return;
   const calls = {
-    'cuda-install': () => window.voxden.installCudaPack(),
-    'cuda-cancel': () => window.voxden.cancelCudaPack(),
-    'qwen-install': () => window.voxden.installQwenAccel(kind),
-    'qwen-cancel': () => window.voxden.cancelQwenAccel(kind),
-    'qwen-retry': () => window.voxden.retryQwenAccel(),
+    'cuda-install': () => window.vell.installCudaPack(),
+    'cuda-cancel': () => window.vell.cancelCudaPack(),
+    'qwen-install': () => window.vell.installQwenAccel(kind),
+    'qwen-cancel': () => window.vell.cancelQwenAccel(kind),
+    'qwen-retry': () => window.vell.retryQwenAccel(),
     'use-gpu': () => patchSettings({ asrDevice: 'auto' }),
   };
   if (!calls[action]) return;
@@ -3882,95 +2664,6 @@ function renderTraining(data) {
   }
   trainingStatsEl.textContent = pairs + (pairs === 1 ? ' corrected clip' : ' corrected clips')
     + ' · ' + formatClipTime(t.seconds) + ' of audio · ' + formatBytes(t.bytes);
-}
-
-function cloudMeterFromAccount(account) {
-  const cloud = account && account.cloud;
-  if (!cloud) return null;
-  const creditsCap = Number(cloud.creditsCap);
-  if (creditsCap > 0) {
-    const creditsUsed = Math.max(0, Number(cloud.creditsUsed) || 0);
-    return {
-      creditsUsed,
-      creditsCap,
-      creditsRemaining: Math.max(0, Number(cloud.creditsRemaining != null
-        ? cloud.creditsRemaining
-        : creditsCap - creditsUsed)),
-      reset: cloud.reset === 'never' ? 'never' : 'month',
-    };
-  }
-  const hoursCap = Number(cloud.hoursCap);
-  if (!(hoursCap > 0)) return null;
-  const hoursUsed = Math.max(0, Number(cloud.hoursUsed) || 0);
-  const cap = Math.round(hoursCap * 60);
-  const used = Math.round(hoursUsed * 60 * 100) / 100;
-  return {
-    creditsUsed: used,
-    creditsCap: cap,
-    creditsRemaining: Math.max(0, Math.round((cap - used) * 100) / 100),
-    reset: cloud.periodEnd ? 'month' : 'never',
-  };
-}
-
-function creditTone(percent) {
-  if (percent >= 95) return 'critical';
-  if (percent >= 90) return 'high';
-  if (percent >= 75) return 'warn';
-  return 'ok';
-}
-
-function wholeNumber(value) {
-  return Math.max(0, Math.round(Number(value) || 0)).toLocaleString();
-}
-
-// The free plan's week, as main.js measured it. Null on Pro, which is metered
-// in cloud credits instead, and null before the first snapshot arrives.
-function freeWordMeter(data) {
-  const meter = data && data.freeWords;
-  return meter && Number(meter.cap) > 0 ? meter : null;
-}
-
-// A credit is a minute of cloud dictation, so the balance reads as time. It
-// rounds down: "13 h" must never promise more than is there. Under an hour it
-// counts minutes.
-function cloudTimeLeft(creditsRemaining) {
-  const minutes = Math.max(0, Math.floor(Number(creditsRemaining) || 0));
-  if (minutes >= 60) {
-    const hours = Math.floor(minutes / 60);
-    return { figure: hours.toLocaleString() + ' h',
-      spoken: 'About ' + hours.toLocaleString() + (hours === 1 ? ' hour' : ' hours') };
-  }
-  return { figure: minutes + ' min', spoken: minutes + (minutes === 1 ? ' minute' : ' minutes') };
-}
-
-// Cloud time counting down, on Pro only: Free has the Go Pro button in that
-// place instead, and its week of words lives in Plans & billing. The island has
-// room for a ring of what is left and one short figure; the credits behind it
-// live in the tooltip and the spoken label.
-function renderCloudCredits(data) {
-  const el = document.getElementById('island-credits');
-  const count = document.getElementById('island-credits-count');
-  if (!el) return;
-  const account = data && data.account;
-  const cloud = account && account.signedIn && account.plan === 'pro' ? cloudMeterFromAccount(account) : null;
-  if (!cloud) {
-    el.hidden = true;
-    return;
-  }
-  const percent = cloud.creditsCap > 0 ? Math.min(100, Math.max(0, (cloud.creditsUsed / cloud.creditsCap) * 100)) : 0;
-  const left = wholeNumber(cloud.creditsRemaining);
-  const cap = wholeNumber(cloud.creditsCap);
-  const time = cloudTimeLeft(cloud.creditsRemaining);
-  const tone = creditTone(percent);
-  el.hidden = false;
-  el.classList.toggle('is-warn', tone === 'warn');
-  el.classList.toggle('is-high', tone === 'high');
-  el.classList.toggle('is-critical', tone === 'critical');
-  el.title = left + ' of ' + cap + ' cloud credits left';
-  el.setAttribute('aria-label', time.spoken + ' of cloud dictation left, ' + left + ' of ' + cap + ' credits. Open plans and billing');
-  if (count) count.textContent = time.figure;
-  // The ring is drawn from what is left, to a tenth of a percent.
-  el.style.setProperty('--credits-left', String(Math.round((100 - percent) * 10) / 10));
 }
 
 // Island replaced Classic (and Ribbon before it); only Orb survives from the
@@ -4039,7 +2732,7 @@ function renderSettings(payload) {
       data.pasteLastShortcutLabel || defaultPasteShortcutLabel()
     );
   }
-  // Off by default: a key Voxden takes stops working in every other app, so
+  // Off by default: a key Vell takes stops working in every other app, so
   // the key and its Change button only show once game typing is on.
   const gameShortcutOn = !!data.gameShortcutEnabled;
   if (gameShortcutToggle) gameShortcutToggle.checked = gameShortcutOn;
@@ -4074,15 +2767,10 @@ function renderSettings(payload) {
   renderEngineBanner(data);
   renderSpeechEngines(data);
   renderDictationLanguages(data);
-  renderAccount(data);
-  renderHeaderAccount(data);
-  window.VoxdenSignIn?.render(data, { render });
-  window.VoxdenOnboarding?.render(data, { render, openBilling: () => openSettingsTarget('billing') });
-  renderAccountUpgrade(data);
+  window.VellOnboarding?.render(data, { render });
 
   renderMicSelect(data);
 
-  renderUpdateStatus(data);
   renderRunAsAdmin(data);
 
   renderUnderstanding(data);
@@ -4327,10 +3015,10 @@ function refreshServerStats(revision, timezone, now) {
   if (serverStatsRequest && serverStatsRequest.revision === revision
       && serverStatsRequest.timezone === timezone && now >= serverStatsRequest.now) return;
   if (serverStatsRetryAt > now + 5000) serverStatsRetryAt = 0;
-  if (serverStatsRetryAt > now || typeof window.voxden.historyStats !== 'function') return;
+  if (serverStatsRetryAt > now || typeof window.vell.historyStats !== 'function') return;
   const request = { revision, timezone, now };
   serverStatsRequest = request;
-  window.voxden.historyStats().then(stats => {
+  window.vell.historyStats().then(stats => {
     if (serverStatsRequest !== request) return;
     serverStatsRequest = null;
     const latest = lastPayload;
@@ -4871,7 +3559,7 @@ function buildPolishedLine(entry) {
   line.appendChild(panel);
 
   let copiedTimer = 0;
-  const copyPolished = () => window.voxden.copyEntry(entry.id, 'polished').then((ok) => {
+  const copyPolished = () => window.vell.copyEntry(entry.id, 'polished').then((ok) => {
     if (!ok) return;
     clearTimeout(copiedTimer);
     line.classList.add('is-copied');
@@ -5089,67 +3777,6 @@ function markCardHits(card, q) {
   cardHits.set(card, ranges);
 }
 
-// Polishing a dictation from its card. One at a time, as in main.
-let cardPolishId = '';
-// Cards whose polished line should arrive with the swap animation: the polish
-// finished and the card has not been rebuilt with it yet.
-const justPolished = new Set();
-
-function polishButtonLabel(entry, busy) {
-  if (busy) return 'Polishing';
-  return entry.polished && entry.polished.text ? 'Polish again' : 'Polish';
-}
-
-function applyPolishState(card, entry) {
-  const busy = cardPolishId === entry.id;
-  const pill = card.querySelector('.pill-polish');
-  if (pill) {
-    pill.classList.toggle('is-working', busy);
-    pill.disabled = busy || !String(entry.text || '').trim();
-    pill.querySelector('.pill-label').textContent = polishButtonLabel(entry, busy);
-  }
-  const words = card.querySelector('.text');
-  if (words) words.classList.toggle('is-polishing', busy);
-}
-
-function liveCard(id) {
-  return groupsEl && groupsEl.querySelector('.card[data-id="' + id + '"]');
-}
-
-async function polishFromCard(entry) {
-  if (cardPolishId || !window.voxden || typeof window.voxden.polishEntry !== 'function') return;
-  const account = lastPayload && lastPayload.account;
-  // Polish is a Pro feature paid from cloud credits. For anyone else the Polish
-  // page is the one that explains what it takes.
-  if (!(account && account.signedIn && account.plan === 'pro')) {
-    setView('polish');
-    return;
-  }
-  cardPolishId = entry.id;
-  const before = liveCard(entry.id);
-  if (before) applyPolishState(before, entry);
-  let res = null;
-  try {
-    res = await window.voxden.polishEntry(entry.id, 'polish');
-  } catch (_) {
-    res = { ok: false, message: 'Polish did not work this time. Nothing was charged.' };
-  }
-  cardPolishId = '';
-  // The reply can land before or after the history broadcast that rebuilds the
-  // card with its polished line, so settle whichever card is on screen now.
-  const after = liveCard(entry.id);
-  if (res && res.ok) {
-    const line = after && after.querySelector('.card-polished');
-    if (line) line.classList.add('swap-in');
-    else justPolished.add(entry.id);
-  } else if (res && (res.code === 'plan' || res.code === 'signed-out')) {
-    setView('polish');
-  } else {
-    cardStatus(entry.id, (res && res.message) || 'Polish did not work this time. Nothing was charged.', 'error');
-  }
-  if (after) applyPolishState(after, (lastPayload && (lastPayload.entries || []).find(e => e.id === entry.id)) || entry);
-}
-
 // Which buttons on a card play its recording, and what they say while it does.
 function syncPlayButtons(card, playing) {
   for (const btn of card.querySelectorAll('[data-play-toggle]')) {
@@ -5238,7 +3865,6 @@ function buildCard(entry, options) {
   card.append(head, text);
   if (entry.polished && entry.polished.text) {
     const polished = buildPolishedLine(entry);
-    if (justPolished.delete(entry.id)) polished.classList.add('swap-in');
     card.appendChild(polished);
   }
 
@@ -5260,7 +3886,6 @@ function buildCard(entry, options) {
 
   let copyMain = null;
   let playPill = null;
-  let polishPill = null;
   if (latest) {
     const foot = document.createElement('div');
     foot.className = 'card-foot';
@@ -5284,12 +3909,6 @@ function buildCard(entry, options) {
       }
       foot.appendChild(playPill);
     }
-    polishPill = document.createElement('button');
-    polishPill.type = 'button';
-    polishPill.className = 'pill pill-polish';
-    polishPill.title = 'Rewrite this dictation as clean writing';
-    polishPill.append(markup(cardIcon('spark', 14, 'icon-spark') + cardIcon('spin', 14, 'icon-spin') + '<span class="pill-label">Polish</span>'));
-    foot.appendChild(polishPill);
     card.appendChild(foot);
   }
   for (const btn of [playBtn, playPill]) {
@@ -5306,7 +3925,6 @@ function buildCard(entry, options) {
   const [playItem, saveItem, retryItem, deleteItem] = menu.children;
   card.appendChild(menu);
 
-  if (latest) applyPolishState(card, entry);
 
   async function playRecording() {
     if (activePlayer && activePlayer.id === entry.id) {
@@ -5318,7 +3936,7 @@ function buildCard(entry, options) {
     const generation = playbackGeneration;
     let res = null;
     try {
-      res = await window.voxden.entryAudio(entry.id);
+      res = await window.vell.entryAudio(entry.id);
     } catch (_) {
       res = null;
     }
@@ -5357,7 +3975,7 @@ function buildCard(entry, options) {
     e.stopPropagation();
     closeCardMenu();
     cardStatus(entry.id, 'Saving…', 'busy', true);
-    window.voxden.saveEntryAudio(entry.id).then((res) => {
+    window.vell.saveEntryAudio(entry.id).then((res) => {
       if (res && res.ok) cardStatus(entry.id, 'Saved as WAV', '');
       else if (res && res.cancelled) cardStatus(entry.id, '');
       else cardStatus(entry.id, (res && res.reason) || 'The recording could not be saved.', 'error');
@@ -5368,7 +3986,7 @@ function buildCard(entry, options) {
     closeCardMenu();
     card.classList.add('is-retrying');
     cardStatus(entry.id, 'Retrying…', 'busy', true);
-    window.voxden.retryEntry(entry.id).then((res) => {
+    window.vell.retryEntry(entry.id).then((res) => {
       // The broadcast may already have rebuilt this card, or may still be on
       // its way. cardStatus keeps the result across either delivery order.
       card.classList.remove('is-retrying');
@@ -5403,7 +4021,7 @@ function buildCard(entry, options) {
   }
 
   function copyThisEntry() {
-    return window.voxden.copyEntry(entry.id).then((ok) => {
+    return window.vell.copyEntry(entry.id).then((ok) => {
       if (!ok) return;
       flashCopied();
       if (typeof window.showAppToast === 'function') window.showAppToast('Copied to clipboard');
@@ -5418,7 +4036,7 @@ function buildCard(entry, options) {
   function saveEdit() {
     const next = text.innerText.replace(/\u00a0/g, ' ').trimEnd();
     if (next === (entry.text || '')) return;
-    window.voxden.editEntry(entry.id, next).then((res) => {
+    window.vell.editEntry(entry.id, next).then((res) => {
       if (!res || res.ok === false) return;
       entry.text = next;
       if (res.proposed && res.proposed.length) {
@@ -5457,18 +4075,12 @@ function buildCard(entry, options) {
       copyThisEntry();
     });
   }
-  if (polishPill) {
-    polishPill.addEventListener('click', (e) => {
-      e.stopPropagation();
-      polishFromCard(entry);
-    });
-  }
   deleteItem.addEventListener('click', (e) => {
     e.stopPropagation();
     closeCardMenu();
     clearTimeout(learnTimer);
     if (activePlayer && activePlayer.id === entry.id) stopActivePlayer();
-    window.voxden.deleteEntry(entry.id);
+    window.vell.deleteEntry(entry.id);
   });
 
   return card;
@@ -5485,7 +4097,7 @@ function buildCard(entry, options) {
 function recoveryReason(item) {
   if (item.reason) return item.reason;
   return item.source === 'crash'
-    ? 'Voxden closed before this dictation finished'
+    ? 'Vell closed before this dictation finished'
     : 'This dictation did not transcribe';
 }
 
@@ -5495,13 +4107,7 @@ function recoveryFacts(item) {
     .filter(Boolean).join(' \u00b7 ');
 }
 
-// The local engine is free. Cloud costs a credit a minute, so the button says
-// so rather than spending it quietly.
-function recoveryCost(item, data) {
-  if (data.cloudTranscription !== true) return '';
-  const credits = Math.max(1, Math.ceil((Number(item.seconds) || 0) / 60));
-  return credits === 1 ? '1 credit' : credits + ' credits';
-}
+
 
 function buildRecoveryCard(item, data) {
   const card = document.createElement('div');
@@ -5578,7 +4184,7 @@ function buildRecoveryCard(item, data) {
     const generation = playbackGeneration;
     let res = null;
     try {
-      res = await window.voxden.recoveryAudio(item.id);
+      res = await window.vell.recoveryAudio(item.id);
     } catch (_) {
       res = null;
     }
@@ -5605,7 +4211,7 @@ function buildRecoveryCard(item, data) {
     e.stopPropagation();
     closeCardMenu();
     cardStatus(item.id, 'Saving\u2026', 'busy', true);
-    window.voxden.saveRecoveryAudio(item.id).then((res) => {
+    window.vell.saveRecoveryAudio(item.id).then((res) => {
       if (res && res.ok) cardStatus(item.id, 'Saved as WAV', '');
       else if (res && res.cancelled) cardStatus(item.id, '');
       else cardStatus(item.id, (res && res.reason) || 'The recording could not be saved.', 'error');
@@ -5615,7 +4221,7 @@ function buildRecoveryCard(item, data) {
     e.stopPropagation();
     closeCardMenu();
     if (activePlayer && activePlayer.id === item.id) stopActivePlayer();
-    window.voxden.deleteRecovery(item.id).catch(() => {});
+    window.vell.deleteRecovery(item.id).catch(() => {});
   });
   recoverBtn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -5624,7 +4230,7 @@ function buildRecoveryCard(item, data) {
     recoverBtn.disabled = true;
     card.classList.add('is-recovering');
     cardStatus(item.id, 'Recovering\u2026', 'busy', true);
-    window.voxden.recoverRecording(item.id).then((res) => {
+    window.vell.recoverRecording(item.id).then((res) => {
       card.classList.remove('is-recovering');
       recoverBtn.disabled = false;
       if (res && res.ok) cardStatus(item.id, 'Recovered \u2014 copied to clipboard', '');
@@ -5651,7 +4257,7 @@ function renderRecoveries(data) {
   // Keeping recordings off empties this list in main, so there is nothing to
   // explain here; the setting itself says what turning it off costs.
   const sig = items.map((r) => r.id + ':' + r.reason).join('|')
-    + '|' + (data.cloudTranscription === true ? 'cloud' : 'local');
+
   if (sig === recoverySignature) return;
   recoverySignature = sig;
   // These cards are about to be replaced, and the menu and the player hang off
@@ -5781,7 +4387,7 @@ function buildPendingRow(item) {
   accept.setAttribute('aria-label', 'Add ' + item.from + ' to ' + item.to);
   accept.addEventListener('click', async () => {
     accept.disabled = true;
-    const res = await window.voxden.acceptPending(item.from);
+    const res = await window.vell.acceptPending(item.from);
     if (res && res.ok === false && res.error) setDictError(res.error);
   });
   const dismiss = document.createElement('button');
@@ -5791,7 +4397,7 @@ function buildPendingRow(item) {
   dismiss.setAttribute('aria-label', 'Dismiss ' + item.from);
   dismiss.addEventListener('click', async () => {
     dismiss.disabled = true;
-    await window.voxden.dismissPending(item.from);
+    await window.vell.dismissPending(item.from);
   });
   actions.appendChild(accept);
   actions.appendChild(dismiss);
@@ -5858,7 +4464,7 @@ function buildDictRow(phrase) {
   });
   delBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    window.voxden.deletePhrase(phrase.from).then(() => {
+    window.vell.deletePhrase(phrase.from).then(() => {
       if (dictEditingFrom && phrase.from.toLowerCase() === dictEditingFrom.toLowerCase()) {
         closeVocabModal();
       }
@@ -5951,7 +4557,7 @@ function renderVocabFix(phrases) {
   vocabFixEl.classList.toggle('is-example', !pairs.length);
   if (vocabOverviewLineEl) {
     vocabOverviewLineEl.textContent = pairs.length
-      ? 'Fix a word once. Voxden remembers.'
+      ? 'Fix a word once. Vell remembers.'
       : 'Correct a word in any dictation and it will appear here.';
   }
   syncVocabFix();
@@ -6009,8 +4615,8 @@ function renderDictionary(payload) {
     const count = Number(data.variantCount) || 0;
     dictVariantsEl.hidden = count < 1;
     dictVariantsEl.textContent = count === 1
-      ? 'Plus 1 spelling Voxden worked out on its own. Delete a term to drop its spellings.'
-      : 'Plus ' + count + ' spellings Voxden worked out on its own. Delete a term to drop its spellings.';
+      ? 'Plus 1 spelling Vell worked out on its own. Delete a term to drop its spellings.'
+      : 'Plus ' + count + ' spellings Vell worked out on its own. Delete a term to drop its spellings.';
   }
 }
 
@@ -6030,7 +4636,7 @@ async function submitDictForm(e) {
 
   let result;
   try {
-    result = await window.voxden.upsertPhrase(from, to, {
+    result = await window.vell.upsertPhrase(from, to, {
       kind: mapping ? 'mapping' : 'word',
       source: 'manual',
       renameFrom: dictEditingFrom || '',
@@ -6269,7 +4875,7 @@ function renderInsMilestones(ms, years, tips, reveal) {
     copy = ms.words.toLocaleString() + ' words across ' + ms.dictations.toLocaleString()
       + (ms.dictations === 1 ? ' dictation ' : ' dictations ') + yearWord + '.';
   } else {
-    copy = showTips ? 'Start dictating and Voxden keeps count.' : '';
+    copy = showTips ? 'Start dictating and Vell keeps count.' : '';
   }
   insSetText('ins-ms-title', title);
   insSetText('ins-ms-copy', copy);
@@ -6514,7 +5120,7 @@ function renderInsVoice(ins, tips) {
 function renderInsVoiceProfile(data) {
   const profileName = data.understandingProfileName || 'Learning';
   const copy = data.understandingCopy
-    || 'Fix a misspelled word in a transcript. Voxden saves that spelling for next time.';
+    || 'Fix a misspelled word in a transcript. Vell saves that spelling for next time.';
   const percent = Math.max(0, Math.min(100, Number(data.understandingPercent) || 0));
   const words = Math.max(0, Number(data.wordCount) || 0);
   const currentIndex = Math.max(0, Number(data.understandingProfileIndex) || 0);
@@ -6607,7 +5213,7 @@ function cachedServerInsights(data) {
   panes.insights.setAttribute('aria-busy', 'true');
   if (serverInsightsRequest && serverInsightsRequest.key === key
       && serverInsightsRequest.timezone === timezone && now >= serverInsightsRequest.now) return null;
-  if (typeof window.voxden.historyInsights !== 'function') {
+  if (typeof window.vell.historyInsights !== 'function') {
     insSetText('ins-subtitle', 'Insights could not be loaded.');
     panes.insights.removeAttribute('aria-busy');
     return null;
@@ -6615,7 +5221,7 @@ function cachedServerInsights(data) {
   insSetText('ins-subtitle', 'Loading insights…');
   const request = { key, revision, range, year, timezone, now, generation: ++serverInsightsGeneration };
   serverInsightsRequest = request;
-  window.voxden.historyInsights({ range, year }).then(reply => {
+  window.vell.historyInsights({ range, year }).then(reply => {
     if (serverInsightsRequest !== request) return;
     serverInsightsRequest = null;
     const latest = lastPayload;
@@ -6918,463 +5524,8 @@ function renderFeed(data, all) {
 
 let dashboardRenderPending = false;
 
-// --- Polish ---------------------------------------------------------------------
-// Any text, or a recent dictation, rewritten as clean writing by Voxden Cloud.
-// Pro only, paid from the cloud credits. What a polish costs is asked of main
-// as the words change (src/polish.js polishQuote) and shown on the button
-// before anything is sent.
-const polishViewEl = document.getElementById('view-polish');
-const polishPageEl = document.getElementById('polish-page');
-const polishStudioEl = document.getElementById('polish-studio');
-const polishDraftEl = document.getElementById('polish-draft');
-const polishInputEl = document.getElementById('polish-input');
-const polishRunEl = document.getElementById('polish-run');
-const polishRunLabelEl = document.getElementById('polish-run-label');
-const polishRunCostEl = document.getElementById('polish-run-cost');
-const polishWordsEl = document.getElementById('polish-words');
-const polishClearEl = document.getElementById('polish-clear');
-const polishOutputEl = document.getElementById('polish-output');
-const polishStatusEl = document.getElementById('polish-status');
-const polishCopyEl = document.getElementById('polish-copy');
-const polishCopyLabelEl = document.getElementById('polish-copy-label');
-const polishChangesEl = document.getElementById('polish-changes');
-const polishModeChipEl = document.getElementById('polish-mode-chip');
-const polishErrorEl = document.getElementById('polish-error');
-const polishErrorTextEl = document.getElementById('polish-error-text');
-const polishBalanceEl = document.getElementById('polish-balance');
-const polishBalanceNumEl = document.getElementById('polish-balance-num');
-const polishBalanceUnitEl = document.getElementById('polish-balance-unit');
-const polishRateEl = document.getElementById('polish-rate');
-const polishRecentsEl = document.getElementById('polish-recents');
-const polishModKeyEl = document.getElementById('polish-mod-key');
-const polishLockEl = document.getElementById('polish-lock');
-const polishLockTitleEl = document.getElementById('polish-lock-title');
-const polishLockCopyEl = document.getElementById('polish-lock-copy');
-const polishLockActionEl = document.getElementById('polish-lock-action');
-const navPolishProEl = document.querySelector('#nav-polish .nav-pro');
-// Polish, Grammar and Tighten: three buttons, one text, one price.
-const polishModeButtons = {
-  polish: polishRunEl,
-  grammar: document.getElementById('polish-grammar'),
-  tighten: document.getElementById('polish-tighten'),
-};
-// The mode a result came from, as the small gold chip on the paper.
-const POLISH_MODE_CHIPS = { polish: 'Polish', grammar: 'Grammar', tighten: 'Tighten' };
-const POLISH_IDLE_EMPTY = 'Type or pick a recent dictation, and the polished version appears here.';
-const POLISH_IDLE_READY = 'Pick Polish, Grammar or Tighten. Your polished text appears here.';
-const POLISH_DIFF_MAX_WORDS = 800;
-// The credits ring is a circle of this circumference (r 6.4) that the page
-// draws in as far as the credits left.
-const POLISH_RING_LENGTH = 40.21;
-
-// A dictation picked from history: polishing it also updates its entry.
-let polishSource = null;
-let polishResult = null;
-// { text, mode } while a polish is out, else null.
-let polishWorking = null;
-// What the smallest polish costs, for the credits pill while the box is empty.
-let polishBaseCredits = null;
-let polishQuoteTimer = 0;
-let polishQuoteSeq = 0;
-let polishRecentsKey = null;
-// Why the last polish did not happen. It stays up until the words change or
-// another polish starts, which the quote refresh after it would otherwise wipe.
-let polishRunError = '';
-
-function polishAppName(exe) {
-  const base = String(exe || '').replace(/\.(exe|app)$/i, '').trim();
-  if (!base) return '';
-  return base.length <= 3 ? base.toUpperCase() : base[0].toUpperCase() + base.slice(1);
-}
-
-// The app marks the dictation cards show (assets/hero-apps), matched on the
-// process name, then on the window title for a browser tab that is really
-// Gmail or Notion. `ink` marks the three that have a charcoal twin for White.
-const POLISH_APP_MARKS = [
-  { name: 'Gmail', file: 'gmail', title: /\bgmail\b/i },
-  { name: 'Google Docs', file: 'google-docs', title: /google docs/i },
-  { name: 'Notion', file: 'notion', ink: true, exe: /^notion/i, title: /\bnotion\b/i },
-  { name: 'Linear', file: 'linear', exe: /^linear/i, title: /\blinear\b/i },
-  { name: 'Cursor', file: 'cursor', ink: true, exe: /^cursor/i },
-  { name: 'Discord', file: 'discord', exe: /^discord/i, title: /\bdiscord\b/i },
-  { name: 'WhatsApp', file: 'whatsapp', exe: /^whatsapp/i, title: /\bwhatsapp\b/i },
-  { name: 'Claude', file: 'claude', exe: /^claude/i, title: /\bclaude\b/i },
-  { name: 'Figma', file: 'figma', exe: /^figma/i, title: /\bfigma\b/i },
-  { name: 'Telegram', file: 'telegram', exe: /^telegram/i, title: /\btelegram\b/i },
-  { name: 'GitHub', file: 'github', ink: true, exe: /^github/i, title: /\bgithub\b/i },
-];
-const POLISH_CHROME_MARK = { name: 'Chrome', file: 'chrome' };
-// What a chip wears for an app with no mark of its own: a plain window.
-const POLISH_PLAIN_ICON = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="3"/><path d="M3.5 9.5h17"/></svg>';
-
-function polishAppMark(entry) {
-  const exe = String(entry.exe || '').replace(/\.(exe|app)$/i, '').trim();
-  return POLISH_APP_MARKS.find((m) => m.exe && m.exe.test(exe))
-    || POLISH_APP_MARKS.find((m) => m.title && m.title.test(String(entry.title || '')))
-    || (/^(google )?chrome$/i.test(exe) ? POLISH_CHROME_MARK : null);
-}
-
-function polishAppIcon(mark) {
-  if (!mark) {
-    const plain = document.createElement('span');
-    plain.className = 'polish-recent-icon is-plain';
-    plain.innerHTML = POLISH_PLAIN_ICON;
-    return plain;
-  }
-  const img = document.createElement('img');
-  img.className = 'polish-recent-icon';
-  img.alt = '';
-  img.width = 15;
-  img.height = 15;
-  img.draggable = false;
-  if (mark.ink) img.dataset.themeIcon = mark.file;
-  const ink = mark.ink && document.documentElement.dataset.appTheme === 'white' ? '-ink' : '';
-  img.src = '../assets/hero-apps/' + mark.file + ink + '.svg';
-  return img;
-}
-
-// The first few words, enough to tell one dictation from the next.
-function polishRecentLabel(text) {
-  const words = String(text || '').trim().split(/\s+/);
-  const head = words.slice(0, 4).join(' ').replace(/[,.;:\s]+$/, '');
-  return words.length > 4 ? head + '…' : head;
-}
-
-function polishCountLabel(words) {
-  return words === 1 ? '1 word' : Number(words || 0).toLocaleString() + ' words';
-}
-
-function setPolishState(state) {
-  if (polishStudioEl) polishStudioEl.dataset.state = state;
-}
-
-function renderPolishRecents(entries) {
-  if (!polishRecentsEl) return;
-  const recent = (entries || []).filter((e) => e && String(e.text || '').trim().split(/\s+/).length >= 3).slice(0, 3);
-  const key = recent.map((e) => e.id + ':' + e.text.length).join('|');
-  if (key !== polishRecentsKey) {
-    polishRecentsKey = key;
-    polishRecentsEl.textContent = '';
-    if (!recent.length) {
-      const empty = document.createElement('span');
-      empty.className = 'polish-recents-empty';
-      empty.textContent = 'Your recent dictations show up here.';
-      polishRecentsEl.appendChild(empty);
-    }
-    for (const entry of recent) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'polish-recent';
-      button.dataset.entryId = entry.id;
-      button.title = entry.text;
-      const mark = polishAppMark(entry);
-      button.appendChild(polishAppIcon(mark));
-      const app = document.createElement('span');
-      app.className = 'polish-recent-app';
-      app.textContent = (mark && mark.name) || polishAppName(entry.exe) || 'Dictation';
-      button.appendChild(app);
-      const words = document.createElement('span');
-      words.className = 'polish-recent-text';
-      words.textContent = polishRecentLabel(entry.text);
-      button.appendChild(words);
-      button.addEventListener('click', () => {
-        if (polishWorking || !polishInputEl || polishInputEl.disabled) return;
-        polishInputEl.value = entry.text;
-        polishSource = { entryId: entry.id, text: entry.text };
-        renderPolishRecents((lastPayload && lastPayload.entries) || []);
-        onPolishInput();
-        polishInputEl.focus();
-      });
-      polishRecentsEl.appendChild(button);
-    }
-  }
-  // Only the picked chip changes when you pick, so the others do not settle in again.
-  for (const button of polishRecentsEl.querySelectorAll('.polish-recent')) {
-    button.setAttribute('aria-pressed', String(!!polishSource && polishSource.entryId === button.dataset.entryId));
-  }
-}
-
-// Behind the Pro card, the studio shows what Polish does, on an example rather
-// than an empty box. Whatever was in the box waits aside and comes back with
-// the plan.
-const POLISH_EXAMPLE = {
-  before: 'um so I was thinking we should uh ship the new flow bar this week, you know, and then like test it with five users before the the release',
-  after: 'I was thinking we should ship the new flow bar this week, then test it with five users before the release.',
-};
-let polishExampleDraft = null;
-
-function showPolishExample() {
-  if (polishExampleDraft === null) polishExampleDraft = polishInputEl.value;
-  polishInputEl.value = POLISH_EXAMPLE.before;
-  polishOutputEl.textContent = '';
-  polishOutputEl.appendChild(polishParagraph('polish-result', POLISH_EXAMPLE.after));
-  polishModeChipEl.textContent = POLISH_MODE_CHIPS.polish;
-  polishModeChipEl.hidden = false;
-  polishStatusEl.textContent = '';
-  polishCopyEl.hidden = true;
-  polishChangesEl.hidden = true;
-}
-
-function hidePolishExample() {
-  if (polishExampleDraft === null) return;
-  polishInputEl.value = polishExampleDraft;
-  polishExampleDraft = null;
-  renderPolishResult();
-}
-
-// The credits pill: what is left, drawn as far round the ring as the month
-// has left to give.
-function renderPolishBalance(remaining, cap) {
-  polishBalanceEl.hidden = remaining === null || !Number.isFinite(remaining);
-  if (polishBalanceEl.hidden) return;
-  const left = Math.floor(remaining * 100) / 100;
-  polishBalanceNumEl.textContent = left.toLocaleString(undefined, { maximumFractionDigits: 2 });
-  polishBalanceUnitEl.textContent = left === 1 ? 'credit' : 'credits';
-  const share = cap > 0 ? Math.min(1, Math.max(0, remaining / cap)) : 0;
-  polishBalanceEl.style.setProperty('--polish-ring-gap', ((1 - share) * POLISH_RING_LENGTH).toFixed(2));
-}
-
-function renderPolish(data) {
-  if (!polishStudioEl) return;
-  const account = (data && data.account) || null;
-  const signedIn = !!(account && account.signedIn);
-  const pro = signedIn && account.plan === 'pro';
-  // The island's Pro tag on Polish is a reason to look, so a Pro account does not see it.
-  if (navPolishProEl) navPolishProEl.hidden = pro;
-  polishViewEl.classList.toggle('is-locked', !pro);
-  // Dimmed behind the card, and out of the tab order too.
-  polishPageEl.inert = !pro;
-  polishLockEl.hidden = pro;
-  polishInputEl.disabled = !pro;
-  polishModKeyEl.textContent = isMacUi() ? 'Cmd' : 'Ctrl';
-  if (pro) hidePolishExample();
-  else showPolishExample();
-  if (!signedIn) {
-    polishLockTitleEl.textContent = 'Sign in to polish';
-    polishLockCopyEl.textContent = 'Polish is part of Voxden Pro. Sign in to use it on your dictations and on anything you paste here.';
-    polishLockActionEl.textContent = 'Sign in';
-    polishLockActionEl.dataset.target = 'account';
-  } else if (!pro) {
-    polishLockTitleEl.textContent = 'Polish is part of Pro';
-    polishLockCopyEl.textContent = 'Turn any rough dictation into clean writing in a second, from the flow bar or right here. Each polish comes out of your cloud credits.';
-    polishLockActionEl.innerHTML = 'Upgrade to Pro <span aria-hidden="true">↗</span>';
-    polishLockActionEl.dataset.target = 'billing';
-  }
-  const cloud = account && account.cloud;
-  const cap = cloud ? Number(cloud.creditsCap) : 0;
-  renderPolishBalance(pro && cap > 0 ? Math.max(0, Number(cloud.creditsRemaining)) : null, cap);
-  renderPolishRecents((data && data.entries) || []);
-  if (view === 'polish') schedulePolishQuote(0);
-}
-
-function schedulePolishQuote(delay) {
-  clearTimeout(polishQuoteTimer);
-  polishQuoteTimer = setTimeout(refreshPolishQuote, delay);
-}
-
-async function refreshPolishQuote() {
-  if (!polishInputEl || !window.voxden || typeof window.voxden.polishQuote !== 'function') return;
-  const text = polishInputEl.value;
-  const seq = ++polishQuoteSeq;
-  let quote = null;
-  try { quote = await window.voxden.polishQuote(text); } catch (_) { quote = null; }
-  if (seq !== polishQuoteSeq) return;
-  const words = quote ? quote.words : 0;
-  // The price steps up with length. With nothing typed yet, the pill shows the
-  // least a polish costs, which main quotes for a single word.
-  if (!words && polishBaseCredits === null) {
-    try {
-      const base = await window.voxden.polishQuote('x');
-      polishBaseCredits = base ? Number(base.credits) || null : null;
-    } catch (_) { /* no price shown */ }
-    if (seq !== polishQuoteSeq) return;
-  }
-  const price = words > 0 && quote ? quote.credits : polishBaseCredits;
-  polishRateEl.textContent = price ? '· ' + Number(price).toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' per polish' : '';
-  polishWordsEl.textContent = polishCountLabel(words);
-  polishClearEl.hidden = !polishInputEl.value.length;
-  polishOutputEl.dataset.idle = polishInputEl.value.trim() ? POLISH_IDLE_READY : POLISH_IDLE_EMPTY;
-  polishRunCostEl.textContent = words > 0 && quote ? quote.label : '';
-  for (const [mode, button] of Object.entries(polishModeButtons)) {
-    if (!button) continue;
-    button.disabled = !!polishWorking || !quote || !quote.ok;
-    if (mode !== 'polish') button.title = words > 0 && quote ? quote.label + ', the same as Polish' : '';
-  }
-  let hint = '';
-  if (quote && quote.reason === 'cap') hint = 'Not enough cloud credits left. This polish needs ' + quote.label + '.';
-  else if (quote && quote.reason === 'long') hint = 'Polish takes up to ' + Number(quote.maxWords).toLocaleString() + ' words at a time.';
-  if (!polishWorking) showPolishError(hint || polishRunError);
-}
-
-function onPolishInput() {
-  if (polishSource && polishInputEl.value !== polishSource.text) {
-    polishSource = null;
-    renderPolishRecents((lastPayload && lastPayload.entries) || []);
-  }
-  polishRunError = '';
-  schedulePolishQuote(120);
-}
-
-function showPolishError(message) {
-  polishErrorTextEl.textContent = message || '';
-  polishErrorEl.hidden = !message;
-}
-
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
-// Word-level changes from what was said to what came back: what came out is
-// struck through, what went in is lit, and a word that only changed its
-// capital or punctuation gets a dotted underline, a fix a reader need not weigh
-// like an edit.
-function polishDiffHtml(before, after) {
-  const a = String(before || '').split(/\s+/).filter(Boolean);
-  const b = String(after || '').split(/\s+/).filter(Boolean);
-  const key = (w) => w.toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
-  const dp = Array.from({ length: a.length + 1 }, () => new Uint16Array(b.length + 1));
-  for (let i = a.length - 1; i >= 0; i--) {
-    for (let j = b.length - 1; j >= 0; j--) {
-      dp[i][j] = key(a[i]) === key(b[j]) ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
-    }
-  }
-  const out = [];
-  const del = (w) => '<del class="polish-seg-del">' + escapeHtml(w) + '</del>';
-  const add = (w) => '<ins class="polish-seg-add">' + escapeHtml(w) + '</ins>';
-  let i = 0;
-  let j = 0;
-  while (i < a.length && j < b.length) {
-    if (key(a[i]) === key(b[j])) {
-      out.push(a[i] === b[j] ? escapeHtml(b[j]) : '<span class="polish-seg-fix">' + escapeHtml(b[j]) + '</span>');
-      i++;
-      j++;
-    } else if (dp[i + 1][j] >= dp[i][j + 1]) { out.push(del(a[i])); i++; }
-    else { out.push(add(b[j])); j++; }
-  }
-  while (i < a.length) out.push(del(a[i++]));
-  while (j < b.length) out.push(add(b[j++]));
-  return out.join(' ');
-}
-
-function polishParagraph(className, text) {
-  const p = document.createElement('p');
-  p.className = className;
-  p.textContent = text;
-  return p;
-}
-
-function renderPolishResult() {
-  const result = polishResult;
-  const working = polishWorking;
-  const words = result ? String(result.before).split(/\s+/).filter(Boolean).length : 0;
-  polishModeChipEl.hidden = !!working || !result;
-  polishCopyEl.hidden = !!working || !result;
-  polishChangesEl.hidden = !!working || !result || words > POLISH_DIFF_MAX_WORDS;
-  polishOutputEl.textContent = '';
-  if (working) {
-    // The words wait on the paper with a sweep of gold across them until the
-    // answer is back. They are the user's own, so the live region stays quiet.
-    const waiting = polishParagraph('polish-result polish-working', working.text);
-    waiting.setAttribute('aria-hidden', 'true');
-    polishOutputEl.appendChild(waiting);
-    polishStatusEl.textContent = polishModeWords(working.mode).busy;
-    return;
-  }
-  if (!result) {
-    polishStatusEl.textContent = 'Ready when you are';
-    return;
-  }
-  polishModeChipEl.textContent = POLISH_MODE_CHIPS[result.mode] || POLISH_MODE_CHIPS.polish;
-  const showChanges = polishChangesEl.getAttribute('aria-pressed') === 'true' && !polishChangesEl.hidden;
-  if (showChanges) {
-    const diff = polishParagraph('polish-result is-diff', '');
-    diff.innerHTML = polishDiffHtml(result.before, result.after);
-    polishOutputEl.appendChild(diff);
-  } else {
-    polishOutputEl.appendChild(polishParagraph('polish-result is-fresh', result.after));
-  }
-  polishStatusEl.textContent = 'Used ' + (result.credits === 1 ? '1 credit' : result.credits + ' credits')
-    + (result.entryId ? ' · saved to this dictation' : '');
-}
-
-async function runPolishPage(mode) {
-  const button = polishModeButtons[mode];
-  if (polishWorking || !button || button.disabled || !window.voxden) return;
-  const text = polishInputEl.value.trim();
-  if (!text) return;
-  polishWorking = { text, mode };
-  for (const b of Object.values(polishModeButtons)) if (b) b.disabled = true;
-  const labelEl = mode === 'polish' ? polishRunLabelEl : button.querySelector('.polish-mode-label');
-  const idleLabel = labelEl.textContent;
-  labelEl.textContent = polishModeWords(mode).busy;
-  button.classList.add('is-running');
-  polishRunError = '';
-  showPolishError('');
-  setPolishState('busy');
-  renderPolishResult();
-  const fromEntry = polishSource && polishSource.text === polishInputEl.value ? polishSource.entryId : '';
-  let res = null;
-  try {
-    res = fromEntry ? await window.voxden.polishEntry(fromEntry, mode) : await window.voxden.polishText(text, mode);
-  } catch (_) {
-    res = { ok: false, message: 'Polish did not work this time. Nothing was charged.' };
-  }
-  polishWorking = null;
-  labelEl.textContent = idleLabel;
-  button.classList.remove('is-running');
-  if (res && res.ok) {
-    polishResult = { before: text, after: res.text, credits: res.credits, entryId: fromEntry, mode };
-    if (fromEntry) polishSource = { entryId: fromEntry, text: polishInputEl.value };
-    setPolishState('done');
-  } else {
-    // Whatever was on the paper before comes back.
-    setPolishState(polishResult ? 'done' : 'idle');
-    polishRunError = (res && res.message) || 'Polish did not work this time. Nothing was charged.';
-    showPolishError(polishRunError);
-  }
-  renderPolishResult();
-  schedulePolishQuote(0);
-}
-
-if (polishStudioEl) {
-  polishInputEl.addEventListener('input', onPolishInput);
-  polishInputEl.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault();
-      runPolishPage('polish');
-    }
-  });
-  // The whole card is the text field.
-  polishDraftEl.addEventListener('click', (e) => {
-    if (!e.target.closest('button') && !polishInputEl.disabled) polishInputEl.focus();
-  });
-  for (const [mode, button] of Object.entries(polishModeButtons)) {
-    if (button) button.addEventListener('click', () => runPolishPage(mode));
-  }
-  polishClearEl.addEventListener('click', () => {
-    polishInputEl.value = '';
-    polishSource = null;
-    polishRunError = '';
-    renderPolishRecents((lastPayload && lastPayload.entries) || []);
-    schedulePolishQuote(0);
-    polishInputEl.focus();
-  });
-  polishChangesEl.addEventListener('click', () => {
-    polishChangesEl.setAttribute('aria-pressed', String(polishChangesEl.getAttribute('aria-pressed') !== 'true'));
-    renderPolishResult();
-  });
-  polishCopyEl.addEventListener('click', async () => {
-    if (!polishResult) return;
-    try {
-      await navigator.clipboard.writeText(polishResult.after);
-      polishCopyLabelEl.textContent = 'Copied';
-      if (typeof window.showAppToast === 'function') window.showAppToast('Copied to clipboard');
-      setTimeout(() => { polishCopyLabelEl.textContent = 'Copy'; }, 1400);
-    } catch (_) {
-      polishStatusEl.textContent = 'Could not copy. Select the text and press ' + (isMacUi() ? 'Cmd+C.' : 'Ctrl+C.');
-    }
-  });
-  polishLockActionEl.addEventListener('click', () => openSettingsTarget(polishLockActionEl.dataset.target || 'billing'));
 }
 
 function render(payload) {
@@ -7395,11 +5546,9 @@ function render(payload) {
   const all = data.entries || [];
 
   renderGreeting(data);
-  renderCloudCredits(data);
   renderNotifications(data);
   renderSettings(data);
   renderWritingStyles(data);
-  renderPolish(data);
   if (view === 'dictation') renderStats(all, data);
   renderDictionary(data);
   renderInsights(data);
@@ -7418,7 +5567,6 @@ syncPageHidden();
 document.addEventListener('visibilitychange', () => {
   syncPageHidden();
   syncVocabFix();
-  syncFeedbackMotion();
   if (!document.hidden && (dashboardRenderPending || lastPayload && lastPayload.usageStats)) render(null);
   else scheduleAnalyticsRefresh();
 });
@@ -7438,11 +5586,6 @@ for (const btn of navButtons) {
     setView(btn.dataset.view);
   });
 }
-const islandCreditsBtn = document.getElementById('island-credits');
-if (islandCreditsBtn) {
-  islandCreditsBtn.addEventListener('click', () => openSettingsTarget('billing'));
-}
-
 // --- Fitting the island ------------------------------------------------------
 // The island sits in the middle of the window when there is room, and slides
 // toward the logo only as far as the buttons on the right push it. When even
@@ -7763,7 +5906,7 @@ for (const btn of document.querySelectorAll('.ins-tab')) {
 function patchSettings(patch) {
   // A save that fails must put the controls back the way the settings really
   // are, rather than leave a toggle showing a value that never persisted.
-  return window.voxden.setSettings(patch).then(payload => {
+  return window.vell.setSettings(patch).then(payload => {
     render(payload);
     return payload;
   }).catch(() => {
@@ -8014,9 +6157,9 @@ if (settingInputs.alwaysShowFlowBar) {
 }
 if (flowBarResetBtn) {
   flowBarResetBtn.addEventListener('click', () => {
-    if (!window.voxden || typeof window.voxden.resetFlowBar !== 'function') return;
+    if (!window.vell || typeof window.vell.resetFlowBar !== 'function') return;
     flowBarResetBtn.disabled = true;
-    window.voxden.resetFlowBar()
+    window.vell.resetFlowBar()
       .then(render)
       .catch(() => {})
       .finally(() => { flowBarResetBtn.disabled = false; });
@@ -8064,7 +6207,7 @@ recordingsClearBtn.addEventListener('click', async () => {
   renderRecordingsHint(lastPayload || {});
   stopActivePlayer();
   try {
-    const result = await window.voxden.clearRecordings();
+    const result = await window.vell.clearRecordings();
     if (result && result.snapshot) render(result.snapshot);
     const ok = !!(result && result.ok);
     recordingsClearStatusEl.textContent = ok ? 'Saved recordings deleted.'
@@ -8135,7 +6278,7 @@ if (trainingClearBtn) {
   trainingClearBtn.addEventListener('click', async () => {
     trainingClearBtn.disabled = true;
     try {
-      const next = await window.voxden.clearTrainingData();
+      const next = await window.vell.clearTrainingData();
       if (next) render(next);
       if (next && next.trainingError && trainingStatsEl) trainingStatsEl.textContent = next.trainingError;
     } catch (_) {
@@ -8198,45 +6341,24 @@ if (settingInputs.microphone) {
   });
 }
 
-if (updateCheckBtn) {
-  updateCheckBtn.addEventListener('click', () => {
-    if (!window.voxden || !window.voxden.checkForUpdates) return;
-    updateCheckBtn.disabled = true;
-    // The reply is only the updater's status, not a snapshot. Rendered on its
-    // own it wiped every setting back to its default on screen (the shortcut,
-    // the toggles) until the next broadcast, so it is laid over the last one.
-    window.voxden.checkForUpdates().then((status) => {
-      render(Object.assign({}, lastPayload || {}, status || {}));
-    }).catch(() => {
-      if (updateCheckBtn) updateCheckBtn.disabled = false;
-    });
-  });
-}
-if (updateRestartBtn) {
-  updateRestartBtn.addEventListener('click', () => {
-    if (updateRestartBtn.disabled) return;
-    updateRestartBtn.disabled = true;
-    requestUpdateInstall().then(() => render());
-  });
-}
 // On success this window closes with the app and the elevated copy opens its
 // own; only a refusal comes back here to be shown.
 if (runAsAdminBtn) {
   runAsAdminBtn.addEventListener('click', async () => {
-    if (restartingAsAdmin || !window.voxden || !window.voxden.restartAsAdmin) return;
+    if (restartingAsAdmin || !window.vell || !window.vell.restartAsAdmin) return;
     restartingAsAdmin = true;
     if (runAsAdminErrorEl) runAsAdminErrorEl.hidden = true;
     renderRunAsAdmin(lastPayload || {});
     let result = null;
     try {
-      result = await window.voxden.restartAsAdmin();
+      result = await window.vell.restartAsAdmin();
     } catch (_) {
       result = null;
     }
     if (result && result.ok) return;
     restartingAsAdmin = false;
     if (runAsAdminErrorEl) {
-      runAsAdminErrorEl.textContent = (result && result.reason) || 'Windows could not restart Voxden as administrator.';
+      runAsAdminErrorEl.textContent = (result && result.reason) || 'Windows could not restart Vell as administrator.';
       runAsAdminErrorEl.hidden = false;
     }
     renderRunAsAdmin(lastPayload || {});
@@ -8259,19 +6381,19 @@ if (customSelectMap.has(settingInputs.asrDevice)) {
 }
 setView('dictation');
 setSettingsCat('general');
-window.voxden.onHistory(render);
+window.vell.onHistory(render);
 // The tray can point at a category or a row in General. Unknown targets are
 // ignored so a stale menu entry cannot leave every panel hidden.
-if (window.voxden.onOpenSettings) {
-  window.voxden.onOpenSettings(openSettingsTarget);
+if (window.vell.onOpenSettings) {
+  window.vell.onOpenSettings(openSettingsTarget);
 }
-window.voxden.loadApp().then((data) => {
+window.vell.loadApp().then((data) => {
   render(data);
   // The device list is for the tray and General; neither needs
   // it in the first frame, and opening the microphone is not free.
   setTimeout(refreshMicrophones, 1200);
 }).catch(() => render(null));
-window.voxden.appReady();
+window.vell.appReady();
 
 setInterval(() => {
   if (!document.hidden && view === 'dictation') renderGreeting(lastPayload || {});
@@ -8323,42 +6445,12 @@ function notifItems(data) {
   return Array.isArray(data.notifications) ? data.notifications : [];
 }
 
-// The download in progress, drawn from the update status rather than from
-// the store. It changes every second and is over within minutes, so it is a
-// row while it lasts and nothing afterwards: it never counts as unread, it
-// cannot be dismissed, and clearing the panel leaves it alone.
-const LIVE_UPDATE_ID = 'update-download';
-
-function liveUpdateItem(data) {
-  if (!data || data.packaged === false || data.status !== 'downloading') return null;
-  return {
-    id: LIVE_UPDATE_ID,
-    kind: 'update',
-    live: true,
-    title: 'Downloading ' + updateVersionLabel(data) + '…',
-    body: 'Voxden keeps working while it downloads.',
-    progress: Number.isFinite(data.progress) ? Math.max(0, Math.min(100, data.progress)) : null,
-    ts: Date.now(),
-    unread: false,
-  };
-}
-
-// The stored "ready" row for the update that is waiting right now. An older
-// row -- a version downloaded, never installed, since superseded -- keeps its
-// plain copy; only the one the restart would actually install gets the button.
-function isWaitingUpdateRow(item, data) {
-  if (!item || typeof item.id !== 'string' || item.id.indexOf('update-ready:') !== 0) return false;
-  if (!updateWaiting(data)) return false;
-  return !data.availableVersion || item.id === 'update-ready:' + data.availableVersion;
-}
-
 function buildNotifItem(item, data) {
   const li = document.createElement('li');
   li.className = 'notif-item';
   li.dataset.id = item.id;
   if (item.live) li.classList.add('is-live');
   if (notifNewIds.has(item.id) || item.unread) li.classList.add('is-new');
-  const waiting = isWaitingUpdateRow(item, data);
 
   const icon = document.createElement('span');
   icon.className = 'notif-icon' + (NOTIF_ICONS[item.kind] ? ' is-' + item.kind : '');
@@ -8373,9 +6465,7 @@ function buildNotifItem(item, data) {
   title.textContent = item.title || '';
   copy.appendChild(title);
 
-  // A refused restart says why, in place of the row's own words, for as long
-  // as the notice lasts.
-  const bodyText = waiting && updateNotice ? updateNotice : item.body;
+  const bodyText = item.body;
   if (bodyText) {
     const body = document.createElement('span');
     body.className = 'notif-item-body';
@@ -8405,26 +6495,9 @@ function buildNotifItem(item, data) {
   if (item.live) when.className = 'notif-progress-pct';
   else when.textContent = dayLabel(item.ts);
   meta.appendChild(when);
-  if (waiting) {
-    // The update that is downloaded and waiting: the one action in this
-    // panel that is a button rather than a link, because it is the reason
-    // the row exists.
-    const restart = document.createElement('button');
-    restart.type = 'button';
-    restart.className = 'notif-open notif-restart';
-    const installing = data && data.status === 'installing';
-    restart.textContent = installing ? 'Restarting…' : 'Restart now';
-    restart.disabled = !!installing;
-    restart.addEventListener('click', () => {
-      if (restart.disabled) return;
-      restart.disabled = true;
-      requestUpdateInstall().then(() => render());
-    });
-    meta.appendChild(restart);
-  }
   // A settings pane that the markup does not have would open the dialog onto
   // nothing, so an action is only offered once its target is known to exist.
-  const cat = !waiting && item.action && item.action.settings;
+  const cat = item.action && item.action.settings;
   if (cat && resolveSettingsTarget(cat)) {
     const open = document.createElement('button');
     open.type = 'button';
@@ -8462,42 +6535,19 @@ function buildNotifItem(item, data) {
   dismiss.setAttribute('aria-label', 'Dismiss notification');
   dismiss.innerHTML = NOTIF_DISMISS_ICON;
   dismiss.addEventListener('click', () => {
-    if (!window.voxden || !window.voxden.dismissNotification) return;
+    if (!window.vell || !window.vell.dismissNotification) return;
     notifNewIds.delete(item.id);
-    window.voxden.dismissNotification(item.id).then(render).catch(() => {});
+    window.vell.dismissNotification(item.id).then(render).catch(() => {});
   });
   li.appendChild(dismiss);
 
   return li;
 }
 
-// The live row's number moves once a second. The row is updated in place so
-// the list is not rebuilt, and its entry animation not replayed, for every
-// percent.
-function syncLiveUpdateRow(live) {
-  if (!live) return;
-  const row = notifListEl.querySelector('.notif-item[data-id="' + LIVE_UPDATE_ID + '"]');
-  if (!row) return;
-  const title = row.querySelector('.notif-item-title');
-  if (title && title.textContent !== live.title) title.textContent = live.title;
-  const known = live.progress != null;
-  const track = row.querySelector('.notif-progress');
-  const bar = row.querySelector('.notif-progress-bar');
-  const pct = row.querySelector('.notif-progress-pct');
-  if (track) {
-    track.classList.toggle('is-indeterminate', !known);
-    if (known) track.setAttribute('aria-valuenow', String(live.progress));
-    else track.removeAttribute('aria-valuenow');
-  }
-  if (bar) bar.style.width = known ? live.progress + '%' : '';
-  if (pct) pct.textContent = known ? live.progress + '%' : 'Starting…';
-}
-
 function renderNotifications(data) {
   if (!notifBtnEl) return;
   const stored = notifItems(data);
-  const live = liveUpdateItem(data);
-  const items = live ? [live].concat(stored) : stored;
+  const items = stored;
   const unread = Number(data.notificationsUnread) || 0;
 
   notifBtnEl.classList.toggle('has-unread', unread > 0);
@@ -8513,15 +6563,13 @@ function renderNotifications(data) {
   notifEmptyEl.hidden = items.length > 0;
 
   const signature = items
-    .map((item) => item.id + ':' + (notifNewIds.has(item.id) || item.unread ? '1' : '0')
-      + (isWaitingUpdateRow(item, data) ? ':' + data.status + (updateNotice ? ':notice' : '') : ''))
+    .map((item) => item.id + ':' + (notifNewIds.has(item.id) || item.unread ? '1' : '0'))
     .join('|');
   if (signature !== notifSignature) {
     notifSignature = signature;
     notifListEl.innerHTML = '';
     for (const item of items) notifListEl.appendChild(buildNotifItem(item, data));
   }
-  syncLiveUpdateRow(live);
 }
 
 function openNotifications() {
@@ -8534,8 +6582,8 @@ function openNotifications() {
   notifSignature = '';
   // Only the panel and its badge change here; the feed and the settings do
   // not need rebuilding to open a 300px panel.
-  if (window.voxden && window.voxden.readNotifications) {
-    window.voxden.readNotifications().then((data) => {
+  if (window.vell && window.vell.readNotifications) {
+    window.vell.readNotifications().then((data) => {
       if (data) lastPayload = data;
       renderNotifications(lastPayload || {});
     }).catch(() => renderNotifications(lastPayload || {}));
@@ -8562,9 +6610,9 @@ if (notifBtnEl) {
   });
 
   notifClearEl.addEventListener('click', () => {
-    if (!window.voxden || !window.voxden.clearNotifications) return;
+    if (!window.vell || !window.vell.clearNotifications) return;
     notifNewIds = new Set();
-    window.voxden.clearNotifications().then(render).catch(() => {});
+    window.vell.clearNotifications().then(render).catch(() => {});
   });
 
   // Anywhere outside the panel closes it, the bell included -- its own handler

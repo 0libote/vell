@@ -17,7 +17,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const DEFAULT_REPO = 'Systran/faster-whisper-large-v3';
-const MANIFEST_NAME = 'voxden-asr-model.json';
+const MANIFEST_NAME = 'vell-asr-model.json';
 
 // The id names the install directory and every asset, so it has to follow the
 // repo. Hardcoding it meant a small.en build shipped assets called large-v3.

@@ -314,7 +314,7 @@ check('every new press forgets the last drag',
     && /function beginPointerGesture\(e\) \{\s*barDragged = false;/.test(overlaySrc), true);
 check('a press that starts on the gear or screenshot never dictates',
   /function onIdleDictate[\s\S]{0,900}if \(flowBarStyle === 'island' && pressOnSide\) return;/.test(overlaySrc), true);
-check('the gear opens settings', overlaySrc.includes('window.voxden.overlaySettings()'), true);
+check('the gear opens settings', overlaySrc.includes('window.vell.overlaySettings()'), true);
 check('the bridges exist', ['overlayDragStart', 'overlayDragEnd', 'overlaySettings', 'resetFlowBar']
   .every((k) => preloadSrc.includes(k + ':')), true);
 

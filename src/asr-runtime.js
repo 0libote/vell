@@ -22,9 +22,9 @@ const { extractZip } = require('./zip');
 
 const fsPromises = fs.promises;
 
-const DEFAULT_REPOSITORY = 'sounak1125/voxden';
+const DEFAULT_REPOSITORY = '0libote/vell';
 const DEFAULT_RELEASE_TAG = 'asr-runtime-v1';
-const MANIFEST_ASSET = 'voxden-asr-runtime.json';
+const MANIFEST_ASSET = 'vell-asr-runtime.json';
 const RECEIPT_SCHEMA = 1;
 
 // One runtime per platform, each built by scripts/prepare-asr-runtime.js. The
@@ -33,12 +33,12 @@ const RECEIPT_SCHEMA = 1;
 // bin/python3 is a symlink the build flattens away.
 const RUNTIME_SPECS = Object.freeze({
   win32: Object.freeze({
-    asset: 'voxden-asr-runtime-win-x64.zip',
+    asset: 'vell-asr-runtime-win-x64.zip',
     python: 'python.exe',
     id: 'asr-win-x64',
   }),
   darwin: Object.freeze({
-    asset: 'voxden-asr-runtime-mac-arm64.zip',
+    asset: 'vell-asr-runtime-mac-arm64.zip',
     python: 'bin/python3.12',
     id: 'asr-mac-arm64',
   }),
@@ -53,7 +53,7 @@ function runtimeSpec(platform = process.platform, arch = process.arch) {
   if (platform === 'win32') return RUNTIME_SPECS.win32;
   if (platform === 'darwin' && arch === 'arm64') return RUNTIME_SPECS.darwin;
   throw new ReleaseError(
-    'Voxden has no speech engine for ' + platform + ' ' + arch + '.',
+    'Vell has no speech engine for ' + platform + ' ' + arch + '.',
     'UNSUPPORTED_PLATFORM'
   );
 }
@@ -79,7 +79,7 @@ function friendlyFetchError(err) {
   if (err instanceof ReleaseError) return err;
   if (err && err.code === 'ENOSPC') return new ReleaseError('There is not enough free disk space to install the speech engine.', 'DISK_FULL');
   if (err && ['EPERM', 'EACCES', 'EBUSY'].includes(err.code)) {
-    return new ReleaseError('Voxden could not replace the speech engine files. Close other copies of Voxden and try again.', 'FILES_IN_USE');
+    return new ReleaseError('Vell could not replace the speech engine files. Close other copies of Vell and try again.', 'FILES_IN_USE');
   }
   return new ReleaseError(
     'Speech engine setup failed: ' + (err && err.message || 'Unknown error. Please try again.'),
@@ -128,7 +128,7 @@ class AsrRuntimeManager {
       releaseTag: this.releaseTag,
       releaseApiUrl: opts.releaseApiUrl,
       fetchImpl: opts.fetchImpl,
-      userAgent: 'Voxden-Asr-Runtime',
+      userAgent: 'Vell-Asr-Runtime',
       cancelLabel: 'Speech engine',
       segmentSize: opts.segmentSize,
       segmentThreshold: opts.segmentThreshold,
@@ -170,7 +170,7 @@ class AsrRuntimeManager {
     return Object.assign({}, ADVERTISED, {
       downloadBytes: this.bundledManifest ? 0 : ADVERTISED.downloadBytes,
       bundled: !!this.bundledManifest,
-      downloadSize: this.bundledManifest ? 'Included with Voxden' : ADVERTISED.downloadSize,
+      downloadSize: this.bundledManifest ? 'Included with Vell' : ADVERTISED.downloadSize,
       installedSize: this.bundledManifest
         ? Math.ceil(this.bundledManifest.runtime.installedBytes / 1e6) + ' MB' : ADVERTISED.installedSize,
       needsUpgrade: !!(installed && this.bundledManifest
@@ -194,7 +194,7 @@ class AsrRuntimeManager {
     if (this.bundledManifest) {
       const declared = this.bundledManifest.runtime;
       if (!declared || declared.asset !== spec.asset) {
-        throw new ReleaseError('The bundled speech engine is incomplete. Reinstall Voxden.', 'RUNTIME_INCOMPLETE');
+        throw new ReleaseError('The bundled speech engine is incomplete. Reinstall Vell.', 'RUNTIME_INCOMPLETE');
       }
       const localPath = path.join(this.bundledRoot, spec.asset);
       return { ...declared, python: spec.python, localPath };
@@ -268,7 +268,7 @@ class AsrRuntimeManager {
       if (asset.localPath) {
         this.onProgress({ status: 'installing', progress: 10, message: 'Verifying the bundled speech engine…' });
         if (!await this.downloader.verifyFile(archive, asset)) {
-          throw new ReleaseError('The bundled speech engine failed verification. Reinstall Voxden.', 'CHECKSUM_MISMATCH');
+          throw new ReleaseError('The bundled speech engine failed verification. Reinstall Vell.', 'CHECKSUM_MISMATCH');
         }
       } else await this.downloader.downloadAsset(asset, archive, {
         signal,

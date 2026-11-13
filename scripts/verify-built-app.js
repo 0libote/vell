@@ -39,10 +39,10 @@ async function main() {
   for (const relative of ['scripts/win32.ps1', 'scripts/correction-watch.ps1', 'scripts/vocabulary-seed.json']) {
     assert.strictEqual(await sha256File(path.join(resources, relative)), await sha256File(path.join(root, relative)), relative + ' is stale in resources');
   }
-  const manifestPath = path.join(resources, 'speech-runtime', 'voxden-asr-runtime.json');
-  assert.strictEqual(await sha256File(manifestPath), await sha256File(path.join(root, 'dist-runtime-v3/voxden-asr-runtime.json')));
+  const manifestPath = path.join(resources, 'speech-runtime', 'vell-asr-runtime.json');
+  assert.strictEqual(await sha256File(manifestPath), await sha256File(path.join(root, 'dist-runtime-v3/vell-asr-runtime.json')));
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  const runtimePath = path.join(resources, 'speech-runtime', 'voxden-asr-runtime-win-x64.zip');
+  const runtimePath = path.join(resources, 'speech-runtime', 'vell-asr-runtime-win-x64.zip');
   assert.strictEqual(fs.statSync(runtimePath).size, manifest.runtime.size);
   assert.strictEqual(await sha256File(runtimePath), manifest.runtime.sha256, 'bundled runtime hash mismatch');
   const highlights = require('../src/announcements').CATALOG.filter(row => row.since === pkg.version);

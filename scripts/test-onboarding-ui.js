@@ -54,7 +54,7 @@ app.whenReady().then(async () => {
     'all four models fit the default window without scrolling');
   assert.equal(await js("document.querySelector('[data-model-size=\"whisper-turbo\"]').textContent"), '1.6 GB',
     'turbo is priced from the live pack, not the static fallback');
-  assert.equal(await js("document.getElementById('island-pro').hidden"), true);
+  assert.equal(await js("document.getElementById('island-pro')"), null, 'no upgrade button in the header');
   if (process.argv.includes('--screenshots')) {
     const output = path.resolve(__dirname, '../temp'); fs.mkdirSync(output, {recursive:true});
     await settle();
@@ -101,20 +101,10 @@ app.whenReady().then(async () => {
   await waitFor("document.getElementById('model-welcome-start').textContent === 'Start dictating'");
   await click('#model-welcome-start');
   assert(!await js("document.getElementById('model-welcome').open"));
-  await click('#island-pro');
-  assert(await js("!document.querySelector('.settings-panel[data-cat=billing]').hidden"));
-  if (process.argv.includes('--screenshots')) {
-    await js('closeSettings()');
-    await settle();
-    fs.writeFileSync(path.resolve(__dirname,'../temp/pro-island.png'),(await win.webContents.capturePage()).toPNG());
-  }
-  payload = {...payload,account:{signedIn:true,plan:'pro'}};
-  win.webContents.send('history-updated',payload);
-  await waitFor("document.getElementById('island-pro').hidden");
   await win.reload();
   await new Promise(r=>setTimeout(r,200));
   assert(!await js("document.getElementById('model-welcome').open"),'returning users skip welcome');
   assert.deepEqual(errors,[]);
-  console.log('Passed onboarding selection, progress, cancellation, retry, persistence, billing navigation and Pro visibility.');
+  console.log('Passed onboarding selection, progress, cancellation, retry and persistence.');
   clearTimeout(deadline); win.destroy(); app.exit(0);
 }).catch(err=>{console.error(err);clearTimeout(deadline);app.exit(1);});

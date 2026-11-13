@@ -214,7 +214,7 @@ check('tray settings links open their respective targets once', openedCategories
 check('flow-bar settings still opens General', /overlay-settings'[\s\S]{0,160}openHistory\('general'\)/.test(mainSrc), true);
 
 // The renderer has to actually send the list, or the picker is permanently empty.
-check('renderer reports devices', appSrc.includes('window.voxden.reportMicDevices('), true);
+check('renderer reports devices', appSrc.includes('window.vell.reportMicDevices('), true);
 check('report happens on every enumeration', /renderMicSelect\(lastPayload \|\| \{\}\);\s*\n\s*reportMicDevices\(\);/.test(appSrc), true);
 check('preload exposes the report channel', preloadSrc.includes('reportMicDevices'), true);
 check('main only trusts its own window', /mic-devices'[\s\S]{0,200}e\.sender !== historyWin\.webContents/.test(mainSrc), true);
@@ -258,7 +258,7 @@ check('tray is no longer a static menu', mainSrc.includes("{ label: 'Dictate', c
 check('main defers a link sent while loading', mainSrc.includes('pendingSettingsCat'), true);
 check('app-ready flushes the deferred link', /app-ready[\s\S]{0,320}pendingSettingsCat/.test(mainSrc), true);
 check('preload exposes the channel', preloadSrc.includes('onOpenSettings'), true);
-check('renderer listens for it', appSrc.includes('window.voxden.onOpenSettings('), true);
+check('renderer listens for it', appSrc.includes('window.vell.onOpenSettings('), true);
 check('renderer validates settings targets before opening', /const target = resolveSettingsTarget\(value\);\s*if \(!target\) return;/.test(appSrc), true);
 
 if (failed) {

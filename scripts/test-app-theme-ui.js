@@ -195,37 +195,15 @@ app.whenReady().then(async () => {
     assert.strictEqual(backdrop.draggable, true, theme+' keeps the titlebar draggable');
     await click('#settings-close');
     await pause(320);
-    const upgrade = await run(`(() => {
-      const el=document.querySelector('#island-pro'), c=getComputedStyle(el), r=el.getBoundingClientRect(), i=document.querySelector('#island').getBoundingClientRect();
-      return {visible:el.checkVisibility(), color:c.color, fill:c.backgroundImage, inside:r.left>=i.left&&r.right<=i.right&&r.top>=i.top&&r.bottom<=i.bottom};
-    })()`);
-    assert.ok(upgrade.visible, theme+' shows the real upgrade button');
-    assert.ok(upgrade.inside, theme+' keeps the upgrade button inside the island');
-    assert.strictEqual(upgrade.color, 'rgb(42, 30, 5)', theme+' has dark text on gold');
-    assert.ok(upgrade.fill.includes('241, 210, 122') && upgrade.fill.includes('212, 164, 55'), theme+' upgrade uses gold');
-    // Force hover so a hover rule that restyles the label would be caught.
-    await win.webContents.debugger.sendCommand('DOM.enable');
-    await win.webContents.debugger.sendCommand('CSS.enable');
-    const {root} = await win.webContents.debugger.sendCommand('DOM.getDocument');
-    const {nodeId} = await win.webContents.debugger.sendCommand('DOM.querySelector', {nodeId:root.nodeId, selector:'#island-pro'});
-    await win.webContents.debugger.sendCommand('CSS.forcePseudoState', {nodeId, forcedPseudoClasses:['hover']});
-    await pause(320);
-    const hovered = await run(`(() => { const c=getComputedStyle(document.querySelector('#island-pro')); return {label:c.color, fill:c.backgroundImage}; })()`);
-    assert.strictEqual(hovered.label, 'rgb(42, 30, 5)', theme+' keeps the dark label on hover');
-    assert.ok(hovered.fill.includes('247, 221, 140'), theme+' hover stays gold');
-    await win.webContents.debugger.sendCommand('CSS.forcePseudoState', {nodeId, forcedPseudoClasses:[]});
-    await review(theme+'-upgrade');
     await run(`openSettingsTarget('display'); true`);
-    for(const category of ['general','display','system','account','billing','speech-engines','sound','privacy']) {
+    for(const category of ['general','display','system','speech-engines','sound','privacy']) {
       if(await run(`!!document.querySelector('.settings-cat[data-cat="${category}"]')`)) {
         await click(`.settings-cat[data-cat="${category}"]`); await review(theme+'-settings-'+category);
       }
     }
-    snapshot = { ...snapshot, cloudTranscription: true, dictationLanguageUnlocked: true,
-      dictationLanguageCatalog: require('../src/asr').DICTATION_LANGUAGES,
-      account: { signedIn: true, plan: 'pro', email: 'alex@example.test', profile: { firstName: 'Alex', lastName: 'River' } } };
+    snapshot = { ...snapshot, dictationLanguageUnlocked: true,
+      dictationLanguageCatalog: require('../src/asr').DICTATION_LANGUAGES };
     await run(`render(${JSON.stringify(snapshot)}); true`);
-    await click('.settings-cat[data-cat="account"]'); await review(theme+'-account-pro');
     await click('.settings-cat[data-cat="general"]');
     await click('#general-more-options > summary'); await review(theme+'-general-options');
     await click('#dictation-lang-open');
@@ -236,7 +214,6 @@ app.whenReady().then(async () => {
     await review(theme+'-microphone-menu');
     await run(`closeAllCustomSelects(); true`);
     await click('#settings-close');
-    await click('#account-btn'); await review(theme+'-account-menu'); await click('#account-btn');
     for(const page of ['dictation','dictionary','writing-style','insights','help']) {
       await click('#nav-'+page); await review(theme+'-'+page);
     }

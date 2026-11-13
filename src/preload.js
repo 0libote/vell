@@ -8,7 +8,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 // freezes the page, and a failed one just leaves the plain sample.
 const stylePreviews = new Map();
 
-contextBridge.exposeInMainWorld('voxden', {
+contextBridge.exposeInMainWorld('vell', {
   // Only the main window opts in. Read once per document, before its styles
   // paint; a reload gets the latest saved preference without a dark flash.
   initialAppTheme: process.argv.includes('--voxden-theme-bootstrap')

@@ -13,10 +13,10 @@ const { execFileSync } = require('child_process');
 const { extractZip } = require('../src/zip');
 
 const DEFAULT_PYTHON_VERSION = '3.12.10';
-const MANIFEST_NAME = 'voxden-asr-runtime.json';
+const MANIFEST_NAME = 'vell-asr-runtime.json';
 
-const WIN_ASSET_NAME = 'voxden-asr-runtime-win-x64.zip';
-const MAC_ASSET_NAME = 'voxden-asr-runtime-mac-arm64.zip';
+const WIN_ASSET_NAME = 'vell-asr-runtime-win-x64.zip';
+const MAC_ASSET_NAME = 'vell-asr-runtime-mac-arm64.zip';
 // Bumped when the contents change in a way an existing install has to pick up.
 // v3 adds Qwen and CPU PyTorch; v2 added DirectML. The mac runtime starts at
 // v3 so the two platforms carry the same engine set under the same number.

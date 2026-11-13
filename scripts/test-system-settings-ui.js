@@ -171,17 +171,6 @@ app.whenReady().then(async () => {
   assert.strictEqual(snapshot.flowBarMoved, false);
   assert.strictEqual(await run(`document.getElementById('flow-bar-position-row').hidden`), true);
   await click('.settings-cat[data-cat="system"]');
-  await click('#update-check-btn');
-  assert.strictEqual(await run(`document.getElementById('update-check-btn').disabled`), false, 'update check releases its button');
-  // Its reply is the updater's status alone; rendering that as a snapshot put
-  // every setting on screen back to its default. Show in taskbar is on by now,
-  // from the failure loop above, so a switched-off toggle gives that away.
-  assert.strictEqual(await run(`document.getElementById('general-shortcut-keys').textContent`), 'Ctrl+Shift+Space',
-    'an update check keeps the shortcut on screen');
-  assert.ok(snapshot.showInTaskbar, 'a toggle is on before the update check');
-  assert.deepStrictEqual(await run(`['set-launch-login', 'set-always-flow', 'set-taskbar'].map(id => document.getElementById(id).checked)`),
-    [snapshot.launchAtLogin, snapshot.alwaysShowFlowBar, snapshot.showInTaskbar], 'an update check keeps the toggles on screen');
-
   for (const category of ['system', 'display']) {
   await click('.settings-cat[data-cat="' + category + '"]');
   for (const [width, height, zoom] of [[1120, 760, 1], [800, 650, 1], [640, 440, 1], [640, 440, 1.25]]) {

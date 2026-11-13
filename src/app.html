@@ -2,18 +2,15 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Voxden</title>
+  <title>Vell</title>
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none';">
   <script src="flow-motion.js"></script>
   <script src="app-theme.js"></script>
   <link rel="stylesheet" href="app.css" />
   <link rel="stylesheet" href="refinement.css" />
   <link rel="stylesheet" href="theme.css" />
-  <link rel="stylesheet" href="billing.css" />
   <link rel="stylesheet" href="onboarding.css" />
-  <link rel="stylesheet" href="signin.css" />
   <link rel="stylesheet" href="writing-preview.css" />
-  <link rel="stylesheet" href="polish.css" />
   <link rel="stylesheet" href="app-theme.css" />
   <link rel="stylesheet" href="island-shell.css" />
   <link rel="stylesheet" href="dictation-island.css" />
@@ -21,9 +18,9 @@
 </head>
 <body class="voxden-app">
   <header class="titlebar">
-    <span class="brand-lockup" aria-label="Voxden">
+    <span class="brand-lockup" aria-label="Vell">
       <img class="logo" src="../assets/logo-mark.png" width="28" height="28" alt="" aria-hidden="true" />
-      <span class="brand">Voxden</span>
+      <span class="brand">Vell</span>
     </span>
 
     <nav class="island" id="island" aria-label="Sections">
@@ -47,14 +44,6 @@
         </svg>
         <span class="island-label">Writing style</span>
       </button>
-      <button type="button" class="island-link" id="nav-polish" data-view="polish" title="Polish">
-        <svg class="island-icon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-          <path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" d="M10 3.5c.7 3.7 2.3 5.3 6 6-3.7.7-5.3 2.3-6 6-.7-3.7-2.3-5.3-6-6 3.7-.7 5.3-2.3 6-6Z"/>
-          <path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" d="M18 14.25c.35 1.75 1.05 2.45 2.75 2.75-1.7.35-2.4 1.05-2.75 2.75-.35-1.7-1.05-2.4-2.75-2.75 1.7-.3 2.4-1 2.75-2.75Z"/>
-        </svg>
-        <span class="island-label">Polish</span>
-        <span class="nav-pro" aria-label="Pro">PRO</span>
-      </button>
       <button type="button" class="island-link" id="nav-insights" data-view="insights" title="Insights">
         <svg class="island-icon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
           <path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M4 19V5m0 14h16M7.5 15l3.3-3.5 2.8 2.35L18.5 8"/>
@@ -63,14 +52,6 @@
         <span class="island-label">Insights</span>
       </button>
       <span class="island-rule" aria-hidden="true"></span>
-      <button type="button" class="island-cloud" id="island-credits" hidden title="Cloud credits">
-        <svg class="island-ring" viewBox="0 0 15 15" width="15" height="15" aria-hidden="true">
-          <circle class="island-ring-track" cx="7.5" cy="7.5" r="6.4"/>
-          <circle class="island-ring-arc" cx="7.5" cy="7.5" r="6.4"/>
-        </svg>
-        <span class="island-cloud-text"><strong id="island-credits-count">0 h</strong> <span id="island-credits-kicker">cloud</span></span>
-      </button>
-      <button type="button" class="island-pro" id="island-pro" hidden title="Upgrade to Pro">Go Pro</button>
     </nav>
 
     <div class="titlebar-end">
@@ -95,10 +76,6 @@
           </svg>
         </span>
         <span class="notif-badge" id="notif-badge" aria-hidden="true" hidden></span>
-      </button>
-      <button type="button" class="account-btn" id="account-btn" hidden aria-haspopup="menu" aria-expanded="false" aria-controls="account-menu" title="Your account">
-        <img class="account-btn-img" id="account-btn-img" alt="" hidden>
-        <span class="account-btn-initials" id="account-btn-initials">?</span>
       </button>
     </div>
   </header>
@@ -237,7 +214,7 @@
           </div>
 
           <div class="vocab-overview" aria-label="Vocabulary overview">
-            <div class="vocab-overview-copy"><h2>Always spelled your way.</h2><p id="vocab-overview-line">Fix a word once. Voxden remembers.</p></div>
+            <div class="vocab-overview-copy"><h2>Always spelled your way.</h2><p id="vocab-overview-line">Fix a word once. Vell remembers.</p></div>
             <!-- A learned correction happening: the heard form is struck out and
                  the corrected form slides in. app.js cycles the user's own. -->
             <div class="vocab-fix is-fixed" id="vocab-fix" role="img" aria-label="vox den becomes Voxden">
@@ -282,7 +259,7 @@
             </div>
             <div id="dict-pending-list" class="dict-pending-list"></div>
           </section>
-          <p id="dict-empty" class="empty dict-empty" hidden>No dictionary entries yet. Add a word you want Voxden to recognize.</p>
+          <p id="dict-empty" class="empty dict-empty" hidden>No dictionary entries yet. Add a word you want Vell to recognize.</p>
           <p id="dict-no-match" class="empty dict-empty" hidden>No entries match this filter.</p>
           <div id="dict-list" class="dict-list"></div>
           <p class="list-caption" id="dict-result-count" role="status"></p>
@@ -394,100 +371,6 @@
         </div>
       </section>
 
-      <section id="view-polish" class="pane" data-view="polish" hidden>
-        <div class="pane-body polish-pane" id="polish-page">
-          <header class="polish-head">
-            <div class="polish-head-copy">
-              <p class="polish-kicker"><svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M10 3.5c.7 3.7 2.3 5.3 6 6-3.7.7-5.3 2.3-6 6-.7-3.7-2.3-5.3-6-6 3.7-.7 5.3-2.3 6-6Z"/></svg>PRO · WRITING</p>
-              <h1 class="polish-title">Polish</h1>
-              <p class="polish-desc">Say it however it comes out. Send it the way it should read.</p>
-            </div>
-            <p class="polish-credits" id="polish-balance" role="status" hidden>
-              <svg class="polish-ring" viewBox="0 0 15 15" width="16" height="16" aria-hidden="true">
-                <circle class="polish-ring-track" cx="7.5" cy="7.5" r="6.4" fill="none" stroke-width="2.2"/>
-                <circle class="polish-ring-fill" cx="7.5" cy="7.5" r="6.4" fill="none" stroke-width="2.2" stroke-linecap="round"/>
-              </svg>
-              <span><b id="polish-balance-num"></b> <span id="polish-balance-unit">credits</span></span>
-              <span class="polish-credits-rate" id="polish-rate"></span>
-            </p>
-          </header>
-          <section class="polish-studio" id="polish-studio" aria-label="Polish" data-state="idle">
-            <div class="polish-toolbar">
-              <span class="polish-toolbar-label">Start from</span>
-              <div class="polish-recents" id="polish-recents" role="group" aria-label="Recent dictations"></div>
-            </div>
-            <div class="polish-body">
-              <div class="polish-draft" id="polish-draft">
-                <label class="polish-card-label" for="polish-input">
-                  <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>As you said it
-                </label>
-                <textarea id="polish-input" class="polish-input" spellcheck="false"
-                  placeholder="Paste or type anything: a rough dictation, a quick message, notes to yourself…"></textarea>
-                <div class="polish-draft-foot">
-                  <span id="polish-words">0 words</span>
-                  <button type="button" class="polish-clear" id="polish-clear" hidden>Clear</button>
-                </div>
-              </div>
-              <span class="polish-bridge" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="17" height="17"><path d="M11 4c.8 4 2.6 5.8 6.6 6.6-4 .8-5.8 2.6-6.6 6.6-.8-4-2.6-5.8-6.6-6.6 4-.8 5.8-2.6 6.6-6.6Z" fill="currentColor"/></svg>
-              </span>
-              <div class="polish-note-wrap">
-                <div class="polish-note-stack" aria-hidden="true"></div>
-                <article class="polish-note" aria-labelledby="polish-note-title">
-                  <div class="polish-note-head">
-                    <svg class="polish-note-mark" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M10 3.5c.7 3.7 2.3 5.3 6 6-3.7.7-5.3 2.3-6 6-.7-3.7-2.3-5.3-6-6 3.7-.7 5.3-2.3 6-6Z"/></svg>
-                    <span class="polish-note-title" id="polish-note-title">Polished</span>
-                    <span class="polish-mode-chip" id="polish-mode-chip" hidden></span>
-                    <button type="button" class="polish-changes" id="polish-changes" aria-pressed="false" hidden>
-                      <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M4 7h10M4 12h16M4 17h7"/><path d="m15 15 2 2 4-4"/></svg>Show changes
-                    </button>
-                  </div>
-                  <div class="polish-output" id="polish-output" role="status" aria-live="polite" tabindex="0"
-                    data-idle="Type or pick a recent dictation, and the polished version appears here."></div>
-                  <div class="polish-note-foot">
-                    <span class="polish-status" id="polish-status"></span>
-                    <button type="button" class="polish-copy" id="polish-copy" hidden>
-                      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M15 9V6.5A2.5 2.5 0 0 0 12.5 4h-6A2.5 2.5 0 0 0 4 6.5v6A2.5 2.5 0 0 0 6.5 15H9"/></svg><span id="polish-copy-label">Copy</span>
-                    </button>
-                  </div>
-                </article>
-              </div>
-            </div>
-            <div class="polish-actions">
-              <button type="button" class="polish-run" id="polish-run" disabled>
-                <svg class="polish-run-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M10 3.5c.7 3.7 2.3 5.3 6 6-3.7.7-5.3 2.3-6 6-.7-3.7-2.3-5.3-6-6 3.7-.7 5.3-2.3 6-6Z"/><path d="M18 14.25c.35 1.75 1.05 2.45 2.75 2.75-1.7.35-2.4 1.05-2.75 2.75-.35-1.7-1.05-2.4-2.75-2.75 1.7-.3 2.4-1 2.75-2.75Z"/></svg>
-                <svg class="polish-run-spinner" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9"/></svg>
-                <span class="polish-run-label" id="polish-run-label">Polish</span>
-                <span class="polish-run-cost" id="polish-run-cost"></span>
-              </button>
-              <!-- The same text, two lighter touches, at the same price. -->
-              <button type="button" class="polish-mode" id="polish-grammar" data-mode="grammar" disabled>
-                <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M4 17.5 8.5 6l4.5 11.5M5.8 13.2h5.4"/><path d="m14.5 14.5 2.6 2.6 4.4-5.6"/></svg>
-                <span class="polish-mode-label">Grammar</span>
-              </button>
-              <button type="button" class="polish-mode" id="polish-tighten" data-mode="tighten" disabled>
-                <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M4 12h6m0 0-2.8-2.8M10 12l-2.8 2.8M20 12h-6m0 0 2.8-2.8M14 12l2.8 2.8"/></svg>
-                <span class="polish-mode-label">Tighten</span>
-              </button>
-              <span class="polish-shortcut" aria-hidden="true"><kbd id="polish-mod-key">Ctrl</kbd><span>+</span><kbd>Enter</kbd><span>to polish</span></span>
-            </div>
-            <p class="polish-error" id="polish-error" role="alert" hidden>
-              <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.01"/></svg>
-              <span id="polish-error-text"></span>
-            </p>
-            <p class="polish-fine"><strong>Polish</strong> clears the mess and smooths the flow. <strong>Grammar</strong> fixes only what is wrong and keeps your words. <strong>Tighten</strong> says it in fewer words. Each costs the same, and your meaning, names and numbers stay as you said them.</p>
-          </section>
-        </div>
-        <div class="polish-lock" id="polish-lock" hidden>
-          <div class="polish-lock-card" role="group" aria-labelledby="polish-lock-title">
-            <span class="polish-lock-tag"><svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true"><path d="M10 3.5c.7 3.7 2.3 5.3 6 6-3.7.7-5.3 2.3-6 6-.7-3.7-2.3-5.3-6-6 3.7-.7 5.3-2.3 6-6Z"/></svg>VOXDEN PRO</span>
-            <h2 id="polish-lock-title">Polish is part of Pro</h2>
-            <p id="polish-lock-copy">Turn any rough dictation into clean writing in a second, from the flow bar or right here. Each polish comes out of your cloud credits.</p>
-            <button type="button" class="polish-lock-action" id="polish-lock-action">Upgrade to Pro <span aria-hidden="true">↗</span></button>
-          </div>
-        </div>
-      </section>
-
       <section id="view-insights" class="pane" data-view="insights" hidden>
         <div class="pane-body insights-pane">
           <header class="ins-header">
@@ -529,7 +412,7 @@
                   <div class="ins-ms-title">
                     <span class="ins-cap-label">Milestones</span>
                     <h2 id="ins-ms-title">Your first milestone is a page away</h2>
-                    <p id="ins-ms-copy">Start dictating and Voxden keeps count.</p>
+                    <p id="ins-ms-copy">Start dictating and Vell keeps count.</p>
                   </div>
                   <div class="ins-range ins-years" id="ins-years" role="group" aria-label="Year" hidden></div>
                 </div>
@@ -571,7 +454,7 @@
             <article class="ins-card ins-span-4">
               <div class="ins-card-head">
                 <span class="ins-big-num" id="ins-fix-total">0</span>
-                <span class="ins-cap-label">fixes made by Voxden</span>
+                <span class="ins-cap-label">fixes made by Vell</span>
               </div>
               <ul class="ins-rows">
                 <li><i class="ins-dot is-style"></i><b id="ins-fix-style">0</b> words changed</li>
@@ -624,7 +507,7 @@
                     <h2 id="ins-profile-name">Learning</h2>
                     <span class="ins-profile-status">Current</span>
                   </div>
-                  <p id="ins-profile-copy">Fix a misspelled word in a transcript. Voxden saves that spelling for next time.</p>
+                  <p id="ins-profile-copy">Fix a misspelled word in a transcript. Vell saves that spelling for next time.</p>
                 </div>
                 <div class="ins-profile-side">
                   <div class="ins-profile-mascot" id="ins-profile-mascot" data-level="0" aria-hidden="true">
@@ -663,14 +546,14 @@
 
             <article class="ins-card ins-span-6">
               <div class="ins-section-head">
-                <h2>What you taught Voxden</h2>
+                <h2>What you taught Vell</h2>
               </div>
               <ul class="ins-stat-rows">
                 <li><span class="ins-stat-key">Dictionary entries</span><span class="ins-stat-val" id="ins-taught-dict">0</span></li>
                 <li><span class="ins-stat-key">Spellings you taught</span><span class="ins-stat-val" id="ins-taught-learned">0</span></li>
                 <li><span class="ins-stat-key">Transcripts you edited</span><span class="ins-stat-val" id="ins-taught-edited">0</span></li>
               </ul>
-              <p class="ins-foot">Edit a transcript and Voxden learns that spelling for next time.</p>
+              <p class="ins-foot">Edit a transcript and Vell learns that spelling for next time.</p>
             </article>
 
             <article class="ins-card ins-span-8">
@@ -728,7 +611,7 @@
           <section class="help-section" aria-labelledby="help-engines-title">
             <div class="help-section-head">
               <h2 class="help-section-title" id="help-engines-title">Which model should I download?</h2>
-              <p class="help-section-hint" id="help-engines-hint">Choose your model when you first open Voxden. Parakeet v3 is recommended for a small, fast start. <b>For names and accents, try Qwen3-ASR</b> under Settings &rsaquo; Speech engines. These models run on your PC.</p>
+              <p class="help-section-hint" id="help-engines-hint">Choose your model when you first open Vell. Parakeet v3 is recommended for a small, fast start. <b>For names and accents, try Qwen3-ASR</b> under Settings &rsaquo; Speech engines. These models run on your PC.</p>
             </div>
             <div class="help-engines">
               <article class="help-engine is-recommended">
@@ -758,13 +641,13 @@
                 <p class="help-engine-lead" id="help-engine-whisper-lead">Uses the words in your dictionary, in a smaller download than Qwen. Much faster with an NVIDIA graphics card.</p>
               </article>
             </div>
-            <p class="help-note" id="help-engines-note">On this PC, dictation is in English whichever model you use. Hindi, Hinglish and other languages need Voxden Cloud on a Pro plan: pick up to three under Settings &rsaquo; General, and Voxden Cloud works out which one each dictation is in. Hinglish writes Hindi in English letters.</p>
+            <p class="help-note" id="help-engines-note">On this PC, dictation is in English whichever model you use.</p>
           </section>
 
           <section class="help-section" id="help-gpu-section" aria-labelledby="help-gpu-title">
             <div class="help-section-head">
               <h2 class="help-section-title" id="help-gpu-title">Optional: make it faster with your graphics card</h2>
-              <p class="help-section-hint">You can skip this. Voxden works on any PC without it. If dictation feels slow, one extra download can speed up your model. Find these in Settings &rsaquo; Speech engines.</p>
+              <p class="help-section-hint">You can skip this. Vell works on any PC without it. If dictation feels slow, one extra download can speed up your model. Find these in Settings &rsaquo; Speech engines.</p>
             </div>
             <ul class="help-tradeoffs">
               <li class="help-tradeoff">
@@ -785,7 +668,7 @@
               </li>
               <li class="help-tradeoff">
                 <span class="help-tradeoff-tag">Anything else</span>
-                <span class="help-tradeoff-copy">Leave <b>Processor</b> (Settings &rsaquo; Speech engines &rsaquo; Advanced) on <b>Auto</b>. Voxden already picks the best option it can.</span>
+                <span class="help-tradeoff-copy">Leave <b>Processor</b> (Settings &rsaquo; Speech engines &rsaquo; Advanced) on <b>Auto</b>. Vell already picks the best option it can.</span>
               </li>
             </ul>
             <p class="help-note">Each download speeds up one model only. Downloading a pack for a model you are not using changes nothing.</p>
@@ -795,7 +678,7 @@
             <div class="help-section-head">
               <h2 class="help-section-title" id="help-privacy-title">Is my voice sent anywhere?</h2>
             </div>
-            <p class="help-note" id="help-privacy-note">Only if you turn on Voxden Cloud, which needs a Pro plan. With it off, your audio stays on this PC and dictation works offline once your model is downloaded. With it on, your audio is sent to Voxden Cloud to be transcribed.</p>
+            <p class="help-note" id="help-privacy-note">Your audio stays on this PC and dictation works offline once your model is downloaded.</p>
           </section>
         </div>
       </section>
@@ -816,21 +699,6 @@
                 </svg>
               </span>
               <span class="settings-cat-label">General</span>
-            </button>
-            <button type="button" class="settings-cat" data-cat="account">
-              <span class="settings-cat-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" focusable="false">
-                  <circle cx="12" cy="8.5" r="3.5" fill="currentColor" fill-opacity=".1"/>
-                  <path d="M5 19.5c1.2-3.4 3.8-5 7-5s5.8 1.6 7 5"/>
-                </svg>
-              </span>
-              <span class="settings-cat-label">Account</span>
-            </button>
-            <button type="button" class="settings-cat" data-cat="billing">
-              <span class="settings-cat-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" focusable="false"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18M7 15h4"/></svg>
-              </span>
-              <span class="settings-cat-label">Plans &amp; billing</span>
             </button>
             <button type="button" class="settings-cat" data-cat="speech-engines">
               <span class="settings-cat-icon" aria-hidden="true">
@@ -925,7 +793,7 @@
                 <div class="setting-row" data-settings-section="dictation-language" tabindex="-1">
                   <div class="setting-copy">
                     <span class="setting-label">Dictation languages</span>
-                    <span class="setting-hint" id="dictation-lang-hint">English on this PC. More with Voxden Cloud on Pro.</span>
+                    <span class="setting-hint" id="dictation-lang-hint">English on this PC.</span>
                   </div>
                   <div class="setting-control">
                     <button type="button" class="btn-secondary lang-summary" id="dictation-lang-open" aria-haspopup="dialog">English</button>
@@ -982,131 +850,12 @@
               </details>
             </div>
 
-            <div class="settings-panel" data-cat="account" hidden>
-              <h2 class="settings-panel-title">Account</h2>
-              <div class="setting-row" id="account-signed-out" hidden>
-                <div class="setting-copy">
-                  <span class="setting-label">Sign in</span>
-                  <span class="setting-hint" id="account-signin-hint">A code goes to your email; no password to remember. Dictation works the same signed out.</span>
-                  <span class="setting-hint is-error" id="account-error" role="alert" hidden></span>
-                </div>
-                <div class="setting-control setting-control-shortcut">
-                  <input type="email" class="setting-input" id="account-email" placeholder="you@example.com" maxlength="254" spellcheck="false" autocomplete="email" />
-                  <button type="button" class="btn-secondary" id="account-send-code">Send code</button>
-                </div>
-              </div>
-              <div class="setting-row" id="account-pending" hidden>
-                <div class="setting-copy">
-                  <span class="setting-label">Enter the code</span>
-                  <span class="setting-hint" id="account-pending-hint"></span>
-                  <span class="setting-hint is-error" id="account-pending-error" role="alert" hidden></span>
-                </div>
-                <div class="setting-control setting-control-shortcut">
-                  <input type="text" class="setting-input" id="account-code" placeholder="6 digits" inputmode="numeric" maxlength="7" spellcheck="false" autocomplete="one-time-code" />
-                  <button type="button" class="btn-secondary" id="account-verify">Sign in</button>
-                  <button type="button" class="speech-setup-remove" id="account-pending-back">Use a different email</button>
-                </div>
-              </div>
-              <div class="account-profile" id="account-signed-in" hidden>
-                <div class="profile-card">
-                  <div class="profile-avatar-wrap" id="profile-avatar-wrap">
-                    <div class="profile-avatar" id="profile-avatar" aria-hidden="true">
-                      <img id="profile-avatar-img" alt="" hidden>
-                      <span class="profile-avatar-initials" id="profile-avatar-initials">?</span>
-                    </div>
-                    <span class="profile-badge" id="profile-badge" hidden>PRO</span>
-                  </div>
-                  <div class="profile-fields">
-                    <label class="profile-field"><span>First name</span><input type="text" id="profile-first" maxlength="40" spellcheck="false" autocomplete="given-name" placeholder="First name"></label>
-                    <label class="profile-field"><span>Last name</span><input type="text" id="profile-last" maxlength="40" spellcheck="false" autocomplete="family-name" placeholder="Last name"></label>
-                    <div class="profile-field profile-field-wide"><span>Email</span><div class="profile-value" id="profile-email"></div></div>
-                  </div>
-                  <p class="setting-hint profile-plan" id="account-plan-hint"></p>
-                  <p class="setting-hint profile-status" id="account-status-hint" role="status"></p>
-                </div>
-                <div class="profile-actions">
-                  <button type="button" class="btn-secondary" id="account-refresh">Refresh</button>
-                  <button type="button" class="btn-secondary" id="account-sign-out">Sign out</button>
-                  <button type="button" class="btn-secondary btn-danger" id="account-delete">Delete account</button>
-                </div>
-              </div>
-              <button type="button" class="btn-secondary" id="account-open-billing">View plans &amp; billing</button>
-            </div>
-            <div class="settings-panel billing-panel" data-cat="billing" hidden>
-              <h2 class="settings-panel-title">Plans &amp; billing</h2>
-              <p class="page-description">Your voice. Your apps. One simple monthly plan.</p>
-              <div class="billing-toolbar">
-                <span class="billing-period">Billed monthly</span>
-                <label class="billing-region-label">Region <select id="billing-region" class="setting-select"><option value="razorpay">India · INR</option></select></label>
-              </div>
-              <div class="billing-plans">
-                <section class="billing-card" id="billing-free-card" aria-labelledby="billing-free-title">
-                  <h3 id="billing-free-title">Free</h3>
-                  <p class="billing-description" id="billing-free-copy">Keep your dictation on this PC.</p>
-                  <p class="billing-price" id="billing-free-price">₹0</p>
-                  <p class="billing-caption">No subscription needed.</p>
-                  <ul class="billing-features"><li id="billing-free-words">3,000 words a week</li><li>On-device dictation</li><li>Your personal dictionary</li><li>Works offline after setup</li></ul>
-                  <p class="billing-caption" id="billing-free-usage" role="status"></p>
-                  <span class="billing-current">Your current plan</span>
-                </section>
-                <section class="billing-card billing-pro" id="account-upgrade" aria-labelledby="account-upgrade-title">
-                  <div class="billing-card-heading"><h3 id="account-upgrade-title">Voxden Pro</h3><span class="billing-badge" id="billing-plan-badge">FOR YOUR EVERYDAY</span></div>
-                  <p class="billing-description">Speak freely. Keep work moving.</p>
-                  <div id="billing-offer-price"><p class="billing-price"><span id="billing-price-amount">₹349</span><span class="billing-price-unit"> / month</span></p><p class="billing-caption" id="billing-price-caption">₹349 billed every month.</p></div>
-                  <div class="billing-welcome" id="billing-welcome" hidden>
-                    <span class="billing-welcome-tag"><svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true" focusable="false"><path fill="currentColor" d="M8 .6l1.8 5.6L15.4 8l-5.6 1.8L8 15.4 6.2 9.8.6 8l5.6-1.8z"/></svg>One-time welcome offer</span>
-                    <p class="billing-welcome-amount"><span class="billing-welcome-number" id="billing-welcome-credits">1,200</span><span class="billing-welcome-unit">cloud credits</span></p>
-                    <p class="billing-welcome-lead">in your first month</p>
-                    <p class="billing-welcome-detail" id="billing-welcome-detail">Up to 20 hours of cloud dictation, about 40 minutes a day.</p>
-                  </div>
-                  <ul class="billing-features">
-                    <li id="billing-cloud-benefit">Cloud dictation</li>
-                    <li id="billing-pro-no-limit">No weekly word limit on this PC</li>
-                    <li>No speech-model download for cloud</li>
-                    <li>Dictate in up to three languages at once</li>
-                    <li id="billing-cloud-languages">18 languages through the cloud, Hindi and Hinglish included</li>
-                    <li>Cloud accuracy on names, accents and noisy rooms</li>
-                    <li>Your dictionary. Automatic punctuation.</li>
-                  </ul>
-                  <p class="billing-caption" id="account-upgrade-hint" role="status"></p>
-                  <p class="setting-hint is-error" id="account-upgrade-error" role="alert" hidden></p>
-                  <div class="billing-actions" id="account-upgrade-options"></div>
-                  <div class="billing-actions" id="account-manage-actions" hidden><button type="button" class="btn-primary" id="account-manage-billing">Manage subscription</button></div>
-                </section>
-              </div>
-              <p class="billing-footnote">Cancel renewal anytime. Payments open securely in your browser.</p>
-              <div class="billing-faq">
-                <details><summary>Do I need to download a speech model?</summary><p id="billing-faq-model">Cloud dictation needs the Voxden app and an internet connection. The Free plan uses a speech model installed on your PC.</p></details>
-                <details><summary>What is the weekly word limit?</summary><p id="billing-faq-limit">The Free plan dictates 3,000 words in any seven days, on the speech model you chose for this PC. The week starts with your first dictation and the words come back seven days later. Voxden Pro has no weekly word limit and adds cloud dictation.</p></details>
-                <details id="billing-faq-welcome-item"><summary>What is the welcome offer?</summary><p id="billing-faq-welcome">Your first month of Voxden Pro comes with 1,200 cloud credits instead of 900. It runs from the day you subscribe until your first renewal, and each account gets it once. From your first renewal on, Pro includes 900 credits a month.</p></details>
-                <details><summary>How much dictation do cloud credits cover?</summary><p id="billing-faq-credits">One credit is one minute of audio sent to Voxden Cloud, so 1,200 credits cover up to 20 hours and 900 credits cover up to 15 hours. Audio is counted in whole seconds, phrase by phrase, and pauses inside a dictation count too, so the time you spend actually speaking comes in a little under those hours. Credits refresh on your billing date each month, and unused credits do not carry over.</p></details>
-                <details><summary>What happens when I cancel?</summary><p>Open Manage subscription and choose Cancel renewal. Your paid access continues through the end of the billing period you already paid for, and nothing more is charged.</p></details>
-              </div>
-            </div>
             <div class="settings-panel" data-cat="speech-engines" hidden>
               <h2 class="settings-panel-title">Speech engines</h2>
 
               <div class="setting-row speech-section" id="speech-mode-section">
-                <span class="setting-label" id="speech-mode-label">How Voxden listens</span>
-                <div class="speech-mode-options" id="speech-mode-options" role="radiogroup" aria-labelledby="speech-mode-label">
-                  <button type="button" class="speech-mode-card" id="speech-mode-local" data-listen="local" role="radio" aria-checked="true" tabindex="0" aria-labelledby="speech-mode-local-name" aria-describedby="speech-mode-local-line">
-                    <span class="speech-mode-head"><span class="flow-style-name" id="speech-mode-local-name">On this PC</span></span>
-                    <span class="flow-style-description" id="speech-mode-local-line">Your audio stays on this PC.</span>
-                    <span class="flow-style-selected" aria-hidden="true"></span>
-                  </button>
-                  <button type="button" class="speech-mode-card" id="speech-mode-cloud" data-listen="cloud" role="radio" aria-checked="false" tabindex="-1" aria-labelledby="speech-mode-cloud-name" aria-describedby="speech-mode-cloud-badge speech-mode-cloud-line">
-                    <span class="speech-mode-head">
-                      <span class="flow-style-name" id="speech-mode-cloud-name">Voxden Cloud</span>
-                      <span class="model-choice-badge subtle speech-mode-badge" id="speech-mode-cloud-badge">Needs Pro</span>
-                    </span>
-                    <span class="flow-style-description" id="speech-mode-cloud-line">Your audio goes to Voxden Cloud, which knows more languages.</span>
-                    <span class="flow-style-description" id="speech-mode-cloud-credits" hidden></span>
-                    <span class="flow-style-description speech-mode-error" id="speech-mode-cloud-error" hidden></span>
-                    <span class="flow-style-selected" aria-hidden="true"></span>
-                  </button>
-                </div>
-              </div>
-
+                <span class="setting-label" id="speech-mode-label">How Vell listens</span>
+                <span class="setting-hint">Dictation runs on this PC. Nothing is uploaded.</span>
               <div class="setting-row speech-section" id="speech-model-section">
                 <div class="setting-copy">
                   <span class="setting-label" id="speech-model-label">Model</span>
@@ -1275,7 +1024,7 @@
                 <div class="setting-row">
                   <div class="setting-copy">
                     <label class="setting-label" for="set-launch-login">Launch at login</label>
-                    <span class="setting-hint" id="launch-login-hint">Start Voxden when you sign in to Windows.</span>
+                    <span class="setting-hint" id="launch-login-hint">Start Vell when you sign in to Windows.</span>
                   </div>
                   <div class="setting-control">
                     <label class="toggle">
@@ -1287,7 +1036,7 @@
                 <div class="setting-row">
                   <div class="setting-copy">
                     <label class="setting-label" for="set-taskbar" id="taskbar-label">Show app in taskbar</label>
-                    <span class="setting-hint" id="taskbar-hint">Keep Voxden in the taskbar when the window is closed.</span>
+                    <span class="setting-hint" id="taskbar-hint">Keep Vell in the taskbar when the window is closed.</span>
                   </div>
                   <div class="setting-control">
                     <label class="toggle">
@@ -1299,25 +1048,11 @@
                 <div class="setting-row" id="run-as-admin-row">
                   <div class="setting-copy">
                     <span class="setting-label">Run as administrator</span>
-                    <span class="setting-hint" id="run-as-admin-hint">Only needed for games and apps that run as administrator. Windows asks first; it lasts until Voxden restarts.</span>
+                    <span class="setting-hint" id="run-as-admin-hint">Only needed for games and apps that run as administrator. Windows asks first; it lasts until Vell restarts.</span>
                     <span class="setting-hint is-error" id="run-as-admin-error" role="alert" hidden></span>
                   </div>
                   <div class="setting-control">
                     <button type="button" class="btn-secondary" id="run-as-admin-btn">Restart as administrator</button>
-                  </div>
-                </div>
-              </section>
-              <section class="settings-group" aria-labelledby="system-updates-title">
-                <h3 class="settings-group-title" id="system-updates-title">Updates</h3>
-                <div class="setting-row">
-                  <div class="setting-copy">
-                    <span class="setting-label">App version</span>
-                    <span class="setting-hint" id="update-status-hint">Checking for updates…</span>
-                  </div>
-                  <div class="setting-control setting-control-shortcut">
-                    <span id="app-version-display" class="shortcut-display">—</span>
-                    <button type="button" class="btn-primary" id="update-restart-btn" hidden>Restart now</button>
-                    <button type="button" class="btn-secondary" id="update-check-btn">Check now</button>
                   </div>
                 </div>
               </section>
@@ -1328,9 +1063,9 @@
               <section class="settings-group" aria-labelledby="display-theme-title">
                 <h3 class="settings-group-title" id="display-theme-title">App theme</h3>
                 <div class="app-theme-options" role="radiogroup" aria-labelledby="display-theme-title" aria-describedby="app-theme-status">
-                  <button type="button" class="app-theme-card" data-app-theme="voxden" role="radio" aria-checked="true" tabindex="0" aria-label="Voxden theme">
+                  <button type="button" class="app-theme-card" data-app-theme="voxden" role="radio" aria-checked="true" tabindex="0" aria-label="Vell theme">
                     <span class="app-theme-preview preview-voxden" aria-hidden="true"><i class="theme-mini-nav"></i><i class="theme-mini-heading"></i><i class="theme-mini-card"></i><i class="theme-mini-accent"></i></span>
-                    <span class="app-theme-name">Voxden<span class="app-theme-check" aria-hidden="true">✓</span></span>
+                    <span class="app-theme-name">Vell<span class="app-theme-check" aria-hidden="true">✓</span></span>
                     <span class="app-theme-description">Charcoal &amp; mint</span>
                   </button>
                   <button type="button" class="app-theme-card" data-app-theme="white" role="radio" aria-checked="false" tabindex="-1" aria-label="White theme">
@@ -1445,7 +1180,7 @@
               <div class="setting-row">
                 <div class="setting-copy">
                   <span class="setting-label">Suggestions</span>
-                  <span class="setting-hint">Show helpful tips inside Voxden.</span>
+                  <span class="setting-hint">Show helpful tips inside Vell.</span>
                 </div>
                 <div class="setting-control">
                   <label class="toggle">
@@ -1505,12 +1240,7 @@
                   <button type="button" class="btn-secondary" id="training-clear">Delete recordings</button>
                 </div>
               </div>
-              <div class="setting-row">
-                <div class="setting-copy">
-                  <span class="setting-label">Where your prices come from</span>
-                  <span class="setting-hint">Your plan is priced for the country you first signed in from, worked out from that sign-in's IP address. IP Geolocation by <a href="https://db-ip.com" target="_blank" rel="noopener noreferrer" title="Open db-ip.com in your browser">DB-IP</a>, used under CC BY 4.0.</span>
-                </div>
-              </div>
+
             </div>
           </div>
         </div>
@@ -1520,7 +1250,7 @@
 
   <dialog id="dictation-lang-dialog" class="shortcuts-dialog lang-dialog" aria-labelledby="dictation-lang-title">
     <h2 class="settings-panel-title" id="dictation-lang-title">Dictation languages</h2>
-    <p class="setting-hint lang-dialog-lead">Pick up to three for Voxden Cloud. The first you pick is the main one; with more than one, Voxden Cloud tells them apart on its own. Hinglish writes Hindi in English letters.</p>
+    <p class="setting-hint lang-dialog-lead">Dictation is in English.</p>
     <input type="search" class="lang-search" id="dictation-lang-search" placeholder="Search languages" autocomplete="off" aria-label="Search languages">
     <div class="lang-dialog-body">
       <div class="lang-grid" id="dictation-lang-grid" role="group" aria-label="Languages"></div>
@@ -1535,34 +1265,8 @@
       <button type="button" class="btn-primary" id="dictation-lang-save">Save and close</button>
     </div>
   </dialog>
-  <div class="account-menu" id="account-menu" role="menu" aria-label="Your account" hidden>
-    <div class="account-menu-banner" id="account-menu-banner">
-      <span class="account-menu-avatar" id="account-menu-avatar" aria-hidden="true"><img id="account-menu-img" alt="" hidden><span id="account-menu-initials">?</span></span>
-      <span class="account-menu-who">
-        <span class="account-menu-name" id="account-menu-name"></span>
-        <span class="account-menu-email" id="account-menu-email"></span>
-      </span>
-      <span class="account-menu-plan" id="account-menu-plan"></span>
-    </div>
-    <button type="button" class="help-menu-item" id="account-menu-manage" role="menuitem">
-      <span class="help-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16"><circle cx="12" cy="8.5" r="3.6" fill="none" stroke="currentColor" stroke-width="1.75"/><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M5 19.5c1.2-3.3 3.6-5 7-5s5.8 1.7 7 5"/></svg></span>
-      <span class="help-menu-text">Manage account</span>
-    </button>
-    <button type="button" class="help-menu-item" id="account-menu-billing" role="menuitem">
-      <span class="help-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16"><rect x="3" y="6" width="18" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.75"/><path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M3 10.5h18M7 14.5h3"/></svg></span>
-      <span class="help-menu-text">Plans &amp; billing</span>
-    </button>
-    <button type="button" class="help-menu-item" id="account-menu-signout" role="menuitem">
-      <span class="help-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M10 4H6.5A1.5 1.5 0 0 0 5 5.5v13A1.5 1.5 0 0 0 6.5 20H10M15 8l4 4-4 4M19 12H9"/></svg></span>
-      <span class="help-menu-text">Sign out</span>
-    </button>
-  </div>
   <div class="help-menu" id="help-menu" role="menu" aria-label="Help" hidden>
     <p class="help-menu-heading">Latest</p>
-    <a class="help-menu-item" id="help-whats-new" role="menuitem" href="https://voxden.app/changelog" target="_blank" rel="noopener noreferrer" title="Open the Voxden changelog in your browser">
-      <span class="help-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M12 3.5l1.9 4.6 4.6 1.9-4.6 1.9L12 16.5l-1.9-4.6L5.5 10l4.6-1.9L12 3.5ZM5 17l.8 1.7L7.5 19.5l-1.7.8L5 22l-.8-1.7-1.7-.8 1.7-.8L5 17Z"/></svg></span>
-      <span class="help-menu-text">What's new</span>
-    </a>
     <p class="help-menu-heading">Quick checks</p>
     <button type="button" class="help-menu-item" id="help-shortcuts" role="menuitem">
       <span class="help-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16"><rect x="3" y="6" width="18" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.75"/><path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M7 10h.01M11 10h.01M15 10h.01M7 14h10"/></svg></span>
@@ -1582,210 +1286,19 @@
       <span class="help-menu-text">Setup guide</span>
     </button>
     <p class="help-menu-heading">Tell us</p>
-    <button type="button" class="help-menu-item" id="help-feedback" role="menuitem">
-      <span class="help-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16"><path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H9l-4.5 4v-4A1.5 1.5 0 0 1 4 14.5v-9ZM8 8.5h8M8 11.5h5"/></svg></span>
-      <span class="help-menu-text">Feedback or bug report</span>
-    </button>
   </div>
-  <dialog id="subscription-dialog" class="shortcuts-dialog subscription-dialog" aria-labelledby="subscription-title">
-    <h2 class="settings-panel-title" id="subscription-title">Your subscription</h2>
-    <p class="setting-hint lang-dialog-lead" id="subscription-lead">Voxden Pro, billed monthly.</p>
-    <dl class="subscription-facts">
-      <div class="subscription-fact"><dt>Price</dt><dd id="subscription-price">—</dd></div>
-      <div class="subscription-fact"><dt>Paid through</dt><dd id="subscription-through">—</dd></div>
-      <div class="subscription-fact"><dt>Renewal</dt><dd id="subscription-renewal">—</dd></div>
-      <div class="subscription-fact"><dt>Cloud credits</dt><dd id="subscription-credits">—</dd></div>
-      <div class="subscription-fact"><dt>Billed by</dt><dd id="subscription-provider">—</dd></div>
-      <div class="subscription-fact"><dt>Account</dt><dd id="subscription-email">—</dd></div>
-    </dl>
-    <p class="setting-hint subscription-note" id="subscription-note"></p>
-    <p class="setting-hint is-error" id="subscription-error" role="alert" hidden></p>
-    <div class="speech-setup-actions lang-dialog-actions">
-      <button type="button" class="btn-secondary btn-danger" id="subscription-cancel">Cancel renewal</button>
-      <button type="button" class="btn-secondary" id="subscription-portal" hidden>Payment details</button>
-      <button type="button" class="btn-primary" id="subscription-close">Close</button>
-    </div>
-  </dialog>
   <dialog id="mic-dialog" class="shortcuts-dialog mic-dialog" aria-labelledby="mic-dialog-title">
     <h2 class="settings-panel-title" id="mic-dialog-title">Microphone check</h2>
-    <p class="setting-hint lang-dialog-lead">Say something. Each bar moves with the microphone it belongs to, so you can see which one hears you. Pick the one Voxden should listen to.</p>
+    <p class="setting-hint lang-dialog-lead">Say something. Each bar moves with the microphone it belongs to, so you can see which one hears you. Pick the one Vell should listen to.</p>
     <ul class="mic-list" id="mic-list" role="radiogroup" aria-label="Microphones"></ul>
     <p class="setting-hint" id="mic-dialog-status" role="status" hidden></p>
     <div class="speech-setup-actions lang-dialog-actions">
       <button type="button" class="btn-primary" id="mic-dialog-close">Done</button>
     </div>
   </dialog>
-  <dialog id="feedback-dialog" class="shortcuts-dialog feedback-dialog" aria-labelledby="feedback-title">
-    <div class="feedback-head">
-      <div class="feedback-head-copy">
-        <h2 class="settings-panel-title feedback-title" id="feedback-title">Tell us what happened</h2>
-        <p class="feedback-lead">It goes straight to the people who build Voxden.</p>
-      </div>
-      <button type="button" class="feedback-close" id="feedback-close" aria-label="Close">
-        <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>
-      </button>
-    </div>
-    <div class="feedback-kind" id="feedback-kind" role="radiogroup" aria-label="What is this about">
-      <button type="button" class="feedback-kind-btn is-active" data-kind="bug" role="radio" aria-checked="true">
-        <svg class="feedback-kind-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="8" height="11" rx="4"/><path d="M9.5 8a2.5 2.5 0 0 1 5 0M12 12v7M8 11H4.5M8 15H4.5M16 11h3.5M16 15h3.5M9 6L7.5 4M15 6l1.5-2"/></svg>Bug
-      </button>
-      <button type="button" class="feedback-kind-btn" data-kind="idea" role="radio" aria-checked="false">
-        <svg class="feedback-kind-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 17.5h6M10 20.5h4M8.2 14.5a6 6 0 1 1 7.6 0c-.6.5-.8 1.2-.8 2v1H9v-1c0-.8-.2-1.5-.8-2z"/></svg>Idea
-      </button>
-      <button type="button" class="feedback-kind-btn" data-kind="other" role="radio" aria-checked="false">
-        <svg class="feedback-kind-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 5.5h15v10.5H10l-4 3.5v-3.5H4.5z"/><path d="M8.5 10.8h.01M12 10.8h.01M15.5 10.8h.01"/></svg>Something else
-      </button>
-    </div>
-    <textarea class="feedback-text" id="feedback-text" rows="6" maxlength="4000" placeholder="What were you doing, and what did Voxden do instead?" aria-label="Your message"></textarea>
-    <label class="feedback-email-row" id="feedback-email-row">
-      <span class="setting-label">Email, if you want a reply</span>
-      <input type="email" class="setting-input feedback-email" id="feedback-email" placeholder="you@example.com" autocomplete="off" spellcheck="false">
-    </label>
-    <p class="setting-hint" id="feedback-status" role="status" hidden></p>
-    <div class="feedback-foot">
-      <label class="feedback-details">
-        <input type="checkbox" id="feedback-details" checked>
-        <span class="feedback-details-label">Sent with it:</span>
-        <span class="feedback-chips" id="feedback-details-summary"></span>
-      </label>
-      <div class="feedback-actions">
-        <button type="button" class="btn-secondary" id="feedback-github" hidden>Open on GitHub instead</button>
-        <button type="button" class="feedback-send" id="feedback-send">
-          <span class="feedback-send-chip" aria-hidden="true">
-            <svg class="feedback-plane" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3L10.5 13.5M21 3l-6.5 18-4-7.5L3 9.5z"/></svg>
-            <svg class="feedback-tick" viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>
-          </span>
-          <span class="feedback-send-label" id="feedback-send-label">Send</span>
-        </button>
-      </div>
-    </div>
-  </dialog>
-  <dialog id="confirm-dialog" class="shortcuts-dialog confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-body">
-    <h2 class="settings-panel-title" id="confirm-title"></h2>
-    <p class="setting-hint confirm-body" id="confirm-body"></p>
-    <div class="speech-setup-actions lang-dialog-actions">
-      <button type="button" class="btn-secondary" id="confirm-cancel">Cancel</button>
-      <button type="button" class="btn-primary" id="confirm-ok">OK</button>
-    </div>
-  </dialog>
-  <dialog id="shortcuts-dialog" class="shortcuts-dialog" aria-labelledby="shortcuts-title">
-    <h2 class="settings-panel-title" id="shortcuts-title">Shortcuts</h2>
-    <div class="setting-row">
-      <div class="setting-copy">
-        <span class="setting-label">Dictation shortcut</span>
-        <span class="setting-hint">Global shortcut to start and finish dictation.</span>
-      </div>
-      <div class="setting-control setting-control-shortcut">
-        <span id="shortcut-display" class="shortcut-display"><kbd>Ctrl</kbd>+<kbd>Win</kbd></span>
-        <button type="button" class="btn-secondary" id="shortcut-change" aria-label="Change dictation shortcut" autofocus>Change</button>
-      </div>
-    </div>
-    <div class="setting-row">
-      <div class="setting-copy">
-        <span class="setting-label">Paste last dictation</span>
-        <span class="setting-hint">Pastes your most recent transcript at the cursor.</span>
-      </div>
-      <div class="setting-control setting-control-shortcut">
-        <span id="paste-last-shortcut-display" class="shortcut-display"><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>V</kbd></span>
-        <button type="button" class="btn-secondary" id="paste-last-shortcut-change" aria-label="Change paste last dictation shortcut">Change</button>
-      </div>
-    </div>
-    <div class="setting-row" id="game-shortcut-row">
-      <div class="setting-copy">
-        <label class="setting-label" for="set-game-shortcut">Game shortcut</label>
-        <span class="setting-hint" id="game-shortcut-hint">Dictate into a game’s chat without leaving the game. While on, its key works only for Voxden.</span>
-      </div>
-      <div class="setting-control setting-control-shortcut">
-        <span id="game-shortcut-display" class="shortcut-display" hidden><kbd>F8</kbd></span>
-        <button type="button" class="btn-secondary" id="game-shortcut-change" aria-label="Change game shortcut" hidden>Change</button>
-        <label class="toggle">
-          <input type="checkbox" id="set-game-shortcut" aria-describedby="game-shortcut-hint" />
-          <span class="toggle-track" aria-hidden="true"></span>
-        </label>
-      </div>
-    </div>
-    <p id="shortcut-capture-hint" class="shortcut-capture-hint" role="status" hidden>Press a new shortcut. Escape to cancel.</p>
-    <button type="button" class="settings-close" id="shortcuts-close" aria-label="Close shortcuts">×</button>
-  </dialog>
-
-  <div id="dict-vocab-overlay" class="vocab-overlay" hidden>
-    <div class="vocab-dialog" role="dialog" aria-modal="true" aria-labelledby="vocab-title">
-      <h2 id="vocab-title">Add to vocabulary</h2>
-      <label class="vocab-option">
-        <span>Correct a misspelling</span>
-        <span class="toggle">
-          <input type="checkbox" id="vocab-misspell" />
-          <span class="toggle-track" aria-hidden="true"></span>
-        </span>
-      </label>
-      <form id="dict-form" class="vocab-form" autocomplete="off">
-        <label class="vocab-field" id="vocab-word-field">
-          <input type="text" id="dict-to" class="setting-input dict-input" placeholder="Add a new word" spellcheck="false" autocomplete="off" />
-        </label>
-        <div class="vocab-mapping" id="vocab-mapping-fields" hidden>
-          <label class="vocab-field">
-            <span class="dict-label">If Voxden writes</span>
-            <input type="text" id="dict-from" class="setting-input dict-input" placeholder="vox don" spellcheck="false" autocomplete="off" />
-          </label>
-          <label class="vocab-field">
-            <span class="dict-label">Use this spelling</span>
-            <input type="text" id="dict-to-map" class="setting-input dict-input" placeholder="Voxden" spellcheck="false" autocomplete="off" />
-          </label>
-        </div>
-        <p id="dict-error" class="dict-error" hidden></p>
-        <div class="vocab-actions">
-          <button type="button" class="btn-secondary" id="vocab-cancel">Cancel</button>
-          <button type="submit" class="btn-primary" id="dict-submit">Add word</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <dialog id="signin-gate" class="signin-gate" aria-labelledby="signin-title">
-    <aside class="signin-brand">
-      <span class="signin-mark"><img src="../assets/logo-mark.png" alt="" aria-hidden="true">Voxden</span>
-      <span class="signin-kicker" id="signin-kicker">DICTATION FOR WINDOWS</span>
-      <h2 class="signin-headline">Speak.<br>It's <em>written.</em></h2>
-      <p class="signin-tagline">Your voice becomes clean text in any app, with one shortcut and none of the typing.</p>
-      <ul class="signin-points">
-        <li id="signin-point-local"><i></i>Stays on this PC until you choose the cloud</li>
-        <li><i></i>Learns your names, words and phrasing</li>
-        <li><i></i>Your dictionary and plan, on every install</li>
-      </ul>
-    </aside>
-    <section class="signin-panel">
-      <div class="signin-view" id="signin-view-out">
-        <h1 class="signin-title" id="signin-title">Sign in to begin</h1>
-        <p class="signin-sub">One account keeps your dictionary, your history and your plan together.</p>
-        <button type="button" class="signin-google" id="signin-google">
-          <span class="signin-google-mark" aria-hidden="true"><svg viewBox="0 0 48 48" width="18" height="18"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg></span>
-          <span>Continue with Google</span>
-        </button>
-        <div class="signin-divider"><span>or use your email</span></div>
-        <label class="signin-field"><span>Email</span><input type="email" id="signin-email" placeholder="you@example.com" maxlength="254" spellcheck="false" autocomplete="email"></label>
-        <button type="button" class="btn-primary signin-primary" id="signin-send">Send me a code</button>
-        <p class="signin-error" id="signin-error" role="alert" hidden></p>
-        <p class="signin-foot" id="signin-foot">No password to remember. A six-digit code arrives by email.</p>
-      </div>
-      <div class="signin-view" id="signin-view-code" hidden>
-        <h2 class="signin-title">Check your email</h2>
-        <p class="signin-sub" id="signin-code-hint"></p>
-        <label class="signin-field"><span>Six-digit code</span><input type="text" id="signin-code" inputmode="numeric" maxlength="7" spellcheck="false" autocomplete="one-time-code" placeholder="000000"></label>
-        <button type="button" class="btn-primary signin-primary" id="signin-verify">Sign in</button>
-        <p class="signin-error" id="signin-code-error" role="alert" hidden></p>
-        <button type="button" class="signin-link" id="signin-back">Use a different email</button>
-      </div>
-      <div class="signin-view" id="signin-view-google" hidden>
-        <div class="signin-wait" aria-hidden="true"><span class="signin-spinner"></span></div>
-        <h2 class="signin-title">Finish in your browser</h2>
-        <p class="signin-sub">Google opened in a new tab. Choose your account there and Voxden picks up from here.</p>
-        <button type="button" class="signin-link" id="signin-google-cancel">Cancel</button>
-      </div>
-    </section>
-  </dialog>
   <dialog id="model-welcome" class="model-welcome" aria-labelledby="model-welcome-title" aria-describedby="model-welcome-description">
     <div class="model-welcome-heading">
-      <span class="model-welcome-kicker">WELCOME TO VOXDEN</span>
+      <span class="model-welcome-kicker">WELCOME TO VELL</span>
       <h2 id="model-welcome-title">Make yourself heard.</h2>
       <p id="model-welcome-description">Choose a free speech model to get started. It runs on this PC, in English.</p>
     </div>
@@ -1829,7 +1342,6 @@
   <script src="suggestions.js"></script>
   <script src="energy-orb.js"></script>
   <script src="energy-orb-preview.js"></script>
-  <script src="signin.js"></script>
   <script src="onboarding.js"></script>
   <script src="app-theme-ui.js"></script>
   <script src="app-toast.js"></script>

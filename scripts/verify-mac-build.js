@@ -166,7 +166,7 @@ function checkApp(app, label) {
 function checkRuntime(res) {
   section('bundled speech runtime');
   const dir = path.join(res, 'speech-runtime');
-  const manifestPath = path.join(dir, 'voxden-asr-runtime.json');
+  const manifestPath = path.join(dir, 'vell-asr-runtime.json');
   if (!check('runtime manifest present', fs.existsSync(manifestPath))) return;
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')).runtime;
   console.log('    ' + JSON.stringify({ id: manifest.id, asset: manifest.asset, python: manifest.python, pythonVersion: manifest.pythonVersion, pythonBuild: manifest.pythonBuild, size: manifest.size, files: manifest.files }));

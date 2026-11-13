@@ -141,13 +141,13 @@ function mockScript() {
     });
   };
 })();
-window.voxden = (function () {
+window.vell = (function () {
   let payload = ${data};
   const historyCbs = [];
   function clone() { return JSON.parse(JSON.stringify(payload)); }
   function refreshMetrics() {
-    if (window.voxdenMetrics) {
-      Object.assign(payload, window.voxdenMetrics.computeMetrics(payload.entries || []));
+    if (window.vellMetrics) {
+      Object.assign(payload, window.vellMetrics.computeMetrics(payload.entries || []));
     }
   }
   function emit() { refreshMetrics(); const next = clone(); historyCbs.forEach((cb) => cb(next)); }

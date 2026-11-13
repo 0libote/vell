@@ -75,7 +75,7 @@ function makeFetch(zipBytes, calls, options) {
     schemaVersion: 1,
     runtime: {
       id: opts.id || 'asr-win-x64-v1',
-      asset: 'voxden-asr-runtime-win-x64.zip',
+      asset: 'vell-asr-runtime-win-x64.zip',
       python: 'python.exe',
       pythonVersion: '3.12.10',
       files: 3,
@@ -86,14 +86,14 @@ function makeFetch(zipBytes, calls, options) {
   const release = {
     assets: [
       {
-        name: 'voxden-asr-runtime.json',
-        browser_download_url: 'https://example.test/voxden-asr-runtime.json',
+        name: 'vell-asr-runtime.json',
+        browser_download_url: 'https://example.test/vell-asr-runtime.json',
         size: manifest.length,
         digest: 'sha256:' + digest(manifest),
       },
       {
-        name: 'voxden-asr-runtime-win-x64.zip',
-        browser_download_url: 'https://example.test/voxden-asr-runtime-win-x64.zip',
+        name: 'vell-asr-runtime-win-x64.zip',
+        browser_download_url: 'https://example.test/vell-asr-runtime-win-x64.zip',
         size: zipBytes.length,
         // Where GitHub supplies a digest it is the one that must be trusted.
         digest: opts.badDigest ? 'sha256:' + '0'.repeat(64) : 'sha256:' + digest(zipBytes),
@@ -111,7 +111,7 @@ function makeFetch(zipBytes, calls, options) {
         headers: { 'Content-Type': 'application/json' },
       });
     }
-    if (href.endsWith('voxden-asr-runtime.json')) {
+    if (href.endsWith('vell-asr-runtime.json')) {
       return new Response(manifest, { status: 200 });
     }
     if (href.endsWith('.zip')) {
@@ -134,7 +134,7 @@ function makeFetch(zipBytes, calls, options) {
 function writeBundle(dir, zipBytes, runtime) {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, runtime.asset), zipBytes);
-  fs.writeFileSync(path.join(dir, 'voxden-asr-runtime.json'), JSON.stringify({
+  fs.writeFileSync(path.join(dir, 'vell-asr-runtime.json'), JSON.stringify({
     schemaVersion: 1,
     runtime: { ...runtime, size: zipBytes.length, sha256: digest(zipBytes) },
   }));
@@ -146,7 +146,7 @@ function offlineFetch() {
 }
 
 async function main() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'voxden-asr-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vell-asr-'));
   const zipBytes = makeRuntimeZip(['python.exe', 'Lib/site-packages/faster_whisper/__init__.py', 'MSVCP140.dll']);
   const macZipBytes = makeRuntimeZip([
     'bin/python3.12',
@@ -154,7 +154,7 @@ async function main() {
   ]);
   const MAC_RUNTIME = {
     id: 'asr-mac-arm64-v3',
-    asset: 'voxden-asr-runtime-mac-arm64.zip',
+    asset: 'vell-asr-runtime-mac-arm64.zip',
     python: 'bin/python3.12',
     pythonVersion: '3.12.12',
     platform: 'darwin',
@@ -167,18 +167,18 @@ async function main() {
 
   await ok('runtimeSpec answers per platform, and refuses the rest', () => {
     assert.deepStrictEqual(runtimeSpec('win32', 'x64'), {
-      asset: 'voxden-asr-runtime-win-x64.zip',
+      asset: 'vell-asr-runtime-win-x64.zip',
       python: 'python.exe',
       id: 'asr-win-x64',
     });
     assert.deepStrictEqual(runtimeSpec('darwin', 'arm64'), {
-      asset: 'voxden-asr-runtime-mac-arm64.zip',
+      asset: 'vell-asr-runtime-mac-arm64.zip',
       python: 'bin/python3.12',
       id: 'asr-mac-arm64',
     });
     // Windows on arm64 runs the x64 runtime under emulation rather than
     // having none at all.
-    assert.strictEqual(runtimeSpec('win32', 'arm64').asset, 'voxden-asr-runtime-win-x64.zip');
+    assert.strictEqual(runtimeSpec('win32', 'arm64').asset, 'vell-asr-runtime-win-x64.zip');
     // An Intel Mac has no arm64 wheels and no runtime built for it.
     for (const [platform, arch] of [['darwin', 'x64'], ['linux', 'x64'], ['linux', 'arm64']]) {
       assert.throws(
@@ -199,9 +199,9 @@ async function main() {
       fetchImpl: offlineFetch(),
     });
     const asset = await manager.resolveAsset();
-    assert.strictEqual(asset.asset, 'voxden-asr-runtime-mac-arm64.zip');
+    assert.strictEqual(asset.asset, 'vell-asr-runtime-mac-arm64.zip');
     assert.strictEqual(asset.python, 'bin/python3.12');
-    assert.strictEqual(asset.localPath, path.join(bundled, 'voxden-asr-runtime-mac-arm64.zip'));
+    assert.strictEqual(asset.localPath, path.join(bundled, 'vell-asr-runtime-mac-arm64.zip'));
     const snapshot = manager.snapshot();
     assert.strictEqual(snapshot.bundled, true);
     assert.strictEqual(snapshot.downloadBytes, 0);

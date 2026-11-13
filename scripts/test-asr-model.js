@@ -70,7 +70,7 @@ function makeFetch(fixture, calls, options) {
       files: manifestFiles,
     },
   }));
-  assetBytes.set('voxden-asr-model.json', manifest);
+  assetBytes.set('vell-asr-model.json', manifest);
 
   const assets = [...assetBytes.entries()].map(([name, buf]) => ({
     name,

@@ -41,8 +41,8 @@ const menu = macShell.applicationMenuTemplate('darwin');
 eq('a Mac gets the app, File, Edit and Window menus', menu.map((m) => m.role), ['appMenu', 'fileMenu', 'editMenu', 'windowMenu']);
 eq('device name', [macShell.deviceName('win32'), macShell.deviceName('darwin')], ['this PC', 'this Mac']);
 eq('paste keys', [macShell.pasteKeys('win32'), macShell.pasteKeys('darwin')], ['Ctrl+V', 'Cmd+V']);
-eq('Windows tray words are unchanged', macShell.trayLabels('win32'), { launchAtLogin: 'Start with Windows', quit: 'Exit Voxden' });
-eq('Mac tray words', macShell.trayLabels('darwin'), { launchAtLogin: 'Open at login', quit: 'Quit Voxden' });
+eq('Windows tray words name Vell', macShell.trayLabels('win32'), { launchAtLogin: 'Start with Windows', quit: 'Exit Vell' });
+eq('Mac tray words name Vell', macShell.trayLabels('darwin'), { launchAtLogin: 'Open at login', quit: 'Quit Vell' });
 eq('Windows keeps the default traffic-light-free title bar', macShell.trafficLightPosition('win32'), undefined);
 eq('Mac traffic lights sit in the 60 px bar', macShell.trafficLightPosition('darwin'), { x: 18, y: 24 });
 
@@ -119,9 +119,8 @@ eq('no hard-coded "this PC" in user-facing strings of main.js (console lines asi
 ok('the Mac title bar makes room for the traffic lights', /html\[data-platform="darwin"\] \.titlebar \.brand-lockup \{ padding-left: 84px; \}/.test(shellCss));
 ok('and has no caption buttons to leave room for', /html\[data-platform="darwin"\] \.titlebar-end \{ padding-right: 16px; \}/.test(shellCss));
 ok('only a Mac snapshot marks the document', /if \(next !== 'darwin'\) return;\s*\n\s*\/\/[^\n]*\n\s*document\.documentElement\.dataset\.platform = 'darwin';/.test(appSrc));
-ok('the update pane explains a Mac release', /case 'available':\s*\n\s*hint = next \+ ' is out\. Download it from voxden\.app\/download\.';/.test(appSrc));
-ok('the restart button becomes Download on a Mac', /updateRestartBtn\.textContent = manual \? 'Download'/.test(appSrc));
-ok('the polish copy hint names the Mac key', /isMacUi\(\) \? 'Cmd\+C\.' : 'Ctrl\+C\.'/.test(appSrc));
+ok('no updater bridge remains in the renderer', !/window\.vell\.(checkForUpdates|installUpdate|openChangelog)/.test(appSrc));
+ok('no cloud billing bridge remains in the renderer', !/window\.vell\.(account|polish|feedback)/.test(appSrc));
 ok('a Mac hides the taskbar switch, which has no Dock to act on',
   /if \(next !== 'darwin'\) return;[\s\S]{0,1600}getElementById\('set-taskbar'\)[\s\S]{0,120}closest\('\.setting-row'\)[\s\S]{0,80}style\.display = 'none'/.test(appSrc));
 ok('and no longer relabels it for the Dock', !/Show app in the Dock/.test(appSrc));

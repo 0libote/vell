@@ -27,9 +27,9 @@ const {
 
 const fsPromises = fs.promises;
 
-const DEFAULT_REPOSITORY = 'sounak1125/voxden';
+const DEFAULT_REPOSITORY = '0libote/vell';
 const DEFAULT_RELEASE_TAG = 'asr-model-v1';
-const MANIFEST_ASSET = 'voxden-asr-model.json';
+const MANIFEST_ASSET = 'vell-asr-model.json';
 const RECEIPT_SCHEMA = 1;
 const LEGACY_CACHE_DIR = 'models--Systran--faster-whisper-large-v3';
 
@@ -46,7 +46,7 @@ function friendlyFetchError(err) {
   if (err instanceof ReleaseError) return err;
   if (err && err.code === 'ENOSPC') return new ReleaseError('There is not enough free disk space for the speech model.', 'DISK_FULL');
   return new ReleaseError(
-    'Could not reach the Voxden speech-model release on GitHub. Check the connection and try again.',
+    'Could not reach the Vell speech-model release on GitHub. Check the connection and try again.',
     'NETWORK_ERROR'
   );
 }
@@ -67,7 +67,7 @@ class AsrModelManager {
       releaseTag: this.releaseTag,
       releaseApiUrl: opts.releaseApiUrl,
       fetchImpl: opts.fetchImpl,
-      userAgent: 'Voxden-Asr-Model',
+      userAgent: 'Vell-Asr-Model',
       cancelLabel: 'Speech model',
       segmentSize: opts.segmentSize,
       segmentThreshold: opts.segmentThreshold,
@@ -83,7 +83,7 @@ class AsrModelManager {
     return path.join(this.root, safeId(id || 'model', 'model id'));
   }
 
-  // Where faster-whisper put these weights before Voxden hosted them: the
+  // Where faster-whisper put these weights before Vell hosted them: the
   // Hugging Face cache, plus its lock directory. Model first.
   legacyDirs() {
     if (!this.cacheRoot) return [];
@@ -248,7 +248,7 @@ class AsrModelManager {
       }
 
       const all = manifest.parts.concat(manifest.files);
-      // Older Voxden versions downloaded Whisper into the Hub cache. Verify
+      // Older Vell versions downloaded Whisper into the Hub cache. Verify
       // those weights against the release before reusing them in explicit setup.
       let cachedWeights = null;
       if (this.cacheRoot) {

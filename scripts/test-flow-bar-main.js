@@ -159,11 +159,11 @@ app.whenReady().then(async () => {
   const before = overlay.getBounds();
 
   // --- A style is loaded, saved, and sent live through the real IPC -----------
-  assert.strictEqual((await fromOverlay('window.voxden.loadApp()')).flowBarStyle, 'orb',
+  assert.strictEqual((await fromOverlay('window.vell.loadApp()')).flowBarStyle, 'orb',
     'a saved design must survive startup and reach the settings snapshot');
-  await fromOverlay('window.__styleStates = []; window.voxden.onState(s => window.__styleStates.push(s)); true');
+  await fromOverlay('window.__styleStates = []; window.vell.onState(s => window.__styleStates.push(s)); true');
   for (const choice of ['island', 'orb']) {
-    const result = await fromOverlay('window.voxden.setSettings({ flowBarStyle: ' + JSON.stringify(choice) + ' })');
+    const result = await fromOverlay('window.vell.setSettings({ flowBarStyle: ' + JSON.stringify(choice) + ' })');
     assert.strictEqual(result.flowBarStyle, choice, 'the settings response must confirm the selected design');
     assert.strictEqual(readSettings().flowBarStyle, choice, 'the design must be persisted immediately');
     const states = await fromOverlay('window.__styleStates.splice(0)');
@@ -181,8 +181,8 @@ app.whenReady().then(async () => {
   // save can arrive after it and still say Orb; only the retired name must
   // never appear.
   for (const retired of ['ribbon', 'classic']) {
-    await fromOverlay('window.voxden.setSettings({ flowBarStyle: "orb" }).then(() => { window.__styleStates.length = 0; return true; })');
-    assert.strictEqual((await fromOverlay('window.voxden.setSettings({ flowBarStyle: ' + JSON.stringify(retired) + ' })')).flowBarStyle,
+    await fromOverlay('window.vell.setSettings({ flowBarStyle: "orb" }).then(() => { window.__styleStates.length = 0; return true; })');
+    assert.strictEqual((await fromOverlay('window.vell.setSettings({ flowBarStyle: ' + JSON.stringify(retired) + ' })')).flowBarStyle,
       'island', 'the retired ' + retired + ' design must resolve to Island');
     assert.strictEqual(readSettings().flowBarStyle, 'island', 'the retired ' + retired + ' design must be persisted as Island');
     const sent = (await fromOverlay('window.__styleStates.splice(0)')).map(state => state.flowBarStyle);
@@ -191,10 +191,10 @@ app.whenReady().then(async () => {
     assert.strictEqual(await fromOverlay('document.body.dataset.flowStyle'), 'island',
       'the live flow bar must open the retired ' + retired + ' design as Island');
   }
-  await fromOverlay('window.voxden.setSettings({ flowBarStyle: "orb" })');
-  assert.strictEqual((await fromOverlay('window.voxden.setSettings({ flowBarStyle: 7 })')).flowBarStyle, 'orb',
+  await fromOverlay('window.vell.setSettings({ flowBarStyle: "orb" })');
+  assert.strictEqual((await fromOverlay('window.vell.setSettings({ flowBarStyle: 7 })')).flowBarStyle, 'orb',
     'a malformed patch must not overwrite an existing choice');
-  assert.strictEqual((await fromOverlay('window.voxden.setSettings({ flowBarStyle: "unavailable" })')).flowBarStyle, 'island',
+  assert.strictEqual((await fromOverlay('window.vell.setSettings({ flowBarStyle: "unavailable" })')).flowBarStyle, 'island',
     'an unavailable design must resolve to Island');
   assert.strictEqual(readSettings().flowBarStyle, 'island', 'the normalized design must be persisted');
 
@@ -202,7 +202,7 @@ app.whenReady().then(async () => {
   // ipcRenderer.on allows more than one listener, so overlay.js's production
   // handler still runs -- and it is what guarantees the renderer can never be
   // left holding a drag main has already put down.
-  await fromOverlay('window.__mainDragEnds = 0; window.voxden.onDragEnd(() => { window.__mainDragEnds += 1; }); true');
+  await fromOverlay('window.__mainDragEnds = 0; window.vell.onDragEnd(() => { window.__mainDragEnds += 1; }); true');
 
   // The bar follows the real cursor, and this test cannot hold a real mouse
   // still -- a hand resting on it mid-run would move the bar for genuinely
@@ -218,10 +218,10 @@ app.whenReady().then(async () => {
   let stirred = 0;
   for (let i = 0; i < 5; i++) {
     const from = screen.getCursorScreenPoint();
-    await fromOverlay('window.voxden.overlayDragStart(); true');
+    await fromOverlay('window.vell.overlayDragStart(); true');
     await wait(DRAG_HOLD_MS);
     const to = screen.getCursorScreenPoint();
-    await fromOverlay('window.voxden.overlayDragEnd(); true');
+    await fromOverlay('window.vell.overlayDragEnd(); true');
     await wait(120);
     expectX += to.x - from.x;
     expectY += to.y - from.y;
@@ -288,8 +288,8 @@ app.whenReady().then(async () => {
   assert.strictEqual(overlay.isFocused(), false, 'a drag must never focus the flow bar');
 
   // --- Reset puts it back ----------------------------------------------------
-  await fromOverlay('window.voxden.setSettings({ flowBarStyle: "orb" })');
-  const reset = await fromOverlay('window.voxden.resetFlowBar()');
+  await fromOverlay('window.vell.setSettings({ flowBarStyle: "orb" })');
+  const reset = await fromOverlay('window.vell.resetFlowBar()');
   await wait(250);
   assert.strictEqual(readSettings().flowBarAnchor, null, 'reset has to clear the saved position');
   assert.strictEqual(reset.flowBarStyle, 'orb', 'resetting the position must preserve the selected design');
@@ -340,7 +340,7 @@ app.whenReady().then(async () => {
   near(afterCrash.x, beforeCrash.x, 'the rebuilt bar has to come back where the old one was');
   near(afterCrash.y, beforeCrash.y, 'the rebuilt bar has to come back at the old height');
   assert.strictEqual(overlay.isFocused(), false, 'a rebuilt bar must not take focus');
-  assert.strictEqual((await fromOverlay('window.voxden.loadApp()')).flowBarStyle, 'orb',
+  assert.strictEqual((await fromOverlay('window.vell.loadApp()')).flowBarStyle, 'orb',
     'a replacement renderer must receive the selected design');
   let events = diagEvents();
   assert.ok(events.some(e => e.event === 'renderer-gone'), 'the crash has to be written down: ' + JSON.stringify(events));

@@ -46,7 +46,7 @@ app.whenReady().then(async () => {
   const run = code => dashboard.webContents.executeJavaScript(code);
   const bar = code => overlay.webContents.executeJavaScript(code);
   await until(()=>run('!!window.VoxdenThemeSettings'));
-  assert.strictEqual(await run('window.voxden.initialAppTheme'), 'white');
+  assert.strictEqual(await run('window.vell.initialAppTheme'), 'white');
   assert.strictEqual(await run('document.documentElement.dataset.appTheme'), 'white');
   // White keeps the dark frame, so the window behind the page is the frame colour.
   assert.strictEqual(dashboard.getBackgroundColor().toLowerCase(), '#0b0d0e');
@@ -72,7 +72,7 @@ app.whenReady().then(async () => {
   }
   const reloaded = new Promise(resolve=>dashboard.webContents.once('did-finish-load',resolve));
   dashboard.webContents.reload(); await reloaded;
-  assert.strictEqual(await run('window.voxden.initialAppTheme'), 'white','fresh preload reads the confirmed saved theme');
+  assert.strictEqual(await run('window.vell.initialAppTheme'), 'white','fresh preload reads the confirmed saved theme');
   const capture=fs.readFileSync(path.join(__dirname,'../src/capture.html'),'utf8');
   assert.ok(!capture.includes('app-theme.'),'capture overlays retain their existing theme');
   console.log('Native theme: saved White startup, live platform chrome, confirmed theme selection, reload and both simulated recording HUDs passed.');
