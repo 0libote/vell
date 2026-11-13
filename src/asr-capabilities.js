@@ -105,6 +105,26 @@ const ENGINE_CAPABILITIES = Object.freeze({
     confidence: false,
     timestamps: true,
   }),
+  // Desert Ant Voz (Parakeet TDT 0.6B v3, on-device). Planned primary engine.
+  // 337MB, 25 languages, word timestamps at 80ms resolution. No language
+  // detection — pair with Ear or an explicit language choice. Vocabulary
+  // biasing is not available on the JS path yet, so terms go via repair.
+  // Hidden / non-default until the worker lands; see docs/DESERT-ANT.md.
+  voz: Object.freeze({
+    id: 'voz',
+    vocabulary: Object.freeze({
+      supported: false,
+      mechanism: null,
+      maxTerms: 0,
+      maxTokens: 0,
+      note: 'Voz takes no vocabulary input on the JS path yet; terms are applied after recognition.',
+    }),
+    languages: Object.freeze(["bg","hr","cs","da","nl","en","et","fi","fr","de","el","hu","it","lv","lt","mt","pl","pt","ro","ru","sk","sl","es","sv","uk"]),
+    autoDetectLanguage: false,
+    segments: true,
+    confidence: false,
+    timestamps: true,
+  }),
 });
 
 const ENGINE_IDS = Object.freeze(Object.keys(ENGINE_CAPABILITIES));
@@ -231,6 +251,7 @@ const ENGINE_LABELS = Object.freeze({
   'whisper-turbo': 'Whisper turbo',
   'qwen3-asr': 'Qwen3-ASR',
   parakeet: 'Parakeet',
+  voz: 'Voz (preview)',
 });
 
 function engineLabel(engine) {

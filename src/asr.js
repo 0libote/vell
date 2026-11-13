@@ -25,6 +25,12 @@ const ASR_ENGINES = Object.freeze({
     advertisedSize: '~0.6 GB',
     description: 'Small and fast multilingual dictation. The default.',
   }),
+  voz: Object.freeze({
+    id: 'voz',
+    name: 'Voz (preview)',
+    advertisedSize: '~0.4 GB',
+    description: 'Desert Ant on-device engine (preview, hidden until the worker lands).',
+  }),
 });
 
 // The engine a fresh install starts on. Parakeet is a 0.7 GB download that

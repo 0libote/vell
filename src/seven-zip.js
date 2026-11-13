@@ -29,7 +29,7 @@ function ensureExecutable(executable) {
 
 function runSevenZip(executable, args, options = {}) {
   if (!executable || !fs.existsSync(executable)) {
-    return Promise.reject(new ReleaseError('Voxden’s archive extractor is missing. Reinstall Voxden to repair it.', 'EXTRACTOR_MISSING'));
+    return Promise.reject(new ReleaseError('Vell’s archive extractor is missing. Reinstall Vell to repair it.', 'EXTRACTOR_MISSING'));
   }
   ensureExecutable(executable);
   return new Promise((resolve, reject) => {

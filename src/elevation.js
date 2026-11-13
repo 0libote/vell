@@ -1,6 +1,6 @@
 'use strict';
 
-// Restarting Voxden as administrator, on Windows.
+// Restarting Vell as administrator, on Windows.
 //
 // An app run as administrator -- some games are -- sits above an ordinary
 // Voxden, and while it is in front Windows keeps the two apart: Voxden hears
@@ -20,7 +20,7 @@ const path = require('path').win32;
 const AFTER_PID = '--voxden-after-pid=';
 
 const CANCELLED = 'Not restarted: the Windows prompt was cancelled.';
-const FAILED = 'Windows could not restart Voxden as administrator.';
+const FAILED = 'Windows could not restart Vell as administrator.';
 
 // The process id a restarted Voxden was told to wait for, or 0.
 function afterPid(argv) {
