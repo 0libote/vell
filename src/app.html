@@ -852,6 +852,23 @@
                       <button type="button" class="btn-secondary" id="speech-repair" aria-disabled="false">Check and repair</button>
                     </div>
                   </div>
+                  <div class="setting-row" id="model-unload-row">
+                    <div class="setting-copy">
+                      <label class="setting-label" for="model-unload-select">Unload model when idle</label>
+                      <span class="setting-hint" id="model-unload-hint">Frees about 1 GB of memory after inactivity. The next dictation reloads it in about 1–2 seconds.</span>
+                    </div>
+                    <div class="setting-control">
+                      <select class="setting-select" id="model-unload-select" aria-describedby="model-unload-hint model-unload-status">
+                        <option value="0">Never</option>
+                        <option value="5">After 5 minutes</option>
+                        <option value="10">After 10 minutes</option>
+                        <option value="15">After 15 minutes</option>
+                        <option value="30">After 30 minutes</option>
+                        <option value="60">After 1 hour</option>
+                      </select>
+                    </div>
+                  </div>
+                  <p class="setting-hint" id="model-unload-status" role="status" hidden></p>
                   <div class="setting-row" id="speech-remove-all-row" hidden>
                     <div class="setting-copy">
                       <span class="setting-label">Remove everything</span>

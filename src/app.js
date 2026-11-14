@@ -481,6 +481,8 @@ const speechRepairBtn = document.getElementById('speech-repair');
 const speechRemoveAllRowEl = document.getElementById('speech-remove-all-row');
 const speechRemoveAllBtn = document.getElementById('speech-remove-all');
 const speechRemoveAllErrorEl = document.getElementById('speech-remove-all-error');
+const modelUnloadSelect = document.getElementById('model-unload-select');
+const modelUnloadStatusEl = document.getElementById('model-unload-status');
 
 const speechPending = new Set();   // action keys a click has started and not yet settled
 let speechOp = null;               // { kind: 'install'|'repair'|'remove'|'remove-all', row?, component?, key?, pending, localError }
@@ -1575,6 +1577,40 @@ function renderSpeechEngines(data) {
   renderSpeechModelSection(data);
   renderSpeechDownloads(data);
   renderSpeechMaintenance(data);
+  renderModelUnload(data);
+}
+
+// Settings > Speech engines > Advanced > Unload model when idle. 0 is Never;
+// older snapshots without the field get the 15-minute default.
+function normalizeModelUnloadMinutesUi(value) {
+  const allowed = [0, 5, 10, 15, 30, 60];
+  const n = Number(value);
+  if (allowed.includes(n)) return n;
+  if (!Number.isFinite(n)) return 15;
+  if (n <= 0) return 0;
+  let best = allowed[0];
+  let bestDiff = Infinity;
+  for (const option of allowed) {
+    const diff = Math.abs(option - n);
+    if (diff < bestDiff) { bestDiff = diff; best = option; }
+  }
+  return best;
+}
+
+function renderModelUnload(data) {
+  if (!modelUnloadSelect) return;
+  const minutes = normalizeModelUnloadMinutesUi(
+    data && data.modelUnloadMinutes !== undefined ? data.modelUnloadMinutes : 15);
+  if (modelUnloadSelect.value !== String(minutes)) modelUnloadSelect.value = String(minutes);
+  if (modelUnloadStatusEl) {
+    const loaded = !!(data && data.modelLoaded);
+    const label = minutes === 0
+      ? (loaded ? 'Model is loaded and stays in memory.' : 'Model will load on next dictation and stay in memory.')
+      : (loaded ? 'Model is loaded. It unloads after ' + minutes + ' idle minutes.'
+        : 'Model is unloaded. Next dictation reloads it in about 1–2 seconds.');
+    if (modelUnloadStatusEl.textContent !== label) modelUnloadStatusEl.textContent = label;
+    modelUnloadStatusEl.hidden = false;
+  }
 }
 
 function renderSpeechModelSection(data) {
@@ -1901,6 +1937,11 @@ async function speechRepair() {
 }
 speechModelRepairBtn.addEventListener('click', () => { if (!speechIsDisabled(speechModelRepairBtn)) speechRepair(); });
 speechRepairBtn.addEventListener('click', () => { if (!speechIsDisabled(speechRepairBtn)) speechRepair(); });
+if (modelUnloadSelect) {
+  modelUnloadSelect.addEventListener('change', () => {
+    patchSettings({ modelUnloadMinutes: Number(modelUnloadSelect.value) });
+  });
+}
 
 // Advanced > Downloaded models > Remove.
 speechDownloadsListEl.addEventListener('click', (event) => {

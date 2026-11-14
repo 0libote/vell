@@ -45,6 +45,12 @@ function menuBarImage(source, nativeImage) {
     const rep = source.resize({ width: px, height: px, quality: 'best' });
     out.addRepresentation({ scaleFactor, width: px, height: px, buffer: rep.toPNG() });
   }
+  // A status item must be a template image so macOS draws it monochrome like
+  // the system icons next to it. Without this the full-color app icon stands
+  // out in pink against a monochrome menu bar.
+  try {
+    if (typeof out.setTemplateImage === 'function') out.setTemplateImage(true);
+  } catch (_) {}
   return out;
 }
 

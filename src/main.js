@@ -159,6 +159,9 @@ let settings = {
   suggestionsEnabled: true,
   keepTrainingAudio: false,
   keepRecordings: false,
+  // Minutes of inactivity before the in-process Voz model is dropped to free
+  // ~1GB of RAM. 0 means never unload. Next dictation reloads it (~1-2s).
+  modelUnloadMinutes: 15,
   asrEngine: asr.DEFAULT_ASR_ENGINE,
   asrDevice: 'auto',
   dictationLanguage: 'en',
@@ -293,6 +296,7 @@ let QWEN_CUDA_PACK;
 let QWEN_ROCM_PACK;
 let ICON_PNG;
 let ICON_ICO;
+let TRAY_PNG;
 
 function resolveAssetIcon(name) {
   const asarPath = path.join(ROOT, 'assets', name);
@@ -322,6 +326,7 @@ function initPaths() {
     QWEN_ROCM_PACK = path.join(app.getPath('userData'), 'qwen-rocm-pack');
     ICON_PNG = resolveAssetIcon('icon.png');
     ICON_ICO = resolveAssetIcon('icon.ico');
+    TRAY_PNG = resolveAssetIcon('tray-icon.png');
   } else {
     DATA = path.join(ROOT, 'data');
     AUDIO = path.join(DATA, 'audio');
@@ -340,6 +345,7 @@ function initPaths() {
     QWEN_ROCM_PACK = path.join(ROOT, 'models', 'qwen-rocm-pack');
     ICON_PNG = path.join(ROOT, 'assets', 'icon.png');
     ICON_ICO = path.join(ROOT, 'assets', 'icon.ico');
+    TRAY_PNG = path.join(ROOT, 'assets', 'tray-icon.png');
   }
   vozModelManager = new VozModelManager({
     dataDir: DATA,
@@ -425,6 +431,18 @@ function applyWindowIcon(win) {
 }
 
 function trayImage() {
+  // macOS gets a dedicated monochrome glyph, not the full-color app icon. The
+  // app icon is an opaque rounded square, so marking it as a template would
+  // render a solid blob with the V lost; the tray asset is a transparent V
+  // that macOS tints like the system icons around it.
+  if (process.platform === 'darwin' && typeof TRAY_PNG === 'string' && TRAY_PNG) {
+    try {
+      if (fs.existsSync(TRAY_PNG)) {
+        const glyph = nativeImage.createFromPath(TRAY_PNG);
+        if (glyph && !glyph.isEmpty()) return macShell.menuBarImage(glyph, nativeImage);
+      }
+    } catch (_) {}
+  }
   const img = loadAppIconImage();
   if (img.isEmpty()) return img;
   if (process.platform === 'darwin') return macShell.menuBarImage(img, nativeImage);
@@ -457,6 +475,7 @@ function loadSettings() {
     autoAddToDictionary: true,
     keepTrainingAudio: false,
     keepRecordings: false,
+    modelUnloadMinutes: 15,
     asrEngine: asr.DEFAULT_ASR_ENGINE,
     localModelChosen: false,
     asrDevice: 'auto',
@@ -524,6 +543,8 @@ function loadSettings() {
       settings.numbersAsDigits = settings.numbersAsDigits !== false;
       settings.autoCleanup = settings.autoCleanup === true;
       settings.keepRecordings = settings.keepRecordings === true;
+      settings.modelUnloadMinutes = normalizeModelUnloadMinutes(
+        raw.modelUnloadMinutes !== undefined ? raw.modelUnloadMinutes : settings.modelUnloadMinutes);
       // The hosted plan is gone: an old file may still carry the switch.
       delete settings.cloudTranscription;
       settings.autoAddToDictionary = settings.autoAddToDictionary !== false;
@@ -549,6 +570,17 @@ function loadSettings() {
 
 const formatShortcutLabel = hotkeys.formatShortcutLabel;
 const trayMenuLabel = hotkeys.trayMenuLabel;
+
+// Minutes of dictation inactivity before the Voz model is dropped from RAM.
+// 0 means never unload. Clamped to whole minutes, max 4h, default 15.
+function normalizeModelUnloadMinutes(value) {
+  if (value === 0 || value === '0') return 0;
+  if (value === null || value === undefined || value === '') return 15;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 15;
+  if (n <= 0) return 0;
+  return Math.min(240, Math.max(1, Math.round(n)));
+}
 
 function applySystemSettings() {
   try {
@@ -894,6 +926,8 @@ function snapshot() {
     autoAddToDictionary: settings.autoAddToDictionary !== false,
     keepTrainingAudio: !!settings.keepTrainingAudio,
     keepRecordings: settings.keepRecordings !== false,
+    modelUnloadMinutes: normalizeModelUnloadMinutes(settings.modelUnloadMinutes),
+    modelLoaded: vozLoaded === true,
     recordingsError,
     trainingError,
     recordings: corpus.recordingStats(),
@@ -4069,6 +4103,45 @@ function sidecarMayBecomeReady() {
 // dictation does not pay the compile cost with the microphone already open.
 // Fire and forget: a failure surfaces on first transcribe instead.
 let vozWarmStarted = false;
+// True while the Voz weights are resident in this process (~1GB). Tracks the
+// shared loader in transcription-provider.js; cleared by unloadIdleModel.
+let vozLoaded = false;
+let modelUnloadTimer = null;
+function clearModelUnload() {
+  if (modelUnloadTimer) clearTimeout(modelUnloadTimer);
+  modelUnloadTimer = null;
+}
+function scheduleModelUnload() {
+  clearModelUnload();
+  const mins = normalizeModelUnloadMinutes(settings.modelUnloadMinutes);
+  if (!mins || mins <= 0 || isQuitting) return;
+  modelUnloadTimer = setTimeout(() => {
+    unloadIdleModel().catch(() => {});
+  }, mins * 60 * 1000);
+  if (modelUnloadTimer.unref) modelUnloadTimer.unref();
+}
+function markModelUsed() {
+  vozLoaded = true;
+  scheduleModelUnload();
+}
+// Drop the weights after X idle minutes. A dictation in flight reschedules
+// instead of unloading; the next dictation reloads (~1-2s) via ensureVoz.
+async function unloadIdleModel() {
+  modelUnloadTimer = null;
+  if (isQuitting) return;
+  if (mode === 'arming' || mode === 'recording' || mode === 'transcribing') {
+    scheduleModelUnload();
+    return;
+  }
+  try {
+    const { dropVoz } = require('./transcription-provider');
+    await dropVoz();
+  } catch (_) {}
+  vozProviderInstance = null;
+  vozLoaded = false;
+  vozWarmStarted = false;
+  broadcast();
+}
 function scheduleSidecarWarmStart() {
   if (vozWarmStarted || isQuitting) return;
   if (!vozModelManager || !vozModelManager.installed()) return;
@@ -4379,6 +4452,7 @@ async function vozTranscribe(wavPath, options) {
       lostCapabilities: [],
       summary: 'Voz',
     };
+    markModelUsed();
     return (result && result.text) || '';
   } finally {
     if (timer) clearTimeout(timer);
@@ -4393,6 +4467,7 @@ async function ensureVozReady() {
     throw new Error('The Voz model is not installed. Download it in Settings, Speech engines.');
   }
   await ensureVoz();
+  markModelUsed();
 }
 
 function dictationHotkeyHandler() {
@@ -5500,6 +5575,11 @@ ipcMain.handle('settings-set', async (_e, patch) => {
     pruneRecordings();
   }
 
+  if (patch.modelUnloadMinutes !== undefined) {
+    settings.modelUnloadMinutes = normalizeModelUnloadMinutes(patch.modelUnloadMinutes);
+    scheduleModelUnload();
+  }
+
   // The list is the setting; a plain string from an older renderer is a
   // list of one. The scalar shadows the first entry either way.
   if (Array.isArray(patch.dictationLanguages)) {
@@ -5921,6 +6001,7 @@ if (!gotLock) {
     if (overlayRecreateTimer) clearTimeout(overlayRecreateTimer);
     if (overlayReflowTimer) clearTimeout(overlayReflowTimer);
     if (hwndTimer) clearInterval(hwndTimer);
+    clearModelUnload();
     corpus.clearRetry();
   });
 }
