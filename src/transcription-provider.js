@@ -7,7 +7,7 @@
 //
 //   provider.transcribe({ wavPath | pcm16, sampleRate, language, vocabularyTerms[] })
 //     → Promise<{ text, words: [{text, start, end}], engine, language,
-//                  realtimeFactor, vocabularyVia, status }>
+//                  realtimeFactor, processingTime, vocabularyVia, status }>
 //
 // - `words` carry 80ms-resolution timestamps where the engine provides them.
 //   Engines without timestamps return words with start/end null.
@@ -47,6 +47,9 @@ function normalizeResult(raw, fallbackEngine) {
     engine: String(r.engine || fallbackEngine || 'unknown'),
     language: String(r.language || 'en'),
     realtimeFactor: typeof r.realtimeFactor === 'number' ? r.realtimeFactor : null,
+    processingTime: typeof r.processingTime === 'number' ? r.processingTime : null,
+    coldStart: r.coldStart === true,
+    loadMs: typeof r.loadMs === 'number' && r.loadMs >= 0 ? Math.round(r.loadMs) : null,
     vocabularyVia: String(r.vocabularyVia || 'none'),
     status: String(r.status || 'ok'),
     error: r.error ? String(r.error) : null,
@@ -76,6 +79,9 @@ class MockVozProvider {
       engine: 'voz-mock',
       language: req.language || 'en',
       realtimeFactor: 120,
+      processingTime: 10,
+      coldStart: false,
+      loadMs: 0,
       vocabularyVia: vocab.length ? 'repair' : 'none',
       status: 'ok',
     }, 'voz-mock');
@@ -206,7 +212,10 @@ class VozProvider {
     } else {
       throw new Error('VozProvider needs samples (+sampleRate), wavPath, or wavBytes.');
     }
+    const coldStart = !sharedVoz;
+    const loadAt = Date.now();
     const voz = await this._ensure(req.onProgress);
+    const loadedAt = Date.now();
     const result = await voz.transcribe(input);
     return normalizeResult({
       text: result.text,
@@ -214,6 +223,12 @@ class VozProvider {
       engine: 'voz',
       language: req.language || 'en',
       realtimeFactor: result.realtimeFactor,
+      processingTime: result.processingTime,
+      // Whether this call paid a model (re)load, and how long the load took.
+      // Lets the UI name a slow transcription instead of leaving the user
+      // guessing, and the history entry record it.
+      coldStart,
+      loadMs: coldStart ? Math.max(0, loadedAt - loadAt) : 0,
       // The JS SDK takes no vocabulary input yet, so terms go via repair.
       vocabularyVia: terms.length ? 'repair' : 'none',
       status: 'ok',

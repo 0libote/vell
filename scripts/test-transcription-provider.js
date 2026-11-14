@@ -24,6 +24,10 @@ async function main() {
   ok('maps to segments', result.segments.length === 1 && result.spans.length === 4);
   ok('engine tagged', result.engine === 'voz-mock');
   ok('vocabulary via repair', result.vocabularyVia === 'repair');
+  ok('engine processing time reported', result.processingTime === 10);
+  ok('mock is never a cold start', result.coldStart === false && result.loadMs === 0);
+  const warm = provider.normalizeResult({ text: 'hi', coldStart: true, loadMs: 1234 }, 'voz');
+  ok('cold start survives normalization', warm.coldStart === true && warm.loadMs === 1234);
 
   ok('lists real voz provider', provider.listProviders().includes('voz'));
   const real = provider.createProvider('voz');

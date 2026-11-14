@@ -3178,6 +3178,10 @@ function addHistoryEntry(text, meta) {
     for (const field of traceFields) {
       if (typeof meta[field] === 'string') entry[field] = meta[field];
     }
+    // Whether this dictation paid a model (re)load. Only stored when true,
+    // so warm transcriptions carry no extra fields.
+    if (meta.coldStart === true) entry.coldStart = true;
+    if (Number.isFinite(meta.loadMs) && meta.loadMs > 0) entry.loadMs = Math.round(meta.loadMs);
     // What a spoken correction took out, so it can always be seen again.
     if (Array.isArray(meta.spokenCorrections) && meta.spokenCorrections.length) {
       entry.spokenCorrections = meta.spokenCorrections.slice();
@@ -3478,6 +3482,13 @@ function composeTranscript(raw, tone) {
       afterDictionary: text,
       afterAutoCleanup: proofread,
       asrEngine: engine,
+      // Whether this dictation paid a model (re)load, and how long the load
+      // took. Stored on the history entry so a slow transcription explains
+      // itself in the stats instead of looking like slow inference.
+      ...(lastAsrReport && lastAsrReport.coldStart ? { coldStart: true } : {}),
+      ...(lastAsrReport && Number(lastAsrReport.loadMs) > 0
+        ? { loadMs: Math.round(Number(lastAsrReport.loadMs)) }
+        : {}),
       vocabulary: vocabularyDiagnostics(dictResult),
     },
   };
@@ -4290,6 +4301,13 @@ async function vozTranscribe(wavPath, options) {
   if (!vozModelManager || !vozModelManager.installed()) {
     throw new Error('The Voz model is not installed. Download it in Settings, Speech engines.');
   }
+  // Name a cold start up front: the weights are not resident, so this
+  // transcription pays a reload before inference begins. The bar says so
+  // instead of looking stuck on "Transcribing…".
+  const cold = !vozLoaded;
+  if (cold && mode === 'transcribing') {
+    sendOverlay({ mode: 'transcribing', text: 'Loading model…', reveal: true });
+  }
   const language = opts.language || textLanguage();
   const work = sharedVozProvider().transcribe({ wavPath, language });
   const timeoutMs = Number(opts.timeoutMs) > 0 ? Number(opts.timeoutMs) : 120000;
@@ -4307,8 +4325,22 @@ async function vozTranscribe(wavPath, options) {
       vocabulary: '',
       routed: 'voz',
       segments: (result && result.segments) || null,
-      modelRecognitionMs: 0,
+      // Engine-reported inference time, so the stats can split it from file
+      // IO and any cold model (re)load inside the measured window.
+      modelRecognitionMs: Number(result && result.processingTime) > 0
+        ? Math.round(Number(result.processingTime))
+        : 0,
+      rtf: Number(result && result.realtimeFactor) > 0
+        ? Number(result.realtimeFactor)
+        : 0,
+      coldStart: !!(result && result.coldStart),
+      loadMs: Number(result && result.loadMs) > 0
+        ? Math.round(Number(result.loadMs))
+        : 0,
     };
+    if (lastAsrReport.coldStart) {
+      diagLog('transcribe-cold-start', { loadMs: lastAsrReport.loadMs });
+    }
     lastVocabularyReport = {
       selectedEngine: 'voz',
       selectedDevice: 'cpu',
