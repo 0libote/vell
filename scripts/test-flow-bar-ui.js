@@ -52,7 +52,6 @@ app.whenReady().then(async () => {
   // and stubbing one only proves that the stub was called.
   const sent = [];
   ipcMain.on('overlay-settings', () => sent.push('overlaySettings'));
-  ipcMain.on('overlay-capture-screen', () => sent.push('captureScreen'));
   ipcMain.on('overlay-drag-start', () => sent.push('dragStart'));
   ipcMain.on('overlay-drag-end', () => sent.push('dragEnd'));
   ipcMain.on('hud-confirm', () => sent.push('confirm'));
@@ -139,7 +138,6 @@ app.whenReady().then(async () => {
   // Nothing is clickable until the pointer is on the bar, and Island has no
   // grip at all: the capsule itself is the handle.
   assert.strictEqual(await clickable('flow-settings'), 'none', 'the gear must not be hit-testable at rest');
-  assert.strictEqual(await clickable('flow-capture'), 'none', 'the screenshot button must not be hit-testable at rest');
   assert.strictEqual(await evaluate("getComputedStyle(document.getElementById('flow-drag')).display"), 'none', 'Island draws no grip');
 
   // The centre of the resting bar: the window's mid-line, just above its floor.
@@ -147,13 +145,12 @@ app.whenReady().then(async () => {
   await cursor(WIDTH / 2, barY);
   assert.ok((await cls()).includes('flow-expanded'), 'hovering the bar opens it');
   assert.strictEqual(await clickable('flow-settings'), 'auto', 'the gear appears with the mic');
-  assert.strictEqual(await clickable('flow-capture'), 'auto', 'the screenshot appears with the mic');
   assert.strictEqual(await clickable('flow-drag'), 'none', 'the grip never appears for Island');
 
   // Both buttons must sit inside the hover rect that keeps the capsule open,
   // or they would vanish the moment the cursor left the microphone.
   await finishTransitions();
-  for (const id of ['flow-settings', 'flow-capture']) {
+  for (const id of ['flow-settings']) {
     const box = await centre(id);
     await cursor(box.x, box.y);
     assert.ok((await cls()).includes('flow-expanded'), id + ' falls outside the hover zone it lives in');
@@ -320,7 +317,7 @@ app.whenReady().then(async () => {
   // snapped exit or a reveal ahead of the shape fails even if every settled
   // position is correct.
   const revealMotion = `(() => {
-    const ids = flowBarStyle === 'orb' ? ['flow-settings', 'flow-capture', 'flow-drag'] : ['flow-settings', 'flow-capture'];
+    const ids = flowBarStyle === 'orb' ? ['flow-settings', 'flow-drag'] : ['flow-settings'];
     const finish = () => {
       void pill.offsetWidth;
       document.getAnimations().filter(a => a.transitionProperty)
@@ -385,7 +382,7 @@ app.whenReady().then(async () => {
         }
         const at140 = frames.findIndex(f => f.time === 140);
         for (const [id, axis, direction] of [
-          ['flow-settings', 'x', -1], ['flow-capture', 'y', -1], ['flow-drag', 'x', 1],
+          ['flow-settings', 'x', -1], ['flow-drag', 'x', 1],
         ]) {
           const context = `${style} ${id} ${opening ? 'opening' : 'closing'}`;
           const sign = opening ? direction : -direction;
@@ -414,7 +411,7 @@ app.whenReady().then(async () => {
         }
         continue;
       }
-      for (const [id, offset] of [['flow-settings', -36], ['flow-capture', 36]]) {
+      for (const [id, offset] of [['flow-settings', -36]]) {
         const context = `island ${id} ${opening ? 'opening' : 'closing'}`;
         const settled = frames[opening ? frames.length - 1 : 0][id];
         for (const frame of frames) {
@@ -444,15 +441,13 @@ app.whenReady().then(async () => {
 
     await cursor(WIDTH / 2, barY);
     await finishTransitions();
-    const boxes = await evaluate(`Object.fromEntries(['pill', 'flow-settings', 'flow-capture', 'flow-drag'].map(id => {
+    const boxes = await evaluate(`Object.fromEntries(['pill', 'flow-settings', 'flow-drag'].map(id => {
       const r = document.getElementById(id).getBoundingClientRect();
       return [id, { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height,
         cx: r.left + r.width / 2, cy: r.top + r.height / 2 }];
     }))`);
-    const core = boxes.pill, settings = boxes['flow-settings'], capture = boxes['flow-capture'], drag = boxes['flow-drag'];
+    const core = boxes.pill, settings = boxes['flow-settings'], drag = boxes['flow-drag'];
     if (style === 'orb') {
-      assert.ok(Math.abs(capture.cx - core.cx) < .2, style + ' screenshot must be centred above the bar');
-      assert.ok(core.top - capture.bottom >= 5, style + ' screenshot must clear the top of the bar');
       assert.ok(settings.right < core.left && drag.left > core.right, style + ' side controls must clear the bar');
       assert.ok(Math.abs(core.cx - settings.cx - (drag.cx - core.cx)) < .2,
         style + ' settings and grip must balance on either side');
@@ -460,7 +455,7 @@ app.whenReady().then(async () => {
         style + ' side controls must align with the bar centre');
     } else {
       assert.ok(Math.abs(core.width - 104) < 1 && Math.abs(core.height - 32) < .5, 'island opens to a 104 x 32 capsule');
-      for (const [box, offset] of [[settings, -36], [capture, 36]]) {
+      for (const [box, offset] of [[settings, -36]]) {
         assert.ok(Math.abs(box.cx - core.cx - offset) < .2 && Math.abs(box.cy - core.cy) < .2, 'island controls sit 36px either side of the microphone');
         assert.ok(box.left >= core.left && box.right <= core.right && box.top >= core.top && box.bottom <= core.bottom,
           'island controls sit inside the capsule');
@@ -473,28 +468,21 @@ app.whenReady().then(async () => {
         style + ' ' + id + ' must fit inside the real overlay window with top clearance');
     }
 
-    if (style === 'orb') {
-      // Walk through the empty gap above the microphone, not just directly to
-      // the destination. A smaller stay rect would close midway to Screenshot.
-      for (let step = 0; step <= 4; step++) {
-        await cursor(core.cx, core.cy + (capture.cy - core.cy) * step / 4);
-        assert.ok((await cls()).includes('flow-expanded'), style + ' must remain open on the path to Screenshot');
+    // Sideways from the microphone to each side control and a little past it.
+    for (const box of style === 'orb' ? [settings, drag] : [settings]) {
+      for (let step = 0; step <= 5; step++) {
+        await cursor(core.cx + (box.cx - core.cx) * step / 4, core.cy);
+        assert.ok((await cls()).includes('flow-expanded'), style + ' must remain open on the way to each control');
       }
-    } else {
-      // Sideways from the microphone to each control and a little past it.
-      for (const box of [settings, capture]) {
-        for (let step = 0; step <= 5; step++) {
-          await cursor(core.cx + (box.cx - core.cx) * step / 4, core.cy);
-          assert.ok((await cls()).includes('flow-expanded'), 'island must remain open on the way to each control');
-        }
-      }
+    }
+    if (style === 'island') {
       await cursor(core.cx, core.top - 20);
       assert.ok(!(await cls()).includes('flow-expanded'), 'island has nothing above the capsule to keep it open');
       await cursor(WIDTH / 2, barY);
       await finishTransitions();
     }
     for (const edge of [false, true]) {
-      for (const [id, channel] of [['flow-settings', 'overlaySettings'], ['flow-capture', 'captureScreen']]) {
+      for (const [id, channel] of [['flow-settings', 'overlaySettings']]) {
         const box = boxes[id];
         await cursor(box.cx, box.cy);
         sent.length = 0;
@@ -505,19 +493,19 @@ app.whenReady().then(async () => {
     if (style === 'island') {
       // A press that starts on the gear and ends on the capsule clicks their
       // common parent, the bar. Nobody meant that as a dictation, or a drag.
-      for (const id of ['flow-settings', 'flow-capture']) {
+      for (const id of ['flow-settings']) {
         const from = { x: Math.round(boxes[id].cx), y: Math.round(boxes[id].cy) };
         sent.length = 0;
-        await gesture([from, { x: from.x + (id === 'flow-settings' ? 14 : -14), y: from.y }, { x: Math.round(core.cx), y: from.y }]);
+        await gesture([from, { x: from.x + 14, y: from.y }, { x: Math.round(core.cx), y: from.y }]);
         assert.deepStrictEqual(sent, [], 'island ' + id + ' slid onto the capsule neither drags nor dictates');
       }
     }
 
     await cursor(4, 4, false);
     await finishTransitions();
-    await cursor(capture.cx, style === 'orb' ? capture.cy : core.top - 20);
-    assert.ok(!(await cls()).includes('flow-expanded'), style + ' hidden screenshot slot must not open the bar');
-    for (const id of style === 'orb' ? ['flow-settings', 'flow-capture', 'flow-drag'] : ['flow-settings', 'flow-capture']) {
+    await cursor(core.cx, core.top - 20);
+    assert.ok(!(await cls()).includes('flow-expanded'), style + ' empty space above the bar must not open it');
+    for (const id of style === 'orb' ? ['flow-settings', 'flow-drag'] : ['flow-settings']) {
       const hidden = await evaluate(`(() => {
         const element = document.getElementById(${JSON.stringify(id)}), s = getComputedStyle(element);
         const r = element.getBoundingClientRect();

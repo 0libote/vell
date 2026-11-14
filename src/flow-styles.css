@@ -3,8 +3,8 @@
 
 /* --- Island -----------------------------------------------------------------
    One black shape, in the spirit of the iPhone's Dynamic Island. It rests as a
-   plain 36 x 10 pill, opens to a 104 x 32 capsule holding settings, the
-   microphone and the screenshot, and grows around whatever a dictation has to
+   plain 36 x 10 pill, opens to a 76 x 32 capsule holding settings and the
+   microphone, and grows around whatever a dictation has to
    show. Every control lives inside it.
 
    Material: a black body and one faint hairline. The body reads on light
@@ -101,7 +101,7 @@ body[data-flow-style="island"].shown.always-flow.flow-expanded.flow-idle .flow-d
   pointer-events: none;
 }
 
-/* Open: settings, the microphone and the screenshot, 28px each with 8px
+/* Open: settings and the microphone, 28px each with 8px
    between them, all placed from the centre (below). At rest: a plain 36 x 10
    pill. No content, no dot, nothing moving.
 
@@ -153,13 +153,13 @@ body[data-flow-style="island"].always-flow:not(.flow-expanded) .pill.idle .glyph
     background-color 120ms ease;
 }
 /* A click anywhere on the capsule dictates, so the disc answers to all of it
-   -- except where the gear or the screenshot sits. */
+   -- except where the gear sits. */
 body[data-flow-style="island"] .pill.idle:hover:not(:has(.flow-side:hover)) .glyph-mic {
   background: var(--island-fill-hover);
 }
 
-/* Settings and the screenshot sit inside the capsule either side of the
-   microphone (placeSideControls in overlay.js moves them in). Like the
+/* Settings sits inside the capsule beside the
+   microphone (placeSideControls in overlay.js moves it in). Like the
    microphone they are pinned 1px above the capsule's floor and placed from its
    centre, so they stay put while it grows and its clip reveals them: they fade,
    and never slide or scale. Bare glyphs until hovered. */
@@ -182,10 +182,8 @@ body[data-flow-style="island"] .flow-side {
     background-color 120ms ease;
 }
 body[data-flow-style="island"] .flow-settings { left: calc(50% - 50px); right: auto; }
-body[data-flow-style="island"] .flow-capture { left: calc(50% + 22px); right: auto; }
 body[data-flow-style="island"] .flow-side svg { width: 14px; height: 14px; transform: none; transition: none; }
-/* Island draws its own gear, a dashed ring, and a viewfinder for the
-   screenshot; Orb keeps the shared icons. */
+/* Island draws its own gear, a dashed ring; Orb keeps the shared icon. */
 body[data-flow-style="island"] .flow-side svg:not(.side-icon-island) { display: none; }
 body[data-flow-style="island"] .flow-side .side-icon-island { display: block; }
 body[data-flow-style="island"].shown.always-flow.flow-expanded.flow-idle .flow-side:not(.flow-drag) {
@@ -759,7 +757,6 @@ body[data-flow-style="orb"] .flow-hit:has(.pill.transcribing) .orb-particle {
    so speech readiness never widens it or moves its centre sideways. */
 body[data-flow-style="orb"] .flow-hit {
   --flow-side-bottom: 16px;
-  --flow-capture-bottom: 52px;
 }
 /* Keep the microphone in front of controls emerging from beneath it, so a
    quick click during the reveal still starts dictation. */

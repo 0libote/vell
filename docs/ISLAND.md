@@ -39,7 +39,7 @@ the previously focused app for paste.
 `test-flow-styles-ui`, `test-island-flow-ui`, `test-island-shell-ui`,
 `test-flow-animation-lifecycle-ui`, `test-flow-bar-audio-ui`,
 `test-flow-bar-input-native`, `test-flow-frame-recovery*`,
-`test-overlay-health`, `test-capture*` (screenshot path only).
+`test-overlay-health`.
 Cloud/account states were removed; animation system untouched.
 Run: `node scripts/test-flow-bar-state.js` etc. (node-only parts pass on
 Linux; Electron UI parts need win32/darwin).

@@ -24,7 +24,6 @@ const corpus = require('./corpus');
 const historyStore = require('./history-store');
 const { createHistoryUsage } = require('./history-usage');
 const { createClipboardPaste, readRestorable } = require('./clipboard-paste');
-const { createScreenCapture } = require('./screen-capture');
 const { ownWindowId } = require('./window-id');
 const macShell = require('./mac-shell');
 const asr = require('./asr');
@@ -67,9 +66,6 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 let overlayWin = null;
 let historyWin = null;
 let historySnapshotPending = true;
-let screenCapture = null;
-let captureVoiceSession = null;
-let captureHiddenWindows = [];
 let tray = null;
 // Last built menu's signature, so a rebuild only happens when the menu would
 // actually come out different.
@@ -1398,9 +1394,6 @@ function sendOverlay(extra) {
   // Cheap: the signature check exits before building anything unless the
   // dictation actually started or finished.
   refreshTray();
-  if (captureVoiceSession !== null && screenCapture && screenCapture.sessionId === captureVoiceSession && extra && extra.mode) {
-    screenCapture.speechState(extra);
-  }
   // The grip only exists next to the resting bar, but a hotkey can start a
   // dictation with the button still down. Put the bar down where it is rather
   // than let the recording pill carry on following the cursor.
@@ -1447,8 +1440,7 @@ let overlayEditing = false;
 function overlaySize() {
   // The window is bottom-anchored, so extra height is headroom above the pill.
   // It has to clear the tallest shape plus its glow, or the halo gets cut off.
-  // The idle width holds the gear and grip beside the mic; height also leaves
-  // room for the screenshot above it, including clearance for its shadow.
+  // The idle width holds the gear and grip beside the mic.
   if (mode === 'learned') return { ww: 460, wh: 96 };
   if (overlayEditing) return { ww: 380, wh: 110 };
   return { ww: 260, wh: 96 };
@@ -1730,7 +1722,6 @@ function applyForegroundFullscreen(full) {
 // that can have changed is when the foreground window changes, so the bar
 // reclaims the top there rather than on a timer.
 function raiseOverlay() {
-  if (screenCapture && screenCapture.hidesOverlay) return;
   if (!overlayWin || overlayWin.isDestroyed() || !overlayWin.isVisible()) return;
   // Re-asserting the level rather than moveTop(): this is a pure z-order
   // change, where moveTop also re-sends a position and can nudge the bar by a
@@ -1746,7 +1737,6 @@ let lastOverlayRescue = 0;
 const OVERLAY_RESCUE_MS = 3000;
 
 function ensureOverlayVisible() {
-  if (screenCapture && screenCapture.hidesOverlay) return;
   if (!restingBarWanted()) return;
   if (mode !== 'idle') return;
   if (!overlayWin || overlayWin.isDestroyed()) return;
@@ -1804,15 +1794,12 @@ const CURSOR_POLL_MS = 40;
 
 // Hover target, in window coordinates; mirrors the renderer's constants. A
 // tight entry rect expands into a horizontal band that covers Island's open
-// capsule (its settings and screenshot are inside it) or Orb's sphere and side
-// controls. Only Orb adds a vertical path to a screenshot above the bar. The
-// upper corners stay click-through either way.
+// capsule (its settings is inside it) or Orb's sphere and side
+// controls. The upper corners stay click-through either way.
 const HOVER_ENTER_W = 62;
 const HOVER_STAY_W = 114;
 const HOVER_ENTER_H = 26;
 const HOVER_STAY_H = 46;
-const HOVER_CAPTURE_W = 38;
-const HOVER_CAPTURE_H = 78;
 const HOVER_BOTTOM = 10;
 
 function inHoverZone(x, y, width, height, stay) {
@@ -1822,7 +1809,7 @@ function inHoverZone(x, y, width, height, stay) {
   const orb = settings.flowBarStyle === 'orb';
   const zoneH = stay ? (orb ? 50 : HOVER_STAY_H) : orb ? 44 : HOVER_ENTER_H;
   if (offsetX <= (stay ? HOVER_STAY_W : HOVER_ENTER_W) / 2 && y >= bottom - zoneH) return true;
-  return orb && stay && offsetX <= HOVER_CAPTURE_W / 2 && y >= bottom - HOVER_CAPTURE_H - 4;
+  return false;
 }
 
 function overlayCursorTick() {
@@ -1924,7 +1911,6 @@ function rearmOverlayInput() {
 }
 
 function showOverlay() {
-  if (screenCapture && screenCapture.hidesOverlay) return;
   if (!overlayWin || overlayWin.isDestroyed()) return;
   positionOverlay();
   if (!overlayWin.isVisible()) overlayWin.showInactive();
@@ -1971,7 +1957,6 @@ function hideOverlayWindow() {
 function isOurHwnd(hwnd) {
   if (!hwnd || hwnd === '0') return true;
   if (hwnd === overlayHwnd || hwnd === historyHwnd) return true;
-  if (screenCapture && screenCapture.owns(hwnd)) return true;
   return false;
 }
 
@@ -2094,7 +2079,7 @@ function overlayHealthTick(now) {
 
 function recoverOverlayFrames(now, info) {
   if (!overlayWin || overlayWin.isDestroyed() || !overlayWin.isVisible()
-      || overlayScreenLocked || overlaySystemSuspended || (screenCapture && screenCapture.hidesOverlay)) return;
+      || overlayScreenLocked || overlaySystemSuspended) return;
   // Hiding a focused result editor causes blur/commit. Wait until that edit
   // finishes; a static result does not need motion to remain usable.
   if (overlayEditing || overlayDrag || overlayWin.isFocused()) {
@@ -2130,7 +2115,7 @@ function restoreOverlayFrameSurface(now) {
     overlayFrameRestore = null;
     return;
   }
-  if (overlayScreenLocked || overlaySystemSuspended || (screenCapture && screenCapture.hidesOverlay)) return;
+  if (overlayScreenLocked || overlaySystemSuspended) return;
   if (now < pending.nextAt) return;
   // A failed native show must not leave a live recording invisible. Retry
   // the same page at the ping cadence, including while main is recording.
@@ -2184,11 +2169,6 @@ function abandonDictation(why) {
   successTimer = null;
   mode = 'idle';
   resumeBackgroundMedia();
-  if (captureVoiceSession !== null && screenCapture) {
-    // Restore Capture's Escape handler after the dead recorder releases it.
-    screenCapture.speechState({ mode: 'error', text: 'Recording interrupted. Press your shortcut to speak again.' });
-    captureVoiceSession = null;
-  }
 }
 
 function recreateOverlay(reason, info) {
@@ -2556,11 +2536,6 @@ function buildTrayTemplate() {
       enabled: !!lastDictationText(),
       click: () => { pasteLastDictation().catch(() => {}); },
     },
-    {
-      label: 'Capture screenshot…',
-      enabled: !busy,
-      click: () => { if (screenCapture) screenCapture.start().catch(err => flashError(err.message)); },
-    },
     { type: 'separator' },
     {
       label: 'Dictation mode',
@@ -2708,31 +2683,9 @@ async function rememberFocus() {
   }
 }
 
-async function captureTargetInfo() {
-  await rememberFocus();
-  // Capture still belongs to an external app, even when the dashboard's
-  // editable field is now the most recent dictation destination.
-  return winInfo(lastExternalHwnd);
-}
-
 function startRecording(fromPtt, { game = false } = {}) {
   const pressedAt = Date.now();
   if (isQuitting) return;
-  // The game shortcut never brings a window forward: the dashboard opened
-  // over a game takes its focus, and an exclusive-fullscreen one minimizes.
-  // The bar says why; the dictation key and the tray still open the
-  // dashboard.
-  if (screenCapture && screenCapture.hasRetry) {
-    // A screenshot retry pastes into the app it was taken for, which would
-    // pull that app over the game.
-    if (game) {
-      flashError('A screenshot is waiting to paste. Use your dictation shortcut.');
-      return;
-    }
-    retryPendingCapture();
-    return;
-  }
-  if (screenCapture && screenCapture.active && !screenCapture.canRecord) return;
   if (mode === 'arming' || mode === 'recording' || mode === 'transcribing') return;
   if (asrOperation || asrIsDisabled() || sidecarState === 'unavailable') {
     if (game) {
@@ -2749,7 +2702,6 @@ function startRecording(fromPtt, { game = false } = {}) {
   const sessionToken = advanceRecordingSession();
   gameDictation = game;
   pttOwner = fromPtt && isPtt() ? (game ? 'game' : 'dictation') : null;
-  captureVoiceSession = screenCapture && screenCapture.active ? screenCapture.sessionId : null;
   corpus.clearRetry();
   // A live copy left over from the dictation before this one would otherwise
   // have this one appended to it.
@@ -2761,9 +2713,7 @@ function startRecording(fromPtt, { game = false } = {}) {
   dictationTiming = null;
   armTiming = { pressAt: pressedAt, cueAt: 0, mediaAt: 0, readyAt: 0, micMs: null, holdMs: null };
   pttReleasePending = false;
-  // Screenshot selection starts listening without a held key. In push-to-talk
-  // mode the next press should finish it, just like a tap-locked recording.
-  pttLocked = captureVoiceSession !== null && !fromPtt && isPtt();
+  pttLocked = false;
   pttIgnoreNextUp = false;
   const pttSession = !!fromPtt && isPtt();
   // Do not call this "recording" until the renderer has a live audio graph.
@@ -2805,7 +2755,7 @@ function startRecording(fromPtt, { game = false } = {}) {
   // The foreground watcher already gives us a usable cached paste target.
   // Refresh its metadata while media is paused. Show the preparing HUD now,
   // but do not open the microphone until any old resume and this pause settle.
-  if (captureVoiceSession === null) rememberFocus().catch(() => {});
+  rememberFocus().catch(() => {});
   const mediaPause = pauseBackgroundMedia();
   if (!pttSession) mediaPause.then(() => {
     if (isQuitting || sessionToken !== recordingSessionToken || mode !== 'arming') return;
@@ -3038,8 +2988,7 @@ async function prepareCorrectionLearning(text) {
     onStop: () => { if (correctionSession === running) stopCorrectionLearning(); },
     onPairs: pairs => {
       if (correctionSession === running && running.pasted && settings.autoAddToDictionary !== false
-          && ['idle', 'success', 'learned'].includes(mode)
-          && !(screenCapture && screenCapture.active)) addAutomaticCorrections(pairs);
+          && ['idle', 'success', 'learned'].includes(mode)) addAutomaticCorrections(pairs);
     },
   });
   if (!running.tracker.active) { stopCorrectionLearning(); return null; }
@@ -3204,26 +3153,6 @@ async function pasteText(text, { game = false, pasteLast = false } = {}) {
       throw new Error('Paste helper failed: ' + why);
     }
   }, vmClipboardTarget(target) ? VM_CLIPBOARD_TIMING : undefined);
-}
-
-async function pasteCapturePayload(value, hwnd, valid, image) {
-  if (!clipboardPaste) clipboardPaste = createClipboardPaste(clipboard);
-  const send = async () => {
-    if (!valid() || !hwnd || hwnd === '0' || isOurHwnd(hwnd)) throw new Error('Choose the destination app again.');
-    const pasted = await ps(['paste', '-Hwnd', hwnd]);
-    if (!String(pasted).split(/\r?\n/).includes('VELL_OK')) {
-      // Same as dictation: without the Accessibility grant the helper cannot
-      // paste, but the user's own keypress can, so the words stay put.
-      if (/Accessibility permission is missing/.test(String(pasted))) {
-        const err = new Error('Paste failed. Accessibility permission is missing — the text stays on the clipboard for your Cmd+V.');
-        err.keepClipboard = true;
-        throw err;
-      }
-      throw new Error('Paste failed. Click your chat box and retry.');
-    }
-  };
-  if (image) return clipboardPaste.pasteImage(value, send);
-  return clipboardPaste.paste(value, send);
 }
 
 function addHistoryEntry(text, meta) {
@@ -3571,10 +3500,6 @@ async function onTranscript(raw, sessionToken = recordingSessionToken) {
     flashError('No speech');
     return;
   }
-  if (captureVoiceSession !== null) {
-    await finishCaptureDictation(composed.text, captureVoiceSession, sessionToken);
-    return;
-  }
   try {
     await pasteDictation(composed.text);
   } catch (err) {
@@ -3610,48 +3535,6 @@ async function onTranscript(raw, sessionToken = recordingSessionToken) {
     category,
   }, composed.meta));
   recordVocabularyUse(composed.text, composed.entries);
-}
-
-async function finishCaptureDictation(text, captureId, token) {
-  try {
-    if (!screenCapture || screenCapture.sessionId !== captureId) {
-      if (token === recordingSessionToken) flashCancel();
-      return;
-    }
-    const pasted = text === null ? await screenCapture.retry() : await screenCapture.complete(text, captureId);
-    if (!pasted || token !== recordingSessionToken) return;
-    // Spoken into a screenshot is still dictation.
-    corpus.dropParked();
-    corpus.clearRetry();
-    dictationTiming = null;
-    captureVoiceSession = null;
-    mode = 'success';
-    sendOverlay({ mode: 'success', text: 'Screenshot + text pasted', reveal: true });
-    registerEscape(false);
-    resumeBackgroundMedia();
-    if (successTimer) clearTimeout(successTimer);
-    successTimer = setTimeout(() => {
-      mode = 'idle';
-      sendOverlay({ mode: 'idle' });
-    }, 1400);
-  } catch (err) {
-    if (token !== recordingSessionToken || err.cancelled) return;
-    flashError('Capture paste failed — press your shortcut to retry');
-  }
-}
-
-function retryPendingCapture() {
-  if (!screenCapture || !screenCapture.hasRetry || ['arming', 'recording', 'transcribing'].includes(mode)) return;
-  if (successTimer) clearTimeout(successTimer);
-  // A screenshot paste is never a game dictation, whatever the last one was.
-  gameDictation = false;
-  captureVoiceSession = screenCapture.sessionId;
-  const token = advanceRecordingSession();
-  mode = 'transcribing';
-  showOverlay();
-  sendOverlay({ mode: 'transcribing', reveal: true });
-  registerEscape(true);
-  finishCaptureDictation(null, captureVoiceSession, token);
 }
 
 // Run a kept recording through the engine again and replace the transcript.
@@ -3853,7 +3736,6 @@ function flashCancel() {
   showOverlay();
   makeUnfocusable(overlayWin);
   sendOverlay({ mode: 'cancel', text: 'Cancelled' });
-  captureVoiceSession = null;
   if (successTimer) clearTimeout(successTimer);
   successTimer = setTimeout(() => {
     mode = 'idle';
@@ -3908,7 +3790,6 @@ let foregroundIsShell = false;
 
 function adoptForegroundHwnd(hwnd) {
   if (!isDictationTarget(hwnd)) return;
-  if (screenCapture && !isOurHwnd(hwnd)) screenCapture.observeTarget(hwnd);
   foregroundHwnd = hwnd;
   // Reading the foreground window mid-dictation would replace the window the
   // text is owed to with whatever the user clicked on since.
@@ -4499,7 +4380,6 @@ function flashHud(kind, text, ms) {
 }
 
 async function pasteLastDictation() {
-  if (screenCapture && screenCapture.active) return;
   if (pasteLastBusy) return;
   if (mode === 'arming' || mode === 'recording' || mode === 'transcribing') return;
   const text = lastDictationText();
@@ -5005,10 +4885,6 @@ ipcMain.on('overlay-settings', (e) => {
   if (!overlayWin || overlayWin.isDestroyed() || e.sender !== overlayWin.webContents) return;
   openHistory('general');
 });
-ipcMain.on('overlay-capture-screen', e => {
-  if (!overlayWin || overlayWin.isDestroyed() || e.sender !== overlayWin.webContents || !screenCapture) return;
-  screenCapture.start().catch(err => flashError(err.message));
-});
 ipcMain.on('app-ready', () => {
   if (historyWin && !historyWin.isDestroyed()) {
     historyWin.webContents.send('history-updated', snapshot());
@@ -5102,7 +4978,7 @@ ipcMain.on('capture-flush', (e, pcm, sampleRate) => {
   // already whole somewhere else, and would otherwise start a new live file
   // that nothing ever closes.
   if (mode !== 'arming' && mode !== 'recording') return;
-  if (!keepingClips() || captureVoiceSession !== null) return;
+  if (!keepingClips()) return;
   corpus.appendLive(Buffer.isBuffer(pcm) ? pcm : Buffer.from(pcm), sampleRate);
 });
 ipcMain.on('start-cue-heard', (e, token) => {
@@ -5183,7 +5059,6 @@ ipcMain.handle('transcribe-local', async (_e, wav, options) => {
   const buf = Buffer.isBuffer(wav) ? wav : Buffer.from(wav);
   const opts = Object.assign({}, options || {});
   const sessionToken = recordingSessionToken;
-  if (captureVoiceSession !== null) opts.park = false;
   if (opts.park !== false) {
     retryEntryOwner = null;
     if (keepingClips()) corpus.parkRetry(buf);
@@ -5212,7 +5087,6 @@ ipcMain.handle('transcribe-local', async (_e, wav, options) => {
   }
 });
 ipcMain.handle('park-audio', async (_e, wav) => {
-  if (captureVoiceSession !== null) return true;
   const buf = Buffer.isBuffer(wav) ? wav : Buffer.from(wav);
   parkCompletedClip(buf);
   return true;
@@ -5896,48 +5770,6 @@ if (!gotLock) {
     });
     const appMenu = macShell.applicationMenuTemplate(process.platform);
     Menu.setApplicationMenu(appMenu ? Menu.buildFromTemplate(appMenu) : null);
-    screenCapture = createScreenCapture({
-      electron: require('electron'),
-      canStart: () => isQuitting ? 'Vell is closing.'
-        : ['arming', 'recording', 'transcribing'].includes(mode) ? 'Finish dictating before taking a screenshot.' : '',
-      hideVell: () => {
-        stopOverlayDrag(true);
-        stopCursorWatch();
-        for (const win of [overlayWin, historyWin]) {
-          if (!win || win.isDestroyed() || !win.isVisible()) continue;
-          if (!captureHiddenWindows.includes(win)) captureHiddenWindows.push(win);
-          win.hide();
-        }
-      },
-      restoreVell: () => {
-        if (!isQuitting) {
-          for (const win of captureHiddenWindows) {
-            if (!win.isDestroyed() && win !== overlayWin) win.showInactive();
-          }
-          if (restingBarWanted()) { showOverlay(); sendOverlay({ reveal: true }); }
-        }
-        captureHiddenWindows = [];
-      },
-      getTarget: captureTargetInfo,
-      currentTarget: () => winInfo(),
-      targetInfo: winInfo,
-      isOurTarget: isOurHwnd,
-      toggleVoice: async () => {
-        if (asrOperation || asrIsDisabled() || sidecarState === 'unavailable') {
-          throw new Error('Set up a speech engine in Vell settings to speak with your screenshot.');
-        }
-        toggleListen();
-      },
-      shortcutLabel: () => formatShortcutLabel(settings.shortcut),
-      retryPaste: retryPendingCapture,
-      cancelVoice: id => {
-        if (captureVoiceSession !== id) return;
-        if (['arming', 'recording', 'transcribing'].includes(mode)) flashCancel();
-        captureVoiceSession = null;
-      },
-      pasteImage: (image, hwnd, valid) => pasteCapturePayload(image, hwnd, valid, true),
-      pasteText: (text, hwnd, valid) => pasteCapturePayload(text, hwnd, valid, false),
-    });
     createOverlay();
     createHistoryWindow();
     createTray();
@@ -5973,7 +5805,6 @@ if (!gotLock) {
     event.preventDefault();
     if (isQuitting) return;
     isQuitting = true;
-    if (screenCapture) screenCapture.close();
     advanceRecordingSession();
     if (mode === 'arming' || mode === 'recording' || mode === 'transcribing') {
       mode = 'cancel';

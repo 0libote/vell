@@ -49,10 +49,9 @@ try {
   console.log('ok delayed idle input messages cannot disable active controls');
 
   // Exercise the native cursor decision along the paths users take to each
-  // revealed control. Orb's screenshot sits above the horizontal band; it must
-  // stay clickable there without revealing from empty space at rest. Island's
-  // gear and screenshot are inside its capsule, so the band alone covers them
-  // and the space above the capsule passes clicks through.
+  // revealed control. The horizontal band covers Island's open capsule (its
+  // gear is inside it) and Orb's sphere and side controls; the space above
+  // the band and the empty upper corners pass clicks through.
   h.context.hoverCursor = { x: 0, y: 0 };
   h.run(`
     overlayWin.isVisible = () => true;
@@ -74,7 +73,7 @@ try {
   {
     // Island, in window coordinates: the 36 x 10 rest pill spans y 66..76 and
     // x 112..148; the open 104 x 32 capsule spans y 44..76 and x 78..182, with
-    // the gear and screenshot centred 36px either side of the microphone.
+    // the gear centred 36px left of the microphone.
     h.run(`settings.flowBarStyle = 'island'; overlayHover = false; overlayIgnoreMouse = null;`);
     cursor(130, 50, false, 'island space above the resting pill cannot open it');
     cursor(150, 71, true, 'island resting pill opens the capsule from its edge');
@@ -85,7 +84,7 @@ try {
     }
     for (const direction of [-1, 1]) {
       cursor(130, 60, true, 'island return to the microphone');
-      // Out past the gear or screenshot (outer edge 50px from the centre) and
+      // Out past the gear (outer edge 50px from the centre) and
       // the capsule's own end (52px), with a few pixels of slack.
       for (let x = 0; x <= 57; x++) {
         cursor(130 + direction * x, 60, true, 'island moving sideways keeps the side control reachable');
@@ -94,28 +93,29 @@ try {
       cursor(130, 55, false, 'island a closed capsule reopens only from the resting pill');
       cursor(130, 73, true, 'island reopen from the resting pill');
     }
-    cursor(130, 30, false, 'island has no screenshot column above the capsule');
+    cursor(130, 30, false, 'island the space above the capsule passes clicks through');
     cursor(130, 26, false, 'island leaving upwards restores the tight entry target');
     cursor(170, 26, false, 'island the empty upper corner passes through clicks');
   }
-  for (const [style, micY, captureY, sideOffset] of [['orb', 58, 22, 33]]) {
+  for (const [style, micY, sideOffset] of [['orb', 58, 33]]) {
     h.run(`settings.flowBarStyle = '${style}'; overlayHover = false; overlayIgnoreMouse = null;`);
-    cursor(130, captureY, false, style + ' screenshot cannot reveal itself while the bar is collapsed');
+    cursor(130, 22, false, style + ' empty space above the bar cannot open it while collapsed');
     cursor(130, 73, true, style + ' resting bar opens the controls');
-    for (let y = 73; y >= captureY - 11; y--) {
-      cursor(130, y, true, style + ' moving upward must keep the screenshot reachable');
+    for (let y = 73; y >= 36; y--) {
+      cursor(130, y, true, style + ' moving upward through the band keeps it open');
     }
+    cursor(130, 30, false, style + ' leaving the band upward closes it');
     for (const direction of [-1, 1]) {
       cursor(130, micY, true, style + ' return to the microphone');
       for (let x = 0; x <= sideOffset + 11; x++) {
         cursor(130 + direction * x, micY, true, style + ' moving sideways keeps the side control reachable');
       }
     }
-    cursor(170, captureY, false, style + ' the empty upper corner passes through clicks');
-    cursor(130, captureY, false, style + ' leaving the cluster restores the tight entry target');
+    cursor(170, 22, false, style + ' the empty upper corner passes through clicks');
+    cursor(130, 22, false, style + ' leaving the cluster restores the tight entry target');
   }
   h.run('settings.flowBarStyle = "island";');
-  console.log('ok Island capsule and Orb screenshot and side controls remain reachable while empty upper corners stay click-through');
+  console.log('ok Island capsule and Orb side controls remain reachable while empty upper corners stay click-through');
 
   // Arriving on the resting bar must wake the page's input window: Chromium
   // hides it whenever the bar was hidden, minimized or counted as occluded,

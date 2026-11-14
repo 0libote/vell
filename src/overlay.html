@@ -13,12 +13,12 @@
   <div class="orb-atmosphere" aria-hidden="true">
     <span class="orb-particles"><i class="orb-particle"></i><i class="orb-particle"></i><i class="orb-particle"></i><i class="orb-particle"></i><i class="orb-particle"></i><i class="orb-particle"></i><i class="orb-particle"></i><i class="orb-particle"></i><i class="orb-particle"></i><i class="orb-particle"></i><i class="orb-particle"></i><i class="orb-particle"></i><i class="orb-particle"></i><i class="orb-particle"></i><i class="orb-particle"></i><i class="orb-particle"></i></span>
   </div>
-  <!-- Screenshot, gear and grip sit outside the pill here, where Orb shows them
+  <!-- Gear and grip sit outside the pill here, where Orb shows them
        beside and above its sphere. Absolutely positioned against the hit area,
        whose content box is centred on the pill, they stay put while it morphs.
-       Island moves the gear and the screenshot inside its capsule at runtime
+       Island moves the gear inside its capsule at runtime
        (placeSideControls in overlay.js), so the capsule's own clip reveals
-       them as it opens; it has no grip. -->
+       it as it opens; it has no grip. -->
   <button type="button" class="flow-side flow-settings" id="flow-settings" title="Vell settings" aria-label="Open Vell settings">
     <!-- Island's gear: a dashed ring. Hidden for every other style. -->
     <svg class="side-icon-island" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
@@ -28,16 +28,6 @@
     <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
       <path fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z"/>
       <path fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" d="M19.1 14.2a1.6 1.6 0 0 0 .32 1.76l.06.06a1.9 1.9 0 1 1-2.7 2.7l-.05-.06a1.6 1.6 0 0 0-1.77-.32 1.6 1.6 0 0 0-.97 1.47v.17a1.9 1.9 0 1 1-3.8 0v-.09a1.6 1.6 0 0 0-1.05-1.46 1.6 1.6 0 0 0-1.76.32l-.06.06a1.9 1.9 0 1 1-2.7-2.7l.06-.06a1.6 1.6 0 0 0 .32-1.76 1.6 1.6 0 0 0-1.47-.98h-.17a1.9 1.9 0 0 1 0-3.8h.09a1.6 1.6 0 0 0 1.46-1.05 1.6 1.6 0 0 0-.32-1.76l-.06-.06a1.9 1.9 0 1 1 2.7-2.7l.06.06a1.6 1.6 0 0 0 1.76.32h.08a1.6 1.6 0 0 0 .97-1.47v-.17a1.9 1.9 0 1 1 3.8 0v.09a1.6 1.6 0 0 0 .97 1.46 1.6 1.6 0 0 0 1.77-.32l.05-.06a1.9 1.9 0 1 1 2.7 2.7l-.06.06a1.6 1.6 0 0 0-.32 1.76v.08a1.6 1.6 0 0 0 1.47.97h.17a1.9 1.9 0 0 1 0 3.8h-.09a1.6 1.6 0 0 0-1.46.97z"/>
-    </svg>
-  </button>
-  <button type="button" class="flow-side flow-capture" id="flow-capture" title="Capture a screenshot and speak" aria-label="Capture a screenshot and speak">
-    <!-- Island's screenshot: a viewfinder. Hidden for every other style. -->
-    <svg class="side-icon-island" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M2.5 5.5v-2a1 1 0 0 1 1-1h2M10.5 2.5h2a1 1 0 0 1 1 1v2M13.5 10.5v2a1 1 0 0 1-1 1h-2M5.5 13.5h-2a1 1 0 0 1-1-1v-2"/>
-      <circle cx="8" cy="8" r="2" fill="currentColor" stroke="none"/>
-    </svg>
-    <svg viewBox="0 0 20 20" width="13" height="13" aria-hidden="true">
-      <path d="M7 3H3v4m10-4h4v4M3 13v4h4m10-4v4h-4M7 7h6v6H7z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
   </button>
   <button type="button" class="flow-side flow-drag" id="flow-drag" title="Drag to move the flow bar" aria-label="Drag to move the flow bar">

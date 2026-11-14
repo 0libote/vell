@@ -128,7 +128,7 @@ app.whenReady().then(async () => {
     function geometry() {
       const p = box(pill);
       const viewport = { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
-      const controls = ['btn-cancel', 'btn-confirm', 'btn-polish', 'orb-trigger', 'orb-discard', 'orb-finish', 'flow-settings', 'flow-capture', 'flow-drag'].map(id => {
+      const controls = ['btn-cancel', 'btn-confirm', 'btn-polish', 'orb-trigger', 'orb-discard', 'orb-finish', 'flow-settings', 'flow-drag'].map(id => {
         const element = document.getElementById(id), css = getComputedStyle(element), rect = box(element);
         return { id, rect, clickable: css.pointerEvents !== 'none', opacity: Number(css.opacity),
           inside: within(rect, id.startsWith('flow-') || ['orb-discard', 'orb-finish'].includes(id) ? viewport : p) };
@@ -286,12 +286,12 @@ app.whenReady().then(async () => {
       // Island has no grip; the gear and screenshot live inside its capsule.
       const grip = hover.controls.find(item => item.id === 'flow-drag');
       assert.ok(!grip.clickable && grip.rect.width === 0, 'Island draws no grip');
-      for (const id of ['flow-settings', 'flow-capture']) {
+      for (const id of ['flow-settings']) {
         const control = hover.controls.find(item => item.id === id);
         assert.ok(await run('styleTest.within(' + JSON.stringify(control.rect) + ', styleTest.box(pill))'), 'Island keeps ' + id + ' inside the capsule');
       }
     }
-    for (const id of style === 'island' ? ['flow-settings', 'flow-capture'] : ['flow-settings', 'flow-capture', 'flow-drag']) {
+    for (const id of style === 'island' ? ['flow-settings'] : ['flow-settings', 'flow-drag']) {
       const control = hover.controls.find(item => item.id === id);
       assert.ok(control.clickable && control.inside, style + ' retains reachable ' + id);
       await run(`onCursor({ x: ${(control.rect.left + control.rect.right) / 2}, y: ${(control.rect.top + control.rect.bottom) / 2}, inside: true }); true`);

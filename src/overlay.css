@@ -37,7 +37,6 @@ body {
 .flow-hit {
   --flow-side-offset: 21px;
   --flow-side-bottom: 14px;
-  --flow-capture-bottom: 48px;
   position: relative;
   display: flex;
   align-items: flex-end;
@@ -48,7 +47,7 @@ body {
 }
 
 /* --- Hover cluster ---------------------------------------------------------
-   Screenshot above, settings left, grip right. Each control travels from the
+   Settings left, grip right. Each control travels from the
    centre along its own axis. Absolute positions keep their destinations steady
    while the pill morphs, and reversing a hover retraces the current motion. */
 .flow-side {
@@ -90,13 +89,6 @@ body {
   cursor: pointer;
 }
 
-.flow-capture {
-  --flow-from-y: 28px;
-  left: calc(50% - 12px);
-  bottom: var(--flow-capture-bottom);
-  cursor: pointer;
-}
-
 .flow-drag {
   --flow-from-x: -24px;
   left: calc(50% + var(--flow-side-offset));
@@ -118,11 +110,6 @@ body.shown.always-flow.flow-expanded.flow-idle .flow-side {
     color 160ms ease,
     background-color 160ms ease,
     border-color 160ms ease;
-}
-
-/* A small second beat lets the top action unfold after the two side handles. */
-body.shown.always-flow.flow-expanded.flow-idle .flow-capture {
-  transition-delay: 30ms, 30ms, 0s, 0s, 0s, 0s;
 }
 
 .flow-side:hover {
@@ -425,7 +412,7 @@ body.always-flow .pill.idle {
 }
 
 /* Island-only artwork. Every other style keeps its X for errors, its own gear
-   and screenshot icons, and never draws the spinner or the line's fading
+   icon, and never draws the spinner or the line's fading
    twin; flow-styles.css turns them on for Island. */
 .glyph-bang,
 .spinner,

@@ -73,8 +73,6 @@ app.whenReady().then(async () => {
   const reloaded = new Promise(resolve=>dashboard.webContents.once('did-finish-load',resolve));
   dashboard.webContents.reload(); await reloaded;
   assert.strictEqual(await run('window.vell.initialAppTheme'), 'white','fresh preload reads the confirmed saved theme');
-  const capture=fs.readFileSync(path.join(__dirname,'../src/capture.html'),'utf8');
-  assert.ok(!capture.includes('app-theme.'),'capture overlays retain their existing theme');
   console.log('Native theme: saved White startup, live platform chrome, confirmed theme selection, reload and both simulated recording HUDs passed.');
   clearTimeout(deadline);app.quit();
 }).catch(error=>{console.error(error);clearTimeout(deadline);app.exit(1);});

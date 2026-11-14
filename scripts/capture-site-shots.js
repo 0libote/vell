@@ -577,7 +577,7 @@ async function captureFlowBar() {
 // discard and finish buttons while recording, and the settings, capture and
 // grip controls it opens on hover.
 const ORB_PARTS_BOX = `(() => {
-  const rects = ['#pill', '.orb-actions', '#flow-settings', '#flow-capture', '#flow-drag']
+  const rects = ['#pill', '.orb-actions', '#flow-settings', '#flow-drag']
     .map((selector) => document.querySelector(selector)).filter(Boolean)
     .map((el) => el.getBoundingClientRect()).filter((r) => r.width && r.height);
   return {

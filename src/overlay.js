@@ -11,7 +11,6 @@ const orbFinish = document.getElementById('orb-finish');
 const orbDiscard = document.getElementById('orb-discard');
 const dragHandle = document.getElementById('flow-drag');
 const settingsBtn = document.getElementById('flow-settings');
-const captureScreenBtn = document.getElementById('flow-capture');
 const waveStrip = document.getElementById('wave');
 const waveBars = Array.from(document.querySelectorAll('#wave i'));
 
@@ -97,8 +96,8 @@ let dragCapture = null;
 // current gesture already has (see "Dragging by the bar").
 let barPress = null;
 let barDragged = false;
-// Island's gear and screenshot sit inside the capsule, so a press that starts
-// on one and is released on the capsule clicks their common parent: the bar.
+// Island's gear sits inside the capsule, so a press that starts
+// on it and is released on the capsule clicks their common parent: the bar.
 let pressOnSide = false;
 // Hover target, in window coordinates. Fixed rects rather than the pill's own
 // box: the pill resizes when it expands, and measuring it would move the edge of
@@ -106,9 +105,8 @@ let pressOnSide = false;
 //
 // The enter rect hugs the resting bar so the controls only appear when you are
 // actually on it. Once open, a horizontal rect covers Island's whole capsule --
-// settings, mic and screenshot all live inside it -- or connects Orb's sphere
-// to its gear and grip, and for Orb a narrow vertical rect reaches the
-// screenshot above it. These overlapping paths keep the controls open as the
+// settings and mic live inside it -- or connects Orb's sphere
+// to its gear and grip. These overlapping paths keep the controls open as the
 // cursor moves between them without capturing clicks in the empty upper
 // corners of the window.
 //
@@ -119,8 +117,6 @@ const HOVER_ENTER_W = 62;    // stable target well wider than Island's 36px rest
 const HOVER_STAY_W = 114;    // Island's 104px capsule, or Orb's gear and grip, with slack
 const HOVER_ENTER_H = 26;    // the rest pill is 10 tall, sitting HOVER_BOTTOM off the floor
 const HOVER_STAY_H = 46;     // must cover the open 32px capsule
-const HOVER_CAPTURE_W = 38; // Orb: 24px screenshot with 7px of slack on each side
-const HOVER_CAPTURE_H = 78; // Orb: reaches 6px above the screenshot, plus 4px more
 const HOVER_BOTTOM = 10;     // gap from the zone's floor to the window edge
 
 let canRetry = false;
@@ -217,9 +213,7 @@ function inHoverZone(x, y) {
   const orb = flowBarStyle === 'orb';
   const height = overInteractive ? (orb ? 50 : HOVER_STAY_H) : orb ? 44 : HOVER_ENTER_H;
   if (offsetX <= (overInteractive ? HOVER_STAY_W : HOVER_ENTER_W) / 2 && y >= bottom - height) return true;
-  // Only Orb has a screenshot above the bar. Island's is inside the capsule,
-  // and the space above it passes clicks through.
-  return orb && overInteractive && offsetX <= HOVER_CAPTURE_W / 2 && y >= bottom - HOVER_CAPTURE_H - 4;
+  return false;
 }
 
 function setIgnoreMouse(ignore) {
@@ -229,21 +223,20 @@ function setIgnoreMouse(ignore) {
   window.vell.setIgnoreMouse(ignore);
 }
 
-// Island draws settings and the screenshot inside its capsule, so the capsule's
-// own clip reveals them as it opens, exactly as it does the microphone. Orb
-// shows them beside and above its sphere. They are the same two buttons either
-// way and only change parents, which happens with the style itself: at idle,
+// Island draws settings inside its capsule, so the capsule's
+// own clip reveals it as it opens, exactly as it does the microphone. Orb
+// shows it beside its sphere. It is the same button either
+// way and only changes parents, which happens with the style itself: at idle,
 // while neither is visible.
 const flowHit = document.getElementById('flow-hit');
 function placeSideControls() {
-  if (!settingsBtn || !captureScreenBtn || !flowHit) return;
+  if (!settingsBtn || !flowHit) return;
   const inside = flowBarStyle === 'island';
   if (inside && settingsBtn.parentElement !== pill) {
-    pill.append(settingsBtn, captureScreenBtn);
+    pill.append(settingsBtn);
   } else if (!inside && settingsBtn.parentElement === pill) {
     const before = dragHandle && dragHandle.parentElement === flowHit ? dragHandle : pill;
     flowHit.insertBefore(settingsBtn, before);
-    flowHit.insertBefore(captureScreenBtn, before);
   }
 }
 
@@ -266,7 +259,7 @@ function syncFlowVisual() {
   placeSideControls();
   syncIslandFloor();
   document.body.classList.toggle('always-flow', alwaysShowFlowBar);
-  // Gates the screenshot, gear and grip: other pill states grow into their
+  // Gates the gear and grip: other pill states grow into their
   // space, so they only exist alongside the resting bar.
   document.body.classList.toggle('flow-idle', hudMode === 'idle');
   const expanded = !alwaysShowFlowBar || hudMode !== 'idle' || overInteractive || dragging;
@@ -496,7 +489,7 @@ function endFlowDrag() {
 // Island has no grip: the capsule itself is the handle, microphone included.
 // A press only becomes a drag once the pointer has moved more than
 // BAR_DRAG_SLOP px with the button still down, so a press that stays put is
-// still the click that dictates. The gear and the screenshot sit inside the
+// still the click that dictates. The gear sits inside the
 // capsule but never start a drag.
 const BAR_DRAG_SLOP = 4;
 
@@ -2226,7 +2219,7 @@ function onIdleDictate(e) {
   // handler is on the document, so without this a click on either would also
   // start a dictation.
   if (e.target.closest && e.target.closest('.flow-side')) return;
-  // Pressed on Island's gear or screenshot and let go on the capsule: that
+  // Pressed on Island's gear and let go on the capsule: that
   // click lands on the bar, but nobody meant to dictate.
   if (flowBarStyle === 'island' && pressOnSide) return;
   if (dragging) return;
@@ -2284,14 +2277,6 @@ if (settingsBtn) {
     if (window.vell && typeof window.vell.overlaySettings === 'function') {
       window.vell.overlaySettings();
     }
-  });
-}
-
-if (captureScreenBtn) {
-  captureScreenBtn.addEventListener('click', e => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (window.vell && window.vell.captureScreen) window.vell.captureScreen();
   });
 }
 

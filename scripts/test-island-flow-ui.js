@@ -33,7 +33,6 @@ app.whenReady().then(async () => {
   const sent = [];
   ipcMain.handle('toggle', () => { sent.push('toggle'); return { mode: 'idle' }; });
   ipcMain.on('overlay-settings', () => sent.push('settings'));
-  ipcMain.on('overlay-capture-screen', () => sent.push('capture'));
   ipcMain.on('overlay-drag-start', () => sent.push('drag-start'));
   ipcMain.on('overlay-drag-end', () => sent.push('drag-end'));
   ipcMain.on('hud-confirm', () => sent.push('confirm'));
@@ -154,10 +153,10 @@ app.whenReady().then(async () => {
   assert.deepStrictEqual(await run('islandIdleAnimations'), [], 'nothing starts moving while the pill rests');
   await shoot('rest');
 
-  // --- Open: settings, microphone and screenshot inside one capsule -----------
+  // --- Open: settings and microphone inside one capsule -----------
   for (const preference of ['full', 'reduced', 'full']) {
     await run(`VoxdenFlowMotion.setPreference('${preference}'); onCursor({ hover: true }); true`);
-    const timing = await run(`[settingsBtn, captureScreenBtn, document.querySelector('.glyph-mic')].map(e => {
+    const timing = await run(`[settingsBtn, document.querySelector('.glyph-mic')].map(e => {
       const s = getComputedStyle(e), props = s.transitionProperty.split(',').map(p => p.trim());
       const at = name => props.indexOf(name) < 0 ? props.indexOf('all') : props.indexOf(name);
       // Shorter lists repeat, as the used value does (reduced motion writes one duration).
@@ -179,21 +178,21 @@ app.whenReady().then(async () => {
       const p = island.pillBox(), mic = document.querySelector('.glyph-mic');
       const part = el => { const s = getComputedStyle(el), b = island.box(el);
         return { box: b, fill: s.backgroundColor, color: s.color, pointer: s.pointerEvents, visible: island.visible(el), inPill: pill.contains(el) }; };
-      return { p, settings: part(settingsBtn), capture: part(captureScreenBtn), mic: part(mic),
+      return { p, settings: part(settingsBtn), mic: part(mic),
         grip: getComputedStyle(dragHandle).display, gripPointer: getComputedStyle(dragHandle).pointerEvents,
         shadow: getComputedStyle(pill).boxShadow, glows: island.glows(),
-        icons: [settingsBtn, captureScreenBtn].map(b => [...b.querySelectorAll('svg')].map(s =>
+        icons: [settingsBtn].map(b => [...b.querySelectorAll('svg')].map(s =>
           (s.classList.contains('side-icon-island') ? 'island' : 'shared') + ':' + getComputedStyle(s).display)) };
     })()`);
-    assert.deepStrictEqual(open.icons, [['island:block', 'shared:none'], ['island:block', 'shared:none']],
-      preference + ': Island draws its own dashed gear and viewfinder, not the shared icons');
+    assert.deepStrictEqual(open.icons, [['island:block', 'shared:none']],
+      preference + ': Island draws its own dashed gear, not the shared icon');
     assert.strictEqual(Math.round(open.p.w), 104, preference + ': the open capsule is 104px wide');
     assert.strictEqual(Math.round(open.p.h), 32, preference + ': the open capsule is 32px tall');
     assert.strictEqual(open.shadow, 'none');
     assert.deepStrictEqual(open.glows, [], preference + ': the open capsule has no glow or shadow');
     assert.strictEqual(open.grip, 'none', 'Island has no grip');
     assert.strictEqual(open.gripPointer, 'none', 'the hidden grip can never take a press');
-    for (const [name, part, offset] of [['settings', open.settings, -36], ['mic', open.mic, 0], ['capture', open.capture, 36]]) {
+    for (const [name, part, offset] of [['settings', open.settings, -36], ['mic', open.mic, 0]]) {
       assert.ok(part.visible && part.inPill, name + ' is shown inside the capsule');
       assert.ok(Math.abs(part.box.w - 28) < .1 && Math.abs(part.box.h - 28) < .1, name + ' is a 28px control');
       assert.ok(Math.abs(part.box.cx - (open.p.cx + offset)) < .6 && Math.abs(part.box.cy - open.p.cy) < .6, name + ' sits ' + offset + 'px from the centre');
@@ -201,8 +200,8 @@ app.whenReady().then(async () => {
     }
     assert.strictEqual(open.mic.fill, 'rgb(44, 44, 46)', 'the microphone is a #2c2c2e disc');
     assert.strictEqual(open.mic.color, 'rgb(255, 255, 255)', 'with a white microphone');
-    for (const side of [open.settings, open.capture]) {
-      assert.strictEqual(side.fill, 'rgba(0, 0, 0, 0)', 'settings and screenshot are bare glyphs until hovered');
+    for (const side of [open.settings]) {
+      assert.strictEqual(side.fill, 'rgba(0, 0, 0, 0)', 'settings is a bare glyph until hovered');
       assert.strictEqual(side.color, 'rgba(235, 235, 245, 0.62)', 'drawn in the secondary grey');
       assert.strictEqual(side.pointer, 'auto', 'and clickable');
     }
@@ -428,7 +427,7 @@ app.whenReady().then(async () => {
   // follows it frame by frame, overshoots about 2% and stays centred. Content
   // fades in only once the shape is moving, and leaves within 100ms.
   const morphs = [
-    ['rest -> open', "() => { setHud('idle'); onCursor({ hover: false }); }", "() => onCursor({ hover: true })", ['.glyph-mic', '#flow-settings', '#flow-capture']],
+    ['rest -> open', "() => { setHud('idle'); onCursor({ hover: false }); }", "() => onCursor({ hover: true })", ['.glyph-mic', '#flow-settings']],
     ['open -> rest', "() => { setHud('idle'); onCursor({ hover: true }); }", "() => onCursor({ hover: false })", []],
     ['open -> arming', "() => { setHud('idle'); onCursor({ hover: true }); }", "() => setHud('arming')", ['#wave']],
     ['recording -> transcribing', "() => { setHud('recording'); stopWaveLoop(); }", "() => setHud('transcribing')", ['#spinner']],
@@ -548,11 +547,11 @@ app.whenReady().then(async () => {
   // --- Drag by the bar -----------------------------------------------------------
   // Real input through Chromium's hit testing: a press plus more than 4px of
   // travel drags, a press that stays put dictates, and the click that ends a
-  // drag does not. The gear and the screenshot never drag.
+  // drag does not. The gear never drags.
   await run("setHud('idle'); VoxdenFlowMotion.setPreference('full'); onCursor({ hover: true }); true");
   await pause(700);
   const at = await run(`(() => { const c = el => { const b = el.getBoundingClientRect(); return { x: Math.round(b.left + b.width / 2), y: Math.round(b.top + b.height / 2) }; };
-    return { mic: c(document.querySelector('.glyph-mic')), edge: { x: c(pill).x - 18, y: c(pill).y }, gear: c(settingsBtn), capture: c(captureScreenBtn) }; })()`);
+    return { mic: c(document.querySelector('.glyph-mic')), edge: { x: c(pill).x - 18, y: c(pill).y }, gear: c(settingsBtn) }; })()`);
   const gesture = async (points, label) => {
     sent.length = 0;
     const [first, ...rest] = points;
@@ -579,7 +578,7 @@ app.whenReady().then(async () => {
   assert.deepStrictEqual(drag.sent, ['drag-start', 'drag-end'], 'the capsule between its controls is a handle too');
   drag = await gesture([at.mic, at.mic]);
   assert.deepStrictEqual(drag.sent, ['toggle'], 'the next plain click after a drag dictates again');
-  for (const [name, point, action] of [['gear', at.gear, 'settings'], ['screenshot', at.capture, 'capture']]) {
+  for (const [name, point, action] of [['gear', at.gear, 'settings']]) {
     drag = await gesture([point, { x: point.x + 8, y: point.y }, { x: point.x + 16, y: point.y }]);
     assert.ok(!drag.mid.dragging && !drag.sent.includes('drag-start'), 'the ' + name + ' never starts a drag');
     assert.ok(!drag.sent.includes('toggle'), 'and a press on it never dictates');
@@ -617,13 +616,13 @@ app.whenReady().then(async () => {
   // --- Styles and reduced motion ---------------------------------------------------
   await run(`setHud('idle'); onCursor({ hover: false }); applyFlowBarStyle('orb'); true`);
   await pause(300);
-  assert.ok(await run(`settingsBtn.parentElement.id === 'flow-hit' && captureScreenBtn.parentElement.id === 'flow-hit'
-    && settingsBtn.nextElementSibling === captureScreenBtn && captureScreenBtn.nextElementSibling === dragHandle`),
-    'Orb gets its gear and screenshot back beside the sphere, in their original order');
+  assert.ok(await run(`settingsBtn.parentElement.id === 'flow-hit'
+    && settingsBtn.nextElementSibling === dragHandle`),
+    'Orb gets its gear back beside the sphere, in its original order');
   await run(`applyFlowBarStyle('classic'); true`);
   await pause(700);
   assert.strictEqual(await run('document.body.dataset.flowStyle'), 'island', 'a saved Classic opens as Island');
-  assert.ok(await run('settingsBtn.parentElement === pill && captureScreenBtn.parentElement === pill'), 'Island takes them back inside the capsule');
+  assert.ok(await run('settingsBtn.parentElement === pill'), 'Island takes it back inside the capsule');
   assert.deepStrictEqual(await run('island.snapshot()'), resting, 'returning from Orb restores the exact resting pill');
   await run(`VoxdenFlowMotion.setPreference('reduced'); setHud('transcribing'); true`);
   await pause(120);

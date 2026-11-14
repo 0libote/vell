@@ -96,7 +96,6 @@ contextBridge.exposeInMainWorld('vell', {
   overlayDragStart: () => ipcRenderer.send('overlay-drag-start'),
   overlayDragEnd: () => ipcRenderer.send('overlay-drag-end'),
   overlaySettings: () => ipcRenderer.send('overlay-settings'),
-  captureScreen: () => ipcRenderer.send('overlay-capture-screen'),
   resetFlowBar: () => ipcRenderer.invoke('flow-bar-reset'),
   setSettings: (patch) => ipcRenderer.invoke('settings-set', patch),
   installAsrRuntime: () => ipcRenderer.invoke('asr-runtime-install'),
