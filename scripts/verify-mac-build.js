@@ -132,7 +132,6 @@ function checkApp(app, label) {
   const binaries = [
     ['main executable', exe],
     ['platform helper', path.join(res, 'helper', 'voxden-helper')],
-    ['7za', path.join(res, 'pack-tools', '7za')],
   ];
   for (const [name, file] of binaries) {
     if (!check(name + ' exists', fs.existsSync(file), path.relative(app, file))) continue;
@@ -152,9 +151,10 @@ function checkApp(app, label) {
     const size = exists && fs.statSync(p).isFile() ? mb(fs.statSync(p).size) : exists ? 'dir' : '';
     check('Resources/' + rel, exists, size);
   }
-  for (const rel of ['app.asar', path.join('sidecar', 'transcribe.py'), 'app-update.yml', 'icon.icns']) {
+  for (const rel of ['app.asar', 'app-update.yml', 'icon.icns']) {
     check('Resources/' + rel, fs.existsSync(path.join(res, rel)));
   }
+  check('no Python sidecar ships anymore', !fs.existsSync(path.join(res, 'sidecar')));
   for (const rel of [path.join('scripts', 'win32.ps1'), path.join('scripts', 'correction-watch.ps1'), path.join('pack-tools', '7za.exe')]) {
     check('no Windows-only Resources/' + rel, !fs.existsSync(path.join(res, rel)));
   }
@@ -164,69 +164,57 @@ function checkApp(app, label) {
 }
 
 function checkRuntime(res) {
-  section('bundled speech runtime');
-  const dir = path.join(res, 'speech-runtime');
-  const manifestPath = path.join(dir, 'vell-asr-runtime.json');
-  if (!check('runtime manifest present', fs.existsSync(manifestPath))) return;
-  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')).runtime;
-  console.log('    ' + JSON.stringify({ id: manifest.id, asset: manifest.asset, python: manifest.python, pythonVersion: manifest.pythonVersion, pythonBuild: manifest.pythonBuild, size: manifest.size, files: manifest.files }));
-  const zip = path.join(dir, manifest.asset);
-  if (!check('runtime archive present', fs.existsSync(zip), manifest.asset)) return;
-  check('runtime archive size matches the manifest', fs.statSync(zip).size === manifest.size, mb(fs.statSync(zip).size));
-  check('runtime archive sha256 matches the manifest', sha256File(zip) === manifest.sha256);
-  check('runtime is the macOS arm64 build', manifest.platform === 'darwin' && manifest.arch === ARCH);
-  const listing = run('unzip', ['-Z1', zip]).out.split('\n');
-  check('runtime carries ' + manifest.python, listing.some((n) => n === manifest.python || n === './' + manifest.python));
-  return { dir, manifest };
+  section('bundled Voz runtime (onnxruntime-node unpacked beside the asar)');
+  const binding = path.join(res, 'app.asar.unpacked', 'node_modules', 'onnxruntime-node', 'bin', 'napi-v6', 'darwin', 'arm64', 'onnxruntime_binding.node');
+  if (!check('unpacked onnxruntime binding present', fs.existsSync(binding), binding)) return;
+  const a = archs(binding);
+  check('binding is ' + ARCH, a.split(/\s+/).includes(ARCH), a);
+  return { dir: res };
 }
 
-// The first-run install exactly as the app does it: AsrRuntimeManager unpacks
-// the bundled archive with src/zip.js, restores the execute bits and runs the
-// same import check main.js passes it. Then the packaged sidecar is asked what
-// it can run on that interpreter.
-async function installRuntime(res, bundled) {
-  section('first-run speech engine install from the bundled archive');
-  const { AsrRuntimeManager } = require('../src/asr-runtime');
-  const root = path.join(EXTRACT, 'asr-runtime');
-  fs.rmSync(root, { recursive: true, force: true });
-  const validate = (python) => {
-    const r = run(python, ['-I', '-c', 'import faster_whisper, onnx_asr; from qwen_asr import Qwen3ASRModel']);
-    if (r.code !== 0) throw new Error(r.all.trim().split('\n').slice(-3).join(' | '));
-  };
-  const manager = new AsrRuntimeManager({ root, bundledRoot: bundled.dir, validateRuntime: async (python) => validate(python) });
-  const started = Date.now();
-  let installed = null;
+function checkVozProvider(res) {
+  section('Voz provider in the bundle (loads without downloading a model)');
+  const unpacked = path.join(res, 'app.asar.unpacked', 'node_modules');
+  const ortPkgPath = path.join(unpacked, 'onnxruntime-node', 'package.json');
+  if (!check('unpacked onnxruntime-node present', fs.existsSync(ortPkgPath), ortPkgPath)) return;
   try {
-    installed = (await manager.install()).installed;
+    const ortPkg = JSON.parse(fs.readFileSync(ortPkgPath, 'utf8'));
+    check('unpacked onnxruntime matches the repo dependency',
+      ortPkg.version === require('../package.json').dependencies['onnxruntime-node'].replace(/^[^\d]*/, ''),
+      ortPkg.version);
+  } catch (e) {
+    check('unpacked onnxruntime package.json parses', false, String(e && e.message || e));
+  }
+}
+
+// Voz ships no Python runtime and no sidecar: the "install" is the provider
+// fetching its own ~409MB bundle on first setup. What the bundle must prove
+// is narrower: onnxruntime-node is unpacked beside the asar (native bindings
+// cannot load from inside an asar), the binding is arm64, and the Voz SDK +
+// model manager resolve from the packaged app.
+async function installRuntime(res, bundled) {
+  section('Voz bundle install path (no Python, no sidecar)');
+  check('no bundled speech-runtime dir ships anymore',
+    !require('fs').existsSync(require('path').join(res, 'speech-runtime')));
+  const { VozModelManager } = require('../src/voz-model');
+  let manager = null;
+  try {
+    manager = new VozModelManager({ dataDir: require('path').join(EXTRACT, 'voz-data') });
+    pass('voz-model manager loads from the repo (same code as the bundle)');
   } catch (err) {
-    fail('the app installs its bundled speech engine', err.message);
+    fail('voz-model manager loads from the repo (same code as the bundle)', String(err && err.message || err));
     return;
   }
-  pass('the app installs its bundled speech engine', ((Date.now() - started) / 1000).toFixed(1) + ' s, ' + installed.pythonPath.slice(root.length));
-  const python = installed.pythonPath;
-  const a = archs(python);
-  check('runtime python is ' + ARCH, a.split(/\s+/).includes(ARCH), a);
-  console.log('    file: ' + run('file', ['-b', python]).out.trim());
-  show('codesign -dv bin/python3.12', run('codesign', ['-dv', python]).all);
-  const v = run('codesign', ['--verify', '--strict', python]);
-  check('runtime python has a valid signature (Apple Silicon runs nothing else)', v.code === 0, v.all.trim());
-  const ver = run(python, ['-I', '-c', 'import platform, sys; print(platform.machine(), sys.version.split()[0])']);
-  check('runtime python runs', ver.code === 0, ver.all.trim());
-  for (const engine of ['parakeet', 'whisper']) {
-    // The probe main.js runs (startSidecar), with the environment it sets.
-    const sidecar = path.join(res, 'sidecar', 'transcribe.py');
-    const r = run(python, [sidecar, '--check'], {
-      env: Object.assign({}, process.env, {
-        VOXDEN_ASR_ENGINE: engine, PYTHONNOUSERSITE: '1', PYTHONUTF8: '1', PYTHONPATH: path.dirname(sidecar),
-        HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1', VOXDEN_OFFLINE: '1', HF_HUB_DISABLE_XET: '1',
-      }),
-    });
-    let parsed = null;
-    try { parsed = JSON.parse(r.out.trim().split('\n').pop()); } catch (_) {}
-    check('the packaged sidecar can run ' + engine + ' on it', r.code === 0 && parsed && parsed.ok === true,
-      parsed ? JSON.stringify({ ok: parsed.ok, engine: parsed.engine, device: parsed.device, warning: parsed.warning || '' }) : r.all.trim().slice(-300));
+  const snap = manager.snapshot();
+  check('Voz snapshot reports not-installed before first download',
+    snap && snap.id === 'voz' && snap.installed === false, JSON.stringify(snap));
+  check('Voz advertises its ~409MB download size',
+    Number(snap.downloadBytes) > 300e6 && Number(snap.downloadBytes) < 600e6, String(snap.downloadBytes));
+  const binding = require('path').join(res, 'app.asar.unpacked', 'node_modules', 'onnxruntime-node', 'bin', 'napi-v6', 'darwin', 'arm64', 'onnxruntime_binding.node');
+  if (check('unpacked onnxruntime binding present (install-time load path)', require('fs').existsSync(binding), binding)) {
+    const v = run('codesign', ['--verify', '--strict', binding]);
+    check('onnxruntime binding has a valid signature', v.code === 0, v.all.trim().split('\n').pop());
   }
-  fs.rmSync(root, { recursive: true, force: true });
 }
 
 async function main() {

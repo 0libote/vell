@@ -2,44 +2,21 @@
 
 // What this machine actually needs to download, and what is merely on offer.
 //
-// Setup used to be all-or-nothing: SpeechModelsManager.install() took no
-// argument and fetched every pack that was not present, and setupDictation
-// called it alongside the Whisper download unconditionally. A first-run user
-// was told "up to 11.0 GB" before they had dictated a word, and most of it was
-// insurance:
-//
-//   Whisper large-v3        3.10 GB   only if you pick Whisper
-//   Qwen3-ASR 1.7B          4.70 GB   only if you pick Qwen
-//   Parakeet TDT int8       0.66 GB   the CPU fast path
-//   Parakeet TDT float32    2.51 GB   the DirectML fast path
-//
-// The two Parakeet packs are the same 0.6B model at two precisions and exactly
-// one of them ever loads: parakeet_quantization() in the sidecar picks int8 on
-// the CPU and float32 on a GPU. On the runtime Voxden ships -- ONNX Runtime's
-// DirectML build -- there is no CUDA execution provider at all, so the float32
-// weights are reachable only when the user has explicitly chosen the AMD or
-// Intel processor. Fetching them on every install bought nothing.
+// Vell ships one engine, Desert Ant Voz, whose ~409MB bundle the provider
+// fetches itself on install and caches afterwards. There are no packs to
+// choose between and no per-engine downloads to add up.
 //
 // This module is the single answer to "what does this configuration need".
-// It is pure: it takes the settings, the hardware, the sizes and what is
-// already on disk, and returns a plan. Nothing here downloads anything.
+// It is pure: it takes the settings, the sizes and what is already on disk,
+// and returns a plan. Nothing here downloads anything.
 
 const capabilities = require('./asr-capabilities');
 
-// Which engines are on offer, per platform.
-//
-// Windows offers all four, in the order asr-capabilities lists them.
-//
-// A Mac offers three. Qwen3-ASR is missing on purpose in this first build: it
-// is a 4.7 GB download to run on the CPU, because the GPU packs it depends on
-// are Windows PyTorch builds and there is no Mac equivalent to ship, and its
-// only Mac accelerator would be torch MPS, which nothing here has tested
-// against this model. Offering the largest download as the slowest engine is
-// how a first Mac user concludes the app does not work. Parakeet leads because
-// it is the one that is genuinely fast on an Apple CPU.
+// Which engines are on offer, per platform. Vell ships one: Desert Ant Voz,
+// on every platform it ships on.
 const PLATFORM_ENGINES = Object.freeze({
   win32: capabilities.ENGINE_IDS,
-  darwin: Object.freeze(['parakeet', 'whisper-turbo', 'whisper']),
+  darwin: capabilities.ENGINE_IDS,
 });
 
 // Anything that is not a platform this app ships on gets the full list rather
@@ -55,93 +32,40 @@ function engineOffered(engine, platform) {
 }
 
 const ENGINE_MODELS = Object.freeze({
-  whisper: 'whisper',
-  // Turbo is the one Whisper that is not on a Voxden release: it is an
-  // optional engine, so it downloads from the Hub through the same catalog
-  // Qwen and Parakeet use, and the hosted release stays a single model.
-  'whisper-turbo': 'whisper-turbo',
-  'qwen3-asr': 'qwen3-asr',
-  // Resolved by device, because the two Parakeet packs are alternatives.
-  parakeet: null,
+  // The provider fetches and caches its own ~409MB bundle on install (see
+  // src/voz-model.js); there is no dist pack for it.
+  voz: 'voz',
 });
 
 const COMPONENTS = Object.freeze({
-  whisper: Object.freeze({
-    id: 'whisper',
-    name: 'Whisper large-v3',
-    manager: 'model',
-    summary: 'Accurate fallback. Recognises every language Voxden offers.',
-  }),
-  'whisper-turbo': Object.freeze({
-    id: 'whisper-turbo',
-    name: 'Whisper large-v3 turbo',
-    manager: 'speech',
-    summary: 'Whisper accuracy at half the download, with the same vocabulary support.',
-  }),
-  'qwen3-asr': Object.freeze({
-    id: 'qwen3-asr',
-    name: 'Qwen3-ASR 1.7B',
-    manager: 'speech',
-    summary: 'Best with names and accents, and the strongest multilingual engine.',
-  }),
-  parakeet: Object.freeze({
-    id: 'parakeet',
-    name: 'Parakeet v3',
-    manager: 'speech',
-    summary: 'Fast multilingual dictation on the CPU.',
-  }),
-  'parakeet-fp32': Object.freeze({
-    id: 'parakeet-fp32',
-    name: 'Parakeet v3 (GPU)',
-    manager: 'speech',
-    summary: 'Fast multilingual dictation on an AMD or Intel GPU.',
+  voz: Object.freeze({
+    id: 'voz',
+    name: 'Voz',
+    manager: 'provider',
+    summary: 'Desert Ant on-device speech model. Downloads once (~409 MB), then runs offline.',
   }),
 });
 
 const COMPONENT_IDS = Object.freeze(Object.keys(COMPONENTS));
 
-// Which Parakeet precision this configuration can actually load.
-//
-// Mirrors onnx_providers() and parakeet_quantization() in the sidecar: the
-// float32 weights are used only when a non-CPU execution provider is chosen,
-// and on the shipped DirectML runtime that means the user picked "AMD or Intel
-// GPU" by hand. Anything else -- auto, CUDA on a runtime with no CUDA provider,
-// or plain CPU -- loads the int8 build.
-function parakeetPackFor(device) {
-  return String(device || 'auto').trim().toLowerCase() === 'directml'
-    ? 'parakeet-fp32'
-    : 'parakeet';
+function modelForEngine(engine) {
+  const id = String(engine || 'voz').trim().toLowerCase();
+  return ENGINE_MODELS[id] || 'voz';
 }
 
-function modelForEngine(engine, device) {
-  const id = String(engine || 'whisper').trim().toLowerCase();
-  if (id === 'parakeet') return parakeetPackFor(device);
-  return ENGINE_MODELS[id] || 'whisper';
+// Single engine, single pack: nothing to choose between.
+function parakeetPackFor() {
+  return 'voz';
 }
 
-// Whether the fast English path is worth offering at all.
-//
-// It is a separate download rather than part of setup, so it only makes sense
-// to offer where it would actually be used: English dictation, on an engine
-// that is not already Parakeet.
-function fastPathOffered(engine, language) {
-  if (String(engine || '').trim().toLowerCase() === 'parakeet') return false;
-  return String(language || 'en').trim().toLowerCase() === 'en';
+// No faster path to offer: Voz is the whole pipeline.
+function fastPathOffered() {
+  return false;
 }
 
-// Whether the float32 Parakeet weights should be shown to this machine.
-//
-// Only once the hardware that can use them is both present and selected.
-// Offering 2.51 GB to somebody whose runtime will never load it is the
-// specific waste this whole module exists to stop.
-function gpuWeightsOffered(device, gpu) {
-  const chosen = String(device || 'auto').trim().toLowerCase();
-  if (chosen === 'directml') return true;
-  // Auto or CUDA never reach DirectML in the sidecar, so the weights are only
-  // worth mentioning as something the processor setting would unlock -- and
-  // only when there is a card to unlock it with.
-  const plan = gpu || {};
-  return chosen === 'auto' && plan.device === 'directml' && !!plan.vendor;
+// No GPU weights to show: Voz runs on the CPU through onnxruntime-node.
+function gpuWeightsOffered() {
+  return false;
 }
 
 function bytesFor(id, sizes) {
@@ -160,12 +84,11 @@ function bytesFor(id, sizes) {
 // one place the numbers live.
 function plan(options) {
   const opts = options || {};
-  const engine = String(opts.engine || 'whisper').trim().toLowerCase();
-  const device = String(opts.device || 'auto').trim().toLowerCase();
+  const engine = String(opts.engine || 'voz').trim().toLowerCase();
+  const device = 'cpu';
   const installed = opts.installed || {};
   const sizes = opts.sizes || {};
   const required = modelForEngine(engine, device);
-  const fastPack = parakeetPackFor(device);
 
   const items = [];
   for (const id of COMPONENT_IDS) {
@@ -177,19 +100,6 @@ function plan(options) {
     if (id === required) {
       role = 'required';
       reason = 'The engine you chose needs it.';
-    } else if (id === 'parakeet-fp32' && !gpuWeightsOffered(device, opts.gpu)) {
-      // Not merely optional -- not shown. The runtime cannot load it.
-      role = 'hidden';
-      reason = 'Only used when the processor is set to AMD or Intel GPU.';
-    } else if (id === fastPack && fastPathOffered(engine, opts.language)) {
-      role = 'optional';
-      reason = 'Adds a faster English path for short dictations.';
-    } else if (id === 'parakeet' || id === 'parakeet-fp32') {
-      role = 'hidden';
-      reason = 'The fast English path does not apply to this configuration.';
-    } else {
-      role = 'optional';
-      reason = 'Another engine you can switch to later.';
     }
 
     items.push({
@@ -216,9 +126,7 @@ function plan(options) {
     hidden: pick('hidden'),
     missing,
     items,
-    // What a first run has to fetch before dictation works. The runtime is not
-    // counted here: it ships inside the installer, and the caller adds it when
-    // it does not.
+    // What a first run has to fetch before dictation works.
     requiredBytes: sum(items.filter((i) => i.role === 'required' && !i.installed)),
     optionalBytes: sum(items.filter((i) => i.role === 'optional' && !i.installed)),
     ready: missing.length === 0,

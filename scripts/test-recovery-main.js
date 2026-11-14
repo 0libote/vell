@@ -107,7 +107,7 @@ async function main() {
     shelf = h.run('corpus.recoveries()');
     assert.strictEqual(shelf.length, 1, 'a clip left in the slot at launch is rescued');
     assert.strictEqual(shelf[0].source, 'crash');
-    assert.strictEqual(shelf[0].reason, 'Voxden closed before this dictation finished');
+    assert.strictEqual(shelf[0].reason, 'Vell closed before this dictation finished');
     const rescued = shelf[0].id;
 
     // --- the handlers --------------------------------------------------
@@ -226,7 +226,7 @@ async function main() {
     let crashed = h.run('corpus.recoveries()');
     assert.strictEqual(crashed.length, 1, 'a clip cut off mid-sentence is rescued at launch');
     assert.strictEqual(crashed[0].source, 'crash');
-    assert.strictEqual(crashed[0].reason, 'Voxden closed while you were dictating');
+    assert.strictEqual(crashed[0].reason, 'Vell closed while you were dictating');
     assert.strictEqual(Math.round(crashed[0].seconds), 6, 'with everything that was said');
     assert.strictEqual(h.run('corpus.hasLive()'), false, 'and nothing left live');
     h.run('corpus.clearRecoveries();');
@@ -238,7 +238,7 @@ async function main() {
     h.run('corpus.parkRetry(testAudio); mode = "idle"; retryEntryOwner = null; rescueUnfinishedClip();');
     const both = h.run('corpus.recoveries()');
     assert.strictEqual(both.length, 1, 'the two copies do not become two recoveries');
-    assert.strictEqual(both[0].reason, 'Voxden closed before this dictation finished');
+    assert.strictEqual(both[0].reason, 'Vell closed before this dictation finished');
     assert.strictEqual(h.run('corpus.hasLive()'), false, 'the partial copy is dropped');
     h.run('corpus.clearRecoveries(); overlayWin = null;');
 

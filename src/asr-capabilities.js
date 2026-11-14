@@ -1,115 +1,23 @@
 'use strict';
 
-// What each speech engine can actually do.
+// What the speech engine can actually do.
 //
-// This file exists because the pipeline used to accept a vocabulary request
-// and throw it away. src/main.js built a prompt out of the user's dictionary
-// and wrote it into every sidecar request; QwenBackend.transcribe opened with
-// `del prompt` and ParakeetBackend.transcribe with `del prompt, language`. The
-// terms a user had typed in by hand reached the model on exactly one of the
-// three engines, and nothing anywhere said so.
-//
-// The fix is not "wire the prompt into every backend" -- Parakeet genuinely
-// has no context input. The fix is to state, in one place, what each engine
-// honours, and to make every caller either use the stated mechanism or say out
+// Vell ships one engine: Desert Ant Voz. This file states, in one place, what
+// it honours, so every caller either uses the stated mechanism or says out
 // loud that it could not. Anything that silently drops a capability is a bug
 // against this file.
-//
-// The Python side has its own copy of the same table (ENGINE_CAPABILITIES in
-// sidecar/transcribe.py) because the sidecar must answer --check before any
-// JavaScript has run. scripts/test-asr-capabilities.js asserts the two agree.
 
 // Vocabulary mechanisms, by what the engine's own API calls them:
 //
-//   initial_prompt  faster-whisper. Text prepended to the decoder as if it had
-//                   already been transcribed. Whisper's prompt buffer is
-//                   n_text_ctx/2 - 1 = 223 tokens and the tail is what gets
-//                   dropped, so the budget below leaves headroom rather than
-//                   filling it exactly.
-//   context         qwen_asr >= 0.0.6. transcribe(audio, context=...) puts the
-//                   string in the system message of the chat template. This is
-//                   the mechanism Qwen3-ASR documents for contextual biasing,
-//                   and it takes far more text than Whisper's prompt.
-//   null            No context input at all. onnx-asr exposes recognize(path)
-//                   and nothing else; the Parakeet TDT graph has no biasing
-//                   entry point. Vocabulary for this engine has to be applied
-//                   after recognition, from the audio-derived transcript.
+//   null            No context input at all. Voz takes no vocabulary input on
+//                   the JS path yet, so terms are applied after recognition,
+//                   from the audio-derived transcript.
 const ENGINE_CAPABILITIES = Object.freeze({
-  whisper: Object.freeze({
-    id: 'whisper',
-    vocabulary: Object.freeze({
-      supported: true,
-      mechanism: 'initial_prompt',
-      maxTerms: 48,
-      maxTokens: 180,
-      note: 'Whisper takes vocabulary as an initial prompt, capped near 200 tokens.',
-    }),
-    // Whisper large-v3 recognises about a hundred languages. This is the
-    // intersection Vell offers, which is what routing may rely on.
-    languages: Object.freeze(['en', 'hi', 'de', 'fr', 'es', 'pt', 'it', 'nl']),
-    autoDetectLanguage: true,
-    segments: true,
-    // avg_logprob and no_speech_prob per segment. This is the only engine that
-    // reports anything about its own confidence, which is why uncertain-span
-    // rechecking is gated on it.
-    confidence: true,
-    timestamps: true,
-  }),
-  // Turbo is large-v3 with a four-layer decoder in place of thirty-two. It is
-  // the same CTranslate2 runtime, the same prompt buffer and the same segment
-  // fields, so every capability below is Whisper's -- the difference is size
-  // and decode speed, which are not capabilities.
-  'whisper-turbo': Object.freeze({
-    id: 'whisper-turbo',
-    vocabulary: Object.freeze({
-      supported: true,
-      mechanism: 'initial_prompt',
-      maxTerms: 48,
-      maxTokens: 180,
-      note: 'Whisper takes vocabulary as an initial prompt, capped near 200 tokens.',
-    }),
-    languages: Object.freeze(['en', 'hi', 'de', 'fr', 'es', 'pt', 'it', 'nl']),
-    autoDetectLanguage: true,
-    segments: true,
-    confidence: true,
-    timestamps: true,
-  }),
-  'qwen3-asr': Object.freeze({
-    id: 'qwen3-asr',
-    vocabulary: Object.freeze({
-      supported: true,
-      mechanism: 'context',
-      maxTerms: 96,
-      maxTokens: 600,
-      note: 'Qwen3-ASR takes vocabulary as a context system message.',
-    }),
-    languages: Object.freeze(['en', 'hi', 'de', 'fr', 'es', 'pt', 'it', 'nl']),
-    autoDetectLanguage: true,
-    segments: false,
-    confidence: false,
-    // Only with a forced aligner loaded, which Voxden does not ship.
-    timestamps: false,
-  }),
-  parakeet: Object.freeze({
-    id: 'parakeet',
-    vocabulary: Object.freeze({
-      supported: false,
-      mechanism: null,
-      maxTerms: 0,
-      maxTokens: 0,
-      note: 'Parakeet has no context input; vocabulary is applied after recognition.',
-    }),
-    languages: Object.freeze(["en","bg","hr","cs","da","nl","et","fi","fr","de","el","hu","it","lv","lt","mt","pl","pt","ro","sk","sl","es","sv","ru","uk"]),
-    autoDetectLanguage: true,
-    segments: true,
-    confidence: false,
-    timestamps: true,
-  }),
-  // Desert Ant Voz (Parakeet TDT 0.6B v3, on-device). Planned primary engine.
-  // 337MB, 25 languages, word timestamps at 80ms resolution. No language
-  // detection — pair with Ear or an explicit language choice. Vocabulary
-  // biasing is not available on the JS path yet, so terms go via repair.
-  // Hidden / non-default until the worker lands; see docs/DESERT-ANT.md.
+  // Desert Ant Voz (Parakeet TDT 0.6B v3, on-device). Vell's only engine.
+  // ~409MB bundle, 25 languages, word timestamps at 80ms resolution. No
+  // language detection -- the first selected language is what the transcript
+  // is treated as. Vocabulary biasing is not available on the JS path yet,
+  // so terms go via repair.
   voz: Object.freeze({
     id: 'voz',
     vocabulary: Object.freeze({
@@ -131,7 +39,7 @@ const ENGINE_IDS = Object.freeze(Object.keys(ENGINE_CAPABILITIES));
 
 function normalizeEngine(value) {
   const id = String(value || '').trim().toLowerCase();
-  return Object.prototype.hasOwnProperty.call(ENGINE_CAPABILITIES, id) ? id : 'whisper';
+  return Object.prototype.hasOwnProperty.call(ENGINE_CAPABILITIES, id) ? id : 'voz';
 }
 
 function capabilitiesFor(engine) {
@@ -177,34 +85,20 @@ function vocabularyRoute(engine, termCount) {
 
 // Auto and Accurate must keep a vocabulary-capable primary. Explicit Fast is
 // the one setting that is allowed to trade in-model biasing for speed.
-function shouldRequireInModelVocabulary(requestedQuality) {
-  return String(requestedQuality || '').trim().toLowerCase() !== 'fast';
+// No in-model vocabulary to require: Voz has no context input, so terms
+// always go via repair.
+function shouldRequireInModelVocabulary() {
+  return false;
 }
 
 // Whether a fast-path swap is allowed to happen for this request.
 //
-// The old prefersFastAsr sent an "accurate" dictation to Parakeet whenever
-// Whisper was stuck on the CPU. That is a good trade for speed and a bad one
-// for a user whose dictionary is the reason they asked for accuracy: the
-// request was accepted and the terms were dropped on the floor.
-//
-// Now the swap still happens -- Parakeet is several times faster and the
-// latency is real -- but the loss is named. Callers that must not lose
-// in-model biasing pass requireInModelVocabulary and get the primary back.
-//
-// `termCount` is counted before any engine-specific prompt is built. Deciding
-// the engine from an already-empty Parakeet prompt is how Auto-with-a-
-// dictionary used to throw the whole list away and then stay on Parakeet
-// because the sidecar only bounced back to Qwen when it saw a nonempty prompt.
+// There is only one engine and no faster path to swap to.
 function planRoute(options) {
   const opts = options || {};
   const primary = normalizeEngine(opts.engine);
-  const fast = opts.fastEngine ? normalizeEngine(opts.fastEngine) : null;
   const language = String(opts.language || 'en').trim().toLowerCase();
   const termCount = Math.max(0, Number(opts.termCount) || 0);
-  const quality = String(opts.quality || '').trim().toLowerCase();
-  const device = String(opts.device || '').trim().toLowerCase();
-  const requireInModel = !!opts.requireInModelVocabulary;
 
   const plan = {
     engine: primary,
@@ -220,37 +114,10 @@ function planRoute(options) {
     plan.degraded = true;
     plan.reason = engineLabel(primary) + ' does not recognise this language.';
   }
-
-  const wantsFast = quality === 'fast'
-    || (quality === 'accurate' && device === 'cpu' && opts.preferFastOnCpu !== false);
-  if (!fast || fast === primary || !wantsFast) return plan;
-  if (!supportsLanguage(fast, language)) return plan;
-  if (requireInModel && termCount && !supportsVocabulary(fast)) {
-    plan.reason = 'Kept ' + engineLabel(primary) + ' so your dictionary reaches the model.';
-    return plan;
-  }
-
-  plan.engine = fast;
-  plan.fallbackFrom = primary;
-  plan.vocabularyVia = vocabularyRoute(fast, termCount);
-  if (termCount && !supportsVocabulary(fast) && supportsVocabulary(primary)) {
-    plan.lostCapabilities.push('vocabulary:in-model');
-    plan.degraded = true;
-    plan.reason = engineLabel(fast) + ' has no context input, so your dictionary is '
-      + 'applied to the transcript instead of to the model.';
-  } else if (!plan.reason) {
-    plan.reason = quality === 'fast'
-      ? engineLabel(fast) + ' was used for speed.'
-      : engineLabel(fast) + ' was used because ' + engineLabel(primary) + ' has no GPU here.';
-  }
   return plan;
 }
 
 const ENGINE_LABELS = Object.freeze({
-  whisper: 'Whisper',
-  'whisper-turbo': 'Whisper turbo',
-  'qwen3-asr': 'Qwen3-ASR',
-  parakeet: 'Parakeet',
   voz: 'Voz',
 });
 
@@ -267,9 +134,7 @@ function describeRoute(plan, options) {
   const parts = [engineLabel(p.engine)];
   if (opts.device) parts.push('on the ' + opts.device);
   let text = parts.join(' ');
-  if (p.vocabularyVia === 'context' || p.vocabularyVia === 'initial_prompt') {
-    text += ' · dictionary sent to the model';
-  } else if (p.vocabularyVia === 'repair') {
+  if (p.vocabularyVia === 'repair') {
     text += ' · dictionary applied after recognition';
   }
   if (p.reason) text += ' · ' + p.reason;
@@ -281,18 +146,8 @@ function describeRoute(plan, options) {
 function summarizeRoute(plan, options) {
   const opts = options || {};
   const p = plan || {};
-  let name = engineLabel(p.engine);
-  if (String(opts.quality || '').trim().toLowerCase() === 'fast'
-      && normalizeEngine(p.engine) === 'parakeet') {
-    name += ' Fast';
-  }
+  const name = engineLabel(p.engine);
   const via = p.vocabularyVia;
-  if (via === 'context' || via === 'initial_prompt') {
-    const n = Number(opts.termsSent) || 0;
-    return n > 0
-      ? name + ' · dictionary sent to the model · ' + n + (n === 1 ? ' term' : ' terms')
-      : name + ' · dictionary sent to the model';
-  }
   if (via === 'repair') return name + ' · dictionary applied after recognition';
   return name;
 }

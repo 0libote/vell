@@ -39,6 +39,10 @@ async function main() {
     const full = fixture(1205);
     const file = h.run('HIST_FILE');
     h.context.clip = wav();
+    // Retention pruning only applies when recordings are kept (the default is
+    // off); the opt-out path is covered separately below. Persist it so the
+    // loadStores() calls below do not reset it.
+    h.run('settings.keepRecordings = true; saveSettings();');
     h.run(`dictionary.phrases = [{from:'voxx',to:'Voxden',kind:'word',source:'learned'}];
       dictionary.pending = [{from:'pending',to:'Pending'}]; saveDict();
       corpus.park(clip); corpus.claim('synthetic-1204');
@@ -119,7 +123,7 @@ async function main() {
     assert(!h.run('history.cleanupPending'));
     assert(!fs.existsSync(path.join(audioRoot, 'recordings', oldest + '.wav')));
     assert.strictEqual(h.run('snapshot().usageStats.dictations'), 1207);
-    h.run('var finishRetentionRetry; sidecarTranscribe = () => new Promise(resolve => { finishRetentionRetry = resolve; });');
+    h.run('var finishRetentionRetry; vozTranscribe = () => new Promise(resolve => { finishRetentionRetry = resolve; });');
     const retry = h.run("retryEntry('synthetic-2')");
     await h.handlers.get('history-edit')(null, 'synthetic-2', 'A correction made while retry was running.');
     h.run("finishRetentionRetry('A stale recognition result');");

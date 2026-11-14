@@ -1,8 +1,7 @@
 'use strict';
 
-// electron-builder copies extraResources with their source permissions, and the
-// 7zip-bin package ships its macOS binary without the execute bit. The packaged
-// app would refuse to spawn it, so the bit is set here once per build.
+// electron-builder copies extraResources with their source permissions; the
+// mac helper binary needs the execute bit, so it is set here once per build.
 //
 // The bundle is then signed ad hoc. electron-builder 25 only signs with a real
 // identity: with CSC_IDENTITY_AUTO_DISCOVERY=false and none configured it logs
@@ -45,7 +44,7 @@ module.exports = async function afterPack(context) {
   const app = context.packager.appInfo.productFilename + '.app';
   const appPath = path.join(context.appOutDir, app);
   const resources = path.join(appPath, 'Contents', 'Resources');
-  const binaries = [path.join(resources, 'pack-tools', '7za'), path.join(resources, 'helper', 'voxden-helper')];
+  const binaries = [path.join(resources, 'helper', 'voxden-helper')];
   for (const file of binaries) {
     if (!fs.existsSync(file)) throw new Error('after-pack: ' + file + ' is missing');
     fs.chmodSync(file, 0o755);

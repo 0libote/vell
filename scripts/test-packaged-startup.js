@@ -127,13 +127,12 @@ app.whenReady().then(async () => {
   assert.ok(releaseIds.length > 0, 'the running release has highlights');
   assert.deepStrictEqual(state.notifications.map(row => row.id).sort(), releaseIds, 'real startup delivers the release highlights');
   assert.strictEqual(state.notificationsUnread, releaseIds.length, 'real startup lights the bell for new highlights');
-  assert.strictEqual(state.engineStatus, 'unavailable');
-  assert.strictEqual(state.asrRuntime.installed, false);
+  assert.strictEqual(state.engineStatus, 'missing');
+  assert.strictEqual(state.asrRuntime.installed, true);
   assert.strictEqual(state.asrRuntimeWouldHelp, true);
-  assert.strictEqual(state.qwenAccel.backend, 'cpu');
-  assert.notStrictEqual(state.qwenAccel.uiStatus, 'verified');
-  assert.strictEqual(state.qwenCudaPack.installed, false);
-  assert.strictEqual(state.qwenRocmPack.installed, false);
+  assert.strictEqual(state.asrModel.installed, false);
+  assert.strictEqual(state.asrEngine, 'voz');
+  assert.deepStrictEqual(state.availableEngines, ['voz']);
   if (existingProfile) {
     assert.strictEqual(state.entries.length, 1000, 'existing history is capped on real startup');
     assert.strictEqual(state.usageStats.dictations, existingHistory.length, 'lifetime total survives real migration');

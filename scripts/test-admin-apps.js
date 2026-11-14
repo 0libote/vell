@@ -106,12 +106,12 @@ async function mainTests() {
       + 'admin app (a terminal, an installer) gets a note only when a paste into it is refused');
     assert.deepStrictEqual(adminNotes(h), [
       { id: 'admin-app:game.exe', kind: 'paste', title: 'Game.exe runs as administrator',
-        body: 'Windows does not let Voxden hear its shortcuts or type into it while it is in front, '
+        body: 'Windows does not let Vell hear its shortcuts or type into it while it is in front, '
           + 'so a dictation into it waits on the clipboard for your Ctrl+V. '
           + 'To dictate into it as usual, open Settings, System, and choose Restart as administrator.',
         action: { settings: 'system' } },
       { id: 'admin-app:tool.exe', kind: 'paste', title: 'Tool.exe runs as administrator',
-        body: 'Windows does not let Voxden hear its shortcuts or type into it while it is in front, '
+        body: 'Windows does not let Vell hear its shortcuts or type into it while it is in front, '
           + 'so a dictation into it waits on the clipboard for your Ctrl+V. '
           + 'To dictate into it as usual, open Settings, System, and choose Restart as administrator.',
         action: { settings: 'system' } },

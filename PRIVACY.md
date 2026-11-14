@@ -24,10 +24,10 @@ Vell keeps these on your computer, in its own data folder, and nowhere else:
 
 ## Model downloads
 
-Speech models, the Python speech runtime and GPU packs are downloaded only
-when you choose them in Settings → Speech engines, from GitHub releases and
-Hugging Face. Each download is hash-verified. No other network access happens
-without you asking for it. See `docs/NETWORK.md` for the full inventory.
+The Voz speech model (~409 MB) is downloaded once, when you set up dictation,
+from Hugging Face via the Desert Ant Labs SDK, and cached on this PC. No other
+network access happens without you asking for it. See `docs/NETWORK.md` for
+the full inventory.
 
 ## What Vell does not do
 
@@ -36,14 +36,13 @@ without you asking for it. See `docs/NETWORK.md` for the full inventory.
 - No analytics or tracking of what you type or where you dictate.
 - No reading of the apps you dictate into beyond placing the text there.
 
-## Desert Ant Labs (future)
+## Desert Ant Labs
 
-Vell's planned on-device engine (Voz) has not been integrated yet, so this
-build sends nothing to Desert Ant Labs. When Voz ships, its SDK reports a
-minimal device count (monthly active devices) as its licence requires: an
-SDK-generated identifier, no audio, no text, no account linkage. That
-telemetry cannot be disabled, and it will be disclosed here before any Voz
-build ships. Full terms: https://license.desertant.com/1.0
+Vell's speech engine is Voz by Desert Ant Labs (Source-Available License 1.0:
+https://license.desertant.com/1.0, free below 100,000 monthly active devices
+per platform). Its SDK reports a minimal device count (monthly active
+devices) as the licence requires: an SDK-generated identifier, no audio, no
+text, no account linkage. That telemetry cannot be disabled.
 
 ## Deleting your data
 

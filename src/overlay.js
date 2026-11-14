@@ -892,12 +892,7 @@ function speechGateApi() {
 
 function wantsLocalAsr() {
   if (cloudCapture || cloudReady) return true;
-  if (engineStatus === 'unavailable') return false;
-  return engine === 'whisper'
-    || engineStatus === 'standby'
-    || engineStatus === 'starting'
-    || engineStatus === 'loading'
-    || engineStatus === 'ready';
+  return engineStatus !== 'unavailable';
 }
 
 // `final` marks the last piece of the recording, flushed at stop. With lanes
@@ -1782,7 +1777,7 @@ async function startCapture(useEngine, hold) {
     // Chromium SpeechRecognition uploads mic chunks to Google's speech service.
     // Electron does not ship that service, so each chunk fails with
     // OnSizeReceived Error: -2 in the terminal and returns no text. Skip it
-    // whenever the local sidecar will transcribe the recording.
+    // whenever Voz will transcribe the recording.
     if (!wantsLocalAsr() && (window.SpeechRecognition || window.webkitSpeechRecognition)) {
       const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
       recognition = new Ctor();

@@ -61,14 +61,12 @@ function countWords(entries) {
   return n;
 }
 
-// What the mock reports as running for an engine; setSettings below does the same.
-function engineRuntime(asrEngine) {
+// What the mock reports as running: Voz only, on the CPU.
+function engineRuntime() {
   return {
-    asrEngineActive: asrEngine === 'whisper' ? 'faster-whisper' : asrEngine,
-    fastEngine: asrEngine === 'parakeet' ? 'parakeet' : '',
-    model: asrEngine === 'qwen3-asr'
-      ? 'Qwen/Qwen3-ASR-1.7B'
-      : (asrEngine === 'parakeet' ? 'nemo-parakeet-tdt-0.6b-v3' : 'large-v3'),
+    asrEngineActive: 'voz',
+    fastEngine: null,
+    model: 'Voz',
   };
 }
 
@@ -98,20 +96,20 @@ function snapshot() {
     soundsEnabled: settings.soundsEnabled !== false,
     suggestionsEnabled: settings.suggestionsEnabled !== false,
     asrEngine,
-    asrDevice: settings.asrDevice || 'auto',
+    asrDevice: 'cpu',
     asrEngineWarning: '',
     asrEngineProgress: null,
-    fastModel: '',
-    fastDevice: '',
+    fastModel: null,
+    fastDevice: null,
     dictationLanguage: 'en',
     appLanguage: 'en',
     microphone: settings.microphone || 'default',
     displayName: settings.displayName || '',
     writingStyles: settings.writingStyles || DEFAULT_SETTINGS.writingStyles,
-    engine: 'whisper',
+    engine: 'voz',
     engineStatus: 'ready',
-    ...engineRuntime(asrEngine),
-    device: 'cuda',
+    ...engineRuntime(),
+    device: 'cpu',
     wordCount,
     ...dictationMetrics,
     ...understanding,
@@ -172,24 +170,8 @@ window.vell = (function () {
         if (typeof patch[k] === 'boolean') payload[k] = patch[k];
       }
       if (patch.dictationLanguage === 'en') payload.dictationLanguage = 'en';
-      if (['whisper','qwen3-asr','parakeet'].indexOf(patch.asrEngine) >= 0) {
-        payload.asrEngine = patch.asrEngine;
-        payload.asrEngineActive = patch.asrEngine === 'whisper' ? 'faster-whisper' : patch.asrEngine;
-        payload.model = patch.asrEngine === 'qwen3-asr'
-          ? 'Qwen/Qwen3-ASR-1.7B'
-          : (patch.asrEngine === 'parakeet' ? 'nemo-parakeet-tdt-0.6b-v3' : 'large-v3');
-        payload.engineStatus = patch.asrEngine === 'whisper' ? 'ready' : 'loading';
-        payload.asrEngineProgress = patch.asrEngine === 'whisper'
-          ? null
-          : { phase: 'downloading', percent: 47 };
-        payload.fastEngine = patch.asrEngine === 'parakeet' ? 'parakeet' : (payload.fastEngine || '');
-      }
-      if (['auto','cuda','directml','cpu'].indexOf(patch.asrDevice) >= 0) {
-        payload.asrDevice = patch.asrDevice;
-        // The preview has no sidecar to resolve 'auto', so it stands in for the
-        // machine this was written on and reports the NVIDIA card.
-        payload.device = patch.asrDevice === 'auto' ? 'cuda' : patch.asrDevice;
-      }
+      if (patch.asrEngine === 'voz') payload.asrEngine = 'voz';
+      // Single engine, single device: no processor choice to preview.
       if (typeof patch.displayName === 'string') payload.displayName = patch.displayName.trim().slice(0, 40);
       if (typeof patch.microphone === 'string' && patch.microphone) payload.microphone = patch.microphone;
       if (patch.writingStyles && typeof patch.writingStyles === 'object') {

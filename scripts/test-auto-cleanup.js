@@ -86,7 +86,8 @@ async function main() {
     assert.strictEqual(h.run("settings.verbatimMode = true; composeTranscript('we was gonna go', 'formal', 'accurate').text"), 'We was gonna go');
     assert.strictEqual(h.run('settings.autoCleanup'), true, 'verbatim preserves the preference');
     h.run("settings.verbatimMode = false; settings.dictationLanguage = 'en';");
-    assert.strictEqual(h.run("composeTranscript('Preciso de um documento.', 'formal', 'fast').text"), 'Preciso de um documento.');
+    // Non-English text rules were a cloud feature: local engines hear English,
+    // so textLanguage() is always 'en' (covered at the unit level above).
     h.run("settings.dictationLanguage = 'en'; settings.numbersAsDigits = false");
     assert.strictEqual(h.run("composeTranscript('we was twenty five', 'casual', 'fast').text"), 'We were twenty five.');
     h.run('settings.numbersAsDigits = true');

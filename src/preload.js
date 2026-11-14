@@ -59,7 +59,6 @@ contextBridge.exposeInMainWorld('vell', {
   loadApp: () => ipcRenderer.invoke('app-load'),
   historyStats: () => ipcRenderer.invoke('history-stats'),
   historyInsights: (options) => ipcRenderer.invoke('history-insights', options || {}),
-  refreshQwenAccelInfo: (kind) => ipcRenderer.invoke('qwen-accel-info', kind),
   previewStyle: (text, tone, clean = false) => {
     const sample = String(text || '').slice(0, 500);
     const key = JSON.stringify([sample, String(tone || ''), clean === true]);
@@ -106,13 +105,6 @@ contextBridge.exposeInMainWorld('vell', {
   removeAsrRuntime: () => ipcRenderer.invoke('asr-runtime-remove'),
   installSpeechModel: (id, options) => ipcRenderer.invoke('speech-model-install', id, options),
   removeSpeechModel: (id) => ipcRenderer.invoke('speech-model-remove', id),
-  installCudaPack: () => ipcRenderer.invoke('cuda-pack-install'),
-  cancelCudaPack: () => ipcRenderer.invoke('cuda-pack-cancel'),
-  removeCudaPack: () => ipcRenderer.invoke('cuda-pack-remove'),
-  installQwenAccel: (kind) => ipcRenderer.invoke('qwen-accel-install', kind),
-  cancelQwenAccel: (kind) => ipcRenderer.invoke('qwen-accel-cancel', kind),
-  removeQwenAccel: (kind) => ipcRenderer.invoke('qwen-accel-remove', kind),
-  retryQwenAccel: () => ipcRenderer.invoke('qwen-accel-retry'),
   restartAsAdmin: () => ipcRenderer.invoke('restart-as-admin'),
   readNotifications: () => ipcRenderer.invoke('notifications-read'),
   dismissNotification: (id) => ipcRenderer.invoke('notifications-dismiss', id),

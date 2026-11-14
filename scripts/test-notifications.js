@@ -6,8 +6,6 @@
 // src/announcements.js, so both are pinned here.
 
 const announcements = require('../src/announcements');
-const fs = require('fs');
-const path = require('path');
 
 let failed = 0;
 function check(name, got, expected) {
@@ -32,10 +30,6 @@ const T0 = 1_700_000_000_000;
 
 // Guard the real release catalog, not just delivery rules with invented rows.
 const releaseVersion = require('../package.json').version;
-const releaseRows = announcements.CATALOG.filter(row => row.since === releaseVersion);
-const releaseIds = releaseRows.map(row => row.id).sort();
-const releaseNotes = fs.readFileSync(path.join(__dirname, '../release-notes/current.md'), 'utf8');
-check('the running release has announcements', releaseRows.length > 0, true);
 check('catalog ids are unique', new Set(announcements.CATALOG.map(row => row.id)).size, announcements.CATALOG.length);
 // Retired rows described flow bars and a home robot that no longer exist. A
 // stored record of either id is skipped by list(), so they must stay out.
@@ -43,143 +37,33 @@ check('retired announcements stay retired',
   announcements.CATALOG.filter(row => ['workspace-2-1-0', 'flow-styles-2-1-0'].includes(row.id)).length, 0);
 check('a stored record of a retired announcement is not drawn',
   announcements.list({ seenVersion: '2.1.0', items: { 'flow-styles-2-1-0': { ts: T0 } } }), []);
-for (const row of releaseRows) {
-  check(row.id + ' uses the same words in release notes', releaseNotes.includes(row.body), true);
-}
+// The catalog is one evergreen welcome from 1.0.0: its words and its link are
+// the product, so both are pinned.
+const welcome = announcements.CATALOG.find(row => row.id === 'vell-local-1-0-0');
+check('the welcome highlight exists', !!welcome, true);
+check('the welcome highlight names Vell', welcome && welcome.title, 'Welcome to Vell');
+check('the welcome highlight opens Speech engines',
+  welcome && welcome.action && welcome.action.settings, 'speech-engines');
 for (const [label, state] of [
   ['fresh install', null],
-  ['upgrade from 1.0.22', { seenVersion: '1.0.22', items: {} }],
-  ['earlier local 2.1.0 build', { seenVersion: '2.1.0', items: {} }],
+  ['upgrade that cleared the welcome',
+    { seenVersion: '1.0.0', items: { 'vell-local-1-0-0': { ts: T0, read: true, cleared: true } } }],
+  ['earlier Voxden build', { seenVersion: '2.1.0', items: {} }],
 ]) {
   const delivered = announcements.deliver(state, { version: releaseVersion, now: T0 }).state;
-  // An upgrade also delivers releases skipped since the last installed build.
-  // A fresh install only needs the highlights for the version it is running.
-  const expectedIds = state ? announcements.CATALOG.filter(row =>
-    announcements.compareVersions(row.since, state.seenVersion) > 0
-    && announcements.compareVersions(row.since, releaseVersion) <= 0
-  ).map(row => row.id).sort() : releaseIds;
-  check(label + ' receives the applicable highlights', announcements.list(delivered).map(row => row.id).sort(), expectedIds);
-  check(label + ' has an unread badge', announcements.unreadCount(announcements.list(delivered)), expectedIds.length);
-  const clearedRelease = announcements.clearAll(delivered).state;
-  check(label + ' does not resurrect cleared highlights', announcements.list(announcements.deliver(clearedRelease, { version: releaseVersion, now: T0 + 1 }).state), []);
+  // 1.0.0 news is not news on the running build, and a cleared welcome stays
+  // cleared: the bell must never re-announce it.
+  check(label + ' is not told old news',
+    announcements.list(delivered).map(row => row.id), []);
+  check(label + ' has no unread badge',
+    announcements.unreadCount(announcements.list(delivered)), 0);
 }
-
-// A 2.1.1 rebuild adds four major highlights without replaying the Auto
-// cleanup announcement or any 2.1.0 news the user has already dismissed.
-const highlights211 = [
-  'auto-cleanup-2-1-1', 'flow-controls-2-1-1', 'flow-motion-2-1-1',
-  'flow-reliability-2-1-1', 'performance-2-1-1',
-].sort();
-check('2.1.1 groups the release into five major highlights',
-  announcements.CATALOG.filter(row => row.since === '2.1.1').map(row => row.id).sort(), highlights211);
-check('the original Auto cleanup announcement keeps its body',
-  announcements.CATALOG.find(row => row.id === 'auto-cleanup-2-1-1').body,
-  'Enable Auto cleanup in Writing style to fix common English grammar and punctuation mistakes while keeping your selected tone. No extra model download. It starts off and pauses in Verbatim mode.');
-
-const cleared210 = announcements.clearAll(
-  announcements.deliver(null, { version: '2.1.0', now: T0 }).state
-).state;
-const upgraded211 = announcements.deliver(cleared210, { version: '2.1.1', now: T0 + 1 });
-check('2.1.0 upgrade receives only the five new 2.1.1 highlights',
-  announcements.list(upgraded211.state).map(row => row.id).sort(), highlights211);
-check('2.1.0 upgrade has five unread highlights',
-  announcements.unreadCount(announcements.list(upgraded211.state)), 5);
-check('2.1.0 upgrade preserves every cleared older record',
-  Object.keys(cleared210.items).every(id =>
-    JSON.stringify(upgraded211.state.items[id]) === JSON.stringify(cleared210.items[id])), true);
-check('restarting the 2.1.0 upgrade does not deliver again',
-  announcements.deliver(upgraded211.state, { version: '2.1.1', now: T0 + 2 }).changed, false);
-
-const earlier211 = {
-  seenVersion: '2.1.1',
-  items: {
-    'auto-cleanup-2-1-1': { ts: T0, read: true, cleared: true },
-    'workspace-2-1-0': { ts: T0 - 1000, read: true, cleared: true },
-  },
-};
-const rebuilt211 = announcements.deliver(earlier211, { version: '2.1.1', now: T0 + 3 });
-const newRebuildIds = highlights211.filter(id => id !== 'auto-cleanup-2-1-1');
-check('an earlier 2.1.1 installation receives only the four added highlights',
-  announcements.list(rebuilt211.state).map(row => row.id).sort(), newRebuildIds);
-check('an earlier 2.1.1 installation has four unread highlights',
-  announcements.unreadCount(announcements.list(rebuilt211.state)), 4);
-check('same-version delivery preserves cleared Auto cleanup and older records',
-  Object.keys(earlier211.items).every(id =>
-    JSON.stringify(rebuilt211.state.items[id]) === JSON.stringify(earlier211.items[id])), true);
-check('same-version delivery does not backfill missing 2.1.0 news',
-  !!rebuilt211.state.items['capture-2-1-0'], false);
-check('restarting the 2.1.1 rebuild changes nothing',
-  announcements.deliver(rebuilt211.state, { version: '2.1.1', now: T0 + 4 }).changed, false);
-const clearedRebuildOne = announcements.clearOne(rebuilt211.state, 'performance-2-1-1').state;
-check('a dismissed rebuild highlight remains dismissed after restart',
-  announcements.list(announcements.deliver(clearedRebuildOne, { version: '2.1.1', now: T0 + 5 }).state)
-    .map(row => row.id).sort(), newRebuildIds.filter(id => id !== 'performance-2-1-1'));
-const clearedRebuildAll = announcements.clearAll(clearedRebuildOne).state;
-check('clearing all rebuilt 2.1.1 highlights survives another restart',
-  announcements.list(announcements.deliver(clearedRebuildAll, { version: '2.1.1', now: T0 + 6 }).state), []);
-
-// 2.1.2 announces history cleanup and the SmartScreen install steps alongside
-// the original flow bar fix. An existing installation receives each highlight
-// once, including a rebuild for users who already opened 2.1.2 and cleared the
-// flow bar announcement.
-const highlights212 = ['flow-input-2-1-2', 'history-retention-2-1-2', 'smartscreen-install-2-1-2'];
-check('2.1.2 carries the flow bar, history cleanup and SmartScreen highlights',
-  announcements.CATALOG.filter(row => row.since === '2.1.2').map(row => row.id).sort(), highlights212);
-check('the flow bar input highlight opens System settings',
-  announcements.CATALOG.find(row => row.id === 'flow-input-2-1-2').action.settings, 'system');
-const historyRetention = announcements.CATALOG.find(row => row.id === 'history-retention-2-1-2');
-check('the history cleanup highlight opens Dictation', historyRetention.action.view, 'dictation');
-check('the history cleanup notification does not disclose a numeric retention limit',
-  /\b(?:1[,.]?000|thousand)\b/i.test(historyRetention.title + ' ' + historyRetention.body), false);
-const cleared211 = announcements.clearAll(
-  announcements.deliver(null, { version: '2.1.1', now: T0 }).state
-).state;
-const upgraded212 = announcements.deliver(cleared211, { version: '2.1.2', now: T0 + 1 });
-check('2.1.1 upgrade receives only the three 2.1.2 highlights',
-  announcements.list(upgraded212.state).map(row => row.id).sort(), highlights212);
-check('2.1.1 upgrade preserves every cleared 2.1.1 record',
-  Object.keys(cleared211.items).every(id =>
-    JSON.stringify(upgraded212.state.items[id]) === JSON.stringify(cleared211.items[id])), true);
-check('restarting the 2.1.2 upgrade does not deliver again',
-  announcements.deliver(upgraded212.state, { version: '2.1.2', now: T0 + 2 }).changed, false);
-check('a 2.1.0 upgrade straight to 2.1.2 receives the 2.1.1 and 2.1.2 highlights',
-  announcements.list(announcements.deliver(cleared210, { version: '2.1.2', now: T0 + 3 }).state).map(row => row.id).sort(),
-  highlights211.concat(highlights212).sort());
-
-const earlier212 = {
-  seenVersion: '2.1.2',
-  items: {
-    'flow-input-2-1-2': { ts: T0, read: true, cleared: true },
-    'auto-cleanup-2-1-1': { ts: T0 - 1000, read: true, cleared: true },
-  },
-};
-const rebuilt212 = announcements.deliver(earlier212, { version: '2.1.2', now: T0 + 4 });
-check('an earlier 2.1.2 installation receives only the added history cleanup and SmartScreen highlights',
-  announcements.list(rebuilt212.state).map(row => row.id).sort(), ['history-retention-2-1-2', 'smartscreen-install-2-1-2']);
-check('the rebuilt 2.1.2 installation has two unread highlights',
-  announcements.unreadCount(announcements.list(rebuilt212.state)), 2);
-check('the 2.1.2 rebuild preserves cleared flow bar and older notifications',
-  Object.keys(earlier212.items).every(id =>
-    JSON.stringify(rebuilt212.state.items[id]) === JSON.stringify(earlier212.items[id])), true);
-check('the 2.1.2 rebuild does not backfill missing older news',
-  !!rebuilt212.state.items['performance-2-1-1'], false);
-check('restarting the 2.1.2 rebuild does not repeat the history cleanup announcement',
-  announcements.deliver(rebuilt212.state, { version: '2.1.2', now: T0 + 5 }).changed, false);
-const clearedHistory212 = announcements.clearOne(rebuilt212.state, 'history-retention-2-1-2').state;
-check('a cleared history cleanup announcement remains dismissed after restart',
-  announcements.list(announcements.deliver(clearedHistory212, { version: '2.1.2', now: T0 + 6 }).state)
-    .map(row => row.id), ['smartscreen-install-2-1-2']);
-
-for (const id of ['qwen-recommended', 'qwen-gpu-acceleration']) {
-  check(id + ' links to Speech engines', announcements.CATALOG.find(entry => entry.id === id).action.settings, 'speech-engines');
-}
-const muteOtherAudio = announcements.CATALOG.find(entry => entry.id === 'mute-other-audio-1-0-22') || {};
-check('1.0.22 announces muting other audio', muteOtherAudio.since, '1.0.22');
-check('1.0.22 audio announcement links to General', muteOtherAudio.action && muteOtherAudio.action.settings, 'general');
-check('1.0.19 recordings link to privacy', announcements.CATALOG.find(entry => entry.id === 'dictation-recordings').action.settings, 'privacy');
-check('1.0.19 settings split links to General', announcements.CATALOG.find(entry => entry.id === 'settings-split-1-0-19').action.settings, 'general');
-check('1.0.19 announces the retired local packs', !!announcements.CATALOG.find(entry => entry.id === 'local-correction-retired'), true);
-check('1.0.19 announces smoother startup', !!announcements.CATALOG.find(entry => entry.id === 'smoother-startup-1-0-19'), true);
+// ...but the build it shipped in delivers it once, and never again.
+const fresh100 = announcements.deliver(null, { version: '1.0.0', now: T0 }).state;
+check('a fresh 1.0.0 install hears the welcome',
+  announcements.list(fresh100).map(row => row.id), ['vell-local-1-0-0']);
+check('restarting the 1.0.0 install changes nothing',
+  announcements.deliver(fresh100, { version: '1.0.0', now: T0 + 1 }).changed, false);
 
 function ids(items) {
   return items.map((item) => item.id);

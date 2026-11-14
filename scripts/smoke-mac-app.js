@@ -171,9 +171,9 @@ async function main() {
       check('it runs as a packaged app', state && state.packaged === true);
       check('it knows it is on macOS', state && state.platform === 'darwin', state && state.platform);
       check('the default shortcut is Cmd+Shift+Space', state && state.shortcutLabel === 'Cmd+Shift+Space', state && state.shortcutLabel);
-      check('no Windows-only engine is offered', state && Array.isArray(state.availableEngines) && !state.availableEngines.includes('qwen3-asr'),
+      check('Voz is the only engine offered', state && Array.isArray(state.availableEngines) && state.availableEngines.join(',') === 'voz',
         state && JSON.stringify(state.availableEngines));
-      check('the speech engine ships inside the app', state && state.runtimeBundled === true);
+      check('no separate speech runtime ships (onnxruntime is inside the app)', state && state.asrRuntime && state.asrRuntime.installed === true);
       check('the Mac title bar makes room for the traffic lights', state && state.htmlPlatform === 'darwin' && state.titlebarPadding === '84px',
         state && state.htmlPlatform + ' ' + state.titlebarPadding);
       check('the Dock switch is hidden', state && state.taskbarRowShown === false);

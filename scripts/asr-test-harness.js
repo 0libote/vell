@@ -79,7 +79,7 @@ module.exports = function harness({ dialog, shell, clipboard, screen, createWrit
   run('initPaths(); loadStores();');
   return { root, handlers, ipcEvents, shortcuts, launches, timers, context, Process, run,
     close: () => closing || (closing = (async () => {
-      run("isQuitting = true; closeSidecarLog(); sidecarQueue.rejectAll(new Error('Test finished'))");
+      run("isQuitting = true;");
       for (const { proc } of launches) proc.kill();
       timers.clear();
       // end() does not wait for an asynchronously opened file to close. Keep

@@ -39,7 +39,6 @@ const harness = require('./asr-test-harness');
     await set({ spokenCorrections: true });
     assert.strictEqual(h.run('spokenCorrectionsAvailable()'), false, 'the harness runs as a packaged build');
     assert.strictEqual(h.run("composeTranscript(takenBack, 'casual', 'fast').text"), h.context.takenBack);
-    assert.strictEqual(h.run('takeBackWanted(takenBack)'), false);
     assert.strictEqual(h.run('snapshot().spokenCorrectionsAvailable'), false, 'and Settings hides the switch');
     await set({ spokenCorrections: false });
     // A development build, or VOXDEN_SPOKEN_CORRECTIONS=1, has them.
@@ -66,60 +65,13 @@ const harness = require('./asr-test-harness');
     assert.strictEqual(plain.spokenCorrections, undefined, 'an entry with nothing taken out says nothing');
     assert.strictEqual(plain.afterCorrections, undefined);
 
-    // With Voxden Cloud the model names what was taken back. Its pieces are
-    // checked and used; any other answer, or none, leaves the rules alone.
-    h.context.walked = "Okay, uh, so let's Uh walk into the Plane field. Uh. No, no, uh... Not in the plain field. Let's, uh... put it in the water.";
-    h.run(`
-      var takeBackCalls = []; var takeBackReply = null;
-      var savedPolishClient = polishClient; var savedSnapshot = accountManager.snapshot;
-      polishClient = { takeBack: async (text) => {
-        takeBackCalls.push(text);
-        if (takeBackReply instanceof Error) throw takeBackReply;
-        return takeBackReply;
-      } };
-      accountManager.snapshot = () => ({ signedIn: true, plan: 'pro' });
-    `);
-    const modelCompose = async (said) => {
-      h.context.said = said;
-      await h.run('modelTakeBack(said).then(answer => { lastTakeBack = answer; })'.replace('lastTakeBack', 'globalThis.lastTakeBack'));
-      return JSON.parse(h.run("JSON.stringify(composeTranscript(said, 'casual', 'fast', globalThis.lastTakeBack))"));
-    };
-    h.run(`takeBackReply = { remove: ["walk into the Plane field. Uh. No, no, uh... Not in the plain field. Let's, uh..."] }`);
-    const walked = await modelCompose(h.context.walked);
-    assert.strictEqual(walked.text, "Okay so let's put it in the water.", 'the model catches what the rules cannot');
-    assert.strictEqual(walked.meta.rawAsr, h.context.walked, 'what was said is still kept');
-    assert.deepStrictEqual(walked.meta.spokenCorrections, ["walk into the Plane field. Uh. No, no, uh... Not in the plain field. Let's, uh..."]);
-    h.run("takeBackReply = { remove: ['No, no,'] }");
-    assert.strictEqual((await modelCompose('No, no, you made it way too dark. Keep the old colors.')).text,
-      'No, no, you made it way too dark. Keep the old colors.', 'a piece that is not words taken back is not used');
-    h.run("takeBackReply = Object.assign(new Error('timed out'), { code: 'timeout' })");
-    assert.strictEqual((await modelCompose(h.context.takenBack)).text, 'The cat is running in the park.',
-      'a model that fails leaves the rules to it');
-    const calls = h.run('takeBackCalls.length');
-    await modelCompose('Please send the notes when we are done.');
-    assert.strictEqual(h.run('takeBackCalls.length'), calls, 'a dictation with no cue word is never sent');
-    h.run("accountManager.snapshot = () => ({ signedIn: true, plan: 'free' })");
-    await modelCompose(h.context.walked);
-    assert.strictEqual(h.run('takeBackCalls.length'), calls, 'nor one from a free account');
-    h.run("accountManager.snapshot = () => ({ signedIn: true, plan: 'pro' })");
-    await set({ spokenCorrections: false });
-    await modelCompose(h.context.walked);
-    assert.strictEqual(h.run('takeBackCalls.length'), calls, 'nor with the setting off');
-    await set({ spokenCorrections: true });
-    h.run('polishClient = savedPolishClient; accountManager.snapshot = savedSnapshot;');
-
+    // Model take-back was a cloud feature. Without it, the local rules above
+    // are the whole story: no model is ever asked.
     await set({ verbatimMode: true });
     assert.strictEqual(h.run("composeTranscript(sample, 'veryCasual', 'fast').text"), input);
     assert.strictEqual(h.run("composeTranscript(takenBack, 'casual', 'fast').text"), h.context.takenBack,
       'verbatim keeps every word, corrections too');
-    assert.strictEqual(await h.run('modelTakeBack(takenBack)'), null, 'and never asks the model');
     await set({ verbatimMode: false });
-    h.run("settings.cloudTranscription = true; accountManager.snapshot = function () { return { signedIn: true, plan: 'pro' }; };");
-    await set({ dictationLanguage: 'de' });
-    assert.strictEqual(h.run("composeTranscript('Er ist hier.', 'formal', 'accurate').text"), 'Er ist hier.');
-    assert.strictEqual(h.run("composeTranscript(takenBack, 'casual', 'accurate').text"), h.context.takenBack,
-      'the cue words are English ones');
-    h.run("accountManager.snapshot = function () { return { signedIn: false, plan: 'free' }; }; settings.cloudTranscription = false;");
 
     // Upgrade from an old settings file. A hidden preference must never send.
     const settingsFile = h.run('SETTINGS_FILE');
@@ -138,5 +90,5 @@ const harness = require('./asr-test-harness');
     await h.run("pasteDictation('Another draft.', 'email')");
     assert.deepStrictEqual(JSON.parse(h.run('JSON.stringify(pasteCalls.map(call => call[0]))')), ['clipboard', 'paste', 'clipboard', 'paste']);
   } finally { await h.close(); }
-  console.log('Writing style integration: all contexts and qualities, saved tones, dictionary, verbatim, language, and removal of auto-send passed.');
+  console.log('Writing style integration: all contexts and qualities, saved tones, dictionary, verbatim, and removal of auto-send passed.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

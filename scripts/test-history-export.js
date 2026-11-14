@@ -59,9 +59,9 @@ async function main() {
       assert.strictEqual(h.run('history.entries[0].ts'), originalTime.getTime(), 'the history date is unchanged');
       console.log('ok ' + (overwrite ? 'overwritten' : 'new') + ' export has the save time and preserves the original');
     }
-    assert.strictEqual(dialogs[0].defaultPath, path.join(h.root, 'Voxden 2026-09-03 12-34-56.wav'),
+    assert.strictEqual(dialogs[0].defaultPath, path.join(h.root, 'Vell 2026-09-03 12-34-56.wav'),
       'the Downloads filename uses the export time, with seconds');
-    assert.strictEqual(path.basename(dialogs[1].defaultPath), 'Voxden 2026-09-03 13-45-06.wav');
+    assert.strictEqual(path.basename(dialogs[1].defaultPath), 'Vell 2026-09-03 13-45-06.wav');
 
     cancelled = true;
     const beforeCancel = fs.statSync(target).mtimeMs;

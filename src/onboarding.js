@@ -9,13 +9,13 @@ window.VellOnboarding = (() => {
   const status = document.getElementById('model-welcome-status');
   const progress = document.getElementById('model-welcome-progress');
   const meter = document.getElementById('model-welcome-meter');
-  const names = { parakeet: 'Parakeet v3', 'whisper-turbo': 'Whisper turbo', 'qwen3-asr': 'Qwen3-ASR', whisper: 'Whisper large-v3' };
+  const names = { voz: 'Voz' };
   let latest = {}, callbacks, deferred = false, pending = false, finished = false;
-  const selected = () => choices.querySelector('input:checked').value;
+  const selected = () => { const checked = choices.querySelector('input:checked'); return checked ? checked.value : 'voz'; };
 
-  // A model with no build for this platform is not a choice. Hiding the label
-  // leaves its radio in the form, so if the hidden one was checked the first
-  // visible choice takes over -- otherwise Start would download nothing.
+  // A model with no build for this platform is not a choice. With a single
+  // engine the picker always offers Voz; the row stays so a missing build
+  // could never leave Start with nothing to download.
   function offerChoices(data) {
     const offered = Array.isArray(data.availableEngines) ? data.availableEngines : null;
     if (!offered) return;
@@ -42,13 +42,12 @@ window.VellOnboarding = (() => {
     if (Number.isFinite(state.progress)) meter.value = Math.max(0, Math.min(100, state.progress));
     else meter.removeAttribute('value');
     status.classList.toggle('is-error', state.status === 'error');
-    status.textContent = finished ? 'Your model is installed. Use ' + (latest.shortcutLabel || 'your dictation shortcut') + ' to start speaking.'
-      : busy || ['error', 'cancelled'].includes(state.status) ? state.message || 'Preparing your model…'
-      : 'Only your selected model will download. You can switch in Settings later.';
+    status.textContent = finished ? 'Voz is installed. Use ' + (latest.shortcutLabel || 'your dictation shortcut') + ' to start speaking.'
+      : busy || ['error', 'cancelled'].includes(state.status) ? state.message || 'Preparing Voz…'
+      : 'Vell downloads Voz once (~409 MB), then dictates offline.';
+    const model = latest.asrModel;
     for (const label of choices.querySelectorAll('[data-model-size]')) {
-      const id = label.dataset.modelSize;
-      const packId = id === 'parakeet' && latest.asrDevice === 'directml' ? 'parakeet-fp32' : id;
-      const model = id === 'whisper' ? latest.asrModel : latest.speechModels?.packs?.find(p => p.id === packId);
+      if (label.dataset.modelSize !== 'voz') continue;
       if (model) label.textContent = model.installed ? 'Installed' : bytesLabel(model.downloadBytes || 0);
     }
   }

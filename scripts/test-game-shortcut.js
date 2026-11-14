@@ -4,7 +4,7 @@
 // until the user turns it on (a key Voxden takes stops working in every other
 // app), that works the same as the dictation shortcut -- toggle or push to talk -- and
 // dictates the game's way: its sound stays on, the paste sends no fake key-ups
-// and pulls no game forward, Polish does not select back over it. Also the
+// and pulls no game forward. Also the
 // resting flow bar standing aside while a fullscreen app is in front. main.js
 // runs in the harness; the native helpers are played by stubs, so nothing is
 // pressed, pasted or muted for real. win32.ps1's side is tested live in
@@ -339,13 +339,6 @@ async function main() {
     await h.run("pasteText('gg', { game: true })");
     await h.run("pasteText('hello')");
     assert.deepStrictEqual(calls(h), [['paste', '-Hwnd', '7', '-Mode', 'game'], ['paste', '-Hwnd', '7']]);
-  });
-
-  await test('Polish does not select back over a game paste', async (h) => {
-    stubHelper(h);
-    h.run("lastPaste = { entryId: 'e', text: 'gg', hwnd: '7', exe: 'game.exe', ts: Date.now(), game: true };");
-    assert.strictEqual(await h.run("replaceLastPaste('gg', 'GG.')"), false);
-    assert.deepStrictEqual(calls(h), [], 'no keys are sent into the game');
   });
 
   // Google Play Games' Android VM (crosvm.exe) pastes from its own copy of the

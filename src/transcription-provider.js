@@ -15,8 +15,8 @@
 //   `segments/spans` shape that repair.js / polish flows consume, so swapping
 //   engines never rewrites the text pipeline.
 // - `MockVozProvider` below is the test implementation: it exercises the full
-//   mapping without a model installed. The real Voz backend (Desert Ant Labs)
-//   plugs in here once its SDK/sidecar lands — see docs/DESERT-ANT.md.
+//   mapping without a model installed. `VozProvider` is the real Desert Ant
+//   backend (onnxruntime-node, in-process) — see docs/DESERT-ANT.md.
 
 function wordsToSegments(words) {
   const list = Array.isArray(words) ? words : [];
@@ -139,38 +139,58 @@ function readWavMono16k(buffer) {
 // Real Desert Ant Voz backend (Node path: onnxruntime-node, CPU).
 // PoC-verified 2026-11-13 on Linux x64: a 3.26s fixture transcribed correctly
 // with word timestamps (see docs/VOZ-SPIKE.md). One instance is loaded and
-// reused; concurrent calls queue inside the SDK. Throws a clear error when
-// onnxruntime-node is not installed (a devDependency for the PoC; the
-// Electron worker wiring is the next step — see docs/DESERT-ANT.md).
+// reused across the provider and the model manager: the bundle holds ~1.2GB,
+// so a second load would double it. Concurrent callers share the in-flight
+// load. Call dropVoz() before deleting the cached bundle (model remove),
+// never mid-dictation.
+let sharedVoz = null;
+let sharedVozLoad = null;
+
+function resetSharedVozForTests() {
+  sharedVoz = null;
+  sharedVozLoad = null;
+}
+
+async function ensureVoz(options) {
+  if (sharedVoz) return sharedVoz;
+  if (!sharedVozLoad) {
+    const opts = options || {};
+    sharedVozLoad = (async () => {
+      let ort;
+      try {
+        ort = require('onnxruntime-node');
+      } catch (e) {
+        throw new Error('Voz needs the onnxruntime-node dependency (npm install).');
+      }
+      const { Voz } = await import('@desert-ant-labs/voz');
+      sharedVoz = await Voz.load({
+        ort,
+        modelBaseUrl: opts.modelBaseUrl,
+        revision: opts.revision,
+        onProgress: opts.onProgress,
+      });
+      return sharedVoz;
+    })().catch((error) => {
+      sharedVozLoad = null;
+      throw error;
+    });
+  }
+  return sharedVozLoad;
+}
+
+async function dropVoz() {
+  sharedVozLoad = null;
+  sharedVoz = null;
+}
+
 class VozProvider {
   constructor(options) {
     this.id = 'voz';
     this.options = options || {};
-    this._voz = null;
-    this._loading = null;
   }
 
   async _ensure(onProgress) {
-    if (this._voz) return this._voz;
-    if (!this._loading) {
-      this._loading = (async () => {
-        let ort;
-        try {
-          ort = require('onnxruntime-node');
-        } catch (e) {
-          throw new Error('Voz needs the onnxruntime-node devDependency (npm install).');
-        }
-        const { Voz } = await import('@desert-ant-labs/voz');
-        this._voz = await Voz.load({
-          ort,
-          modelBaseUrl: this.options.modelBaseUrl,
-          revision: this.options.revision,
-          onProgress,
-        });
-        return this._voz;
-      })();
-    }
-    return this._loading;
+    return ensureVoz({ ...this.options, onProgress });
   }
 
   async transcribe(request) {
@@ -221,6 +241,9 @@ module.exports = {
   normalizeResult,
   resampleLinear,
   readWavMono16k,
+  ensureVoz,
+  dropVoz,
+  resetSharedVozForTests,
   MockVozProvider,
   VozProvider,
   listProviders,

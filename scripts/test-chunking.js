@@ -2,7 +2,6 @@
 
 const assert = require('assert');
 const chunking = require('../src/chunking');
-const { createSidecarQueue } = require('../src/sidecar-queue');
 
 function tone(seconds, amp, rate) {
   const sr = rate || chunking.SAMPLE_RATE;
@@ -86,32 +85,4 @@ function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function testQueue() {
-  const queue = createSidecarQueue();
-  let aText = null;
-  let aErr = null;
-  let bText = null;
-  queue.register('a', (msg) => { aText = msg.text; }, (err) => { aErr = err; }, 25);
-  queue.register('b', (msg) => { bText = msg.text; }, () => {}, 5000);
-  await wait(60);
-  assert.ok(aErr, 'chunk A times out on its own');
-  assert.strictEqual(queue.dispatch({ id: 'a', ok: true, text: 'from-a' }), false);
-  assert.strictEqual(aText, null, 'late A must not attach to anyone');
-  assert.strictEqual(queue.dispatch({ id: 'b', ok: true, text: 'from-b' }), true);
-  assert.strictEqual(bText, 'from-b');
-  assert.strictEqual(queue.dispatch({ id: 'missing', ok: true, text: 'nope' }), false);
-
-  const q2 = createSidecarQueue();
-  let rejected = null;
-  q2.register('x', () => {}, (err) => { rejected = err; }, 5000);
-  q2.rejectAll(new Error('sidecar exited'));
-  assert.strictEqual(rejected.message, 'sidecar exited');
-  assert.strictEqual(q2.size(), 0);
-}
-
-testQueue().then(() => {
-  console.log('all chunking tests passed');
-}).catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+console.log('all chunking tests passed');

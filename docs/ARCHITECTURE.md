@@ -6,18 +6,19 @@ No account, no word limits, no cloud fallback.
 ## Processes
 
 - **Main** (`src/main.js`, ~8k lines): owns `BrowserWindow`s, tray, global
-  shortcuts, audio session orchestration, sidecar lifecycle, settings/history
+  shortcuts, audio session orchestration, Voz lifecycle, settings/history
   stores, clipboard insertion. All privileged work lives here.
 - **Renderer — dashboard** (`src/app.js/html`, `src/preload.js`): settings,
-  history, dictionary, speech-engine picker. Talks to main only via
+  history, dictionary, speech-engine panel. Talks to main only via
   `window.vell` bridge (`preload.js`). No Node in renderer.
 - **Renderer — overlay / Island** (`src/overlay.html/js/css`): floating pill,
   mic capture, waveform, drag/positioning. Talks to main via IPC
   (`transcript`, `flushAudio`, `flow-bar-*`, `hud-*`).
 - **Renderer — capture** (`src/capture.*`): screenshot annotation + voice.
-- **Sidecar** (`sidecar/transcribe.py` + `qwen_accel.py`): Python speech
-  runtime (faster-whisper / Qwen / Parakeet ONNX). Spawned by main,
-  JSON-line protocol, `--check` capability report.
+- **Transcription (in-process)**: `src/transcription-provider.js`
+  (`VozProvider`, shared via `ensureVoz()`/`dropVoz()`) + `onnxruntime-node`
+  (CPU) + `@desert-ant-labs/voz` SDK. The model bundle (~409MB) is fetched
+  once by the SDK and cached under the OS cache root — no Python, no sidecar.
 - **Native helpers**: Windows `scripts/win32.ps1` (paste, foreground-watch,
   hotkey-watch); macOS `helper/mac/main.swift` + `src/mac-shell.js` (AXUI
   focus, Cmd+V paste, foreground watcher).
@@ -29,7 +30,7 @@ No account, no word limits, no cloud fallback.
 | Island bar | `flow-bar.js` (anchor math), `overlay.js` (state machine), `dictation-island.css`, `flow-styles.css`, `overlay.css`, `island-shell.css`, `flow-motion.js`, `energy-orb.js`, `sound-cues.js`, `speech-gate.js`, `overlay-health.js` |
 | Shortcuts | `hotkeys.js` + `main.js` `tryRegisterDictationShortcut` (globalShortcut + chord-watch helper) |
 | Audio | `overlay.js` (getUserMedia → AudioContext → chunker), `chunking.js`, `media-controller.js` (duck music), `screen-capture.js` |
-| Speech | `asr.js` (engine list), `asr-capabilities.js` (+ sidecar mirror), `asr-runtime.js`, `asr-model.js`, `speech-models.js` + `speech-model-catalog.json`, `model-plan.js`, `transcription-provider.js` (new neutral interface) |
+| Speech | `asr.js` (Voz-only catalog), `asr-capabilities.js` (Voz-only capabilities), `voz-model.js` (install/remove/snapshot), `model-plan.js` (single-component plan), `transcription-provider.js` (Voz + mock providers) |
 | Text | `cleanup.js`, `numbers.js`, `spoken-corrections.js`, `style.js` (per-app), `dictionary.js`, `auto-dictionary.js`, `correction-learning.js`, `correction-observer.js`, `corpus.js`, `repair.js`, `hinglish.js`, `phonetics.js`, `vocabulary.js` |
 | Insert | `clipboard-paste.js`, `mac-shell.js`, `elevation.js`, `win32.ps1` |
 | Stores | `atomic-store.js`, `history-store.js`, `history-usage.js`, `models.js`, `corpus.js` (14d/512MB recordings, default OFF) |
@@ -39,10 +40,10 @@ No account, no word limits, no cloud fallback.
 
 1. Shortcut → main shows overlay at saved anchor (`flow-bar.js` `resolveAnchor`).
 2. Overlay captures mic, streams PCM chunks → `capture-flush` IPC → main.
-3. Main routes via `model-plan.js` + `asr-capabilities.js` (`planRoute`) → sidecar `transcribe`.
+3. Main routes via `model-plan.js` + `asr-capabilities.js` (`planRoute` → always Voz) → `vozTranscribe`.
 4. Transcript → `cleanup` → `numbers` → `dictionary/repair` → `style` → `spoken-corrections`.
 5. `clipboard-paste` writes text, sends paste keys, restores clipboard. Focus restored via native helper.
-6. History/dictionary persisted locally. `Esc` cancels. No network.
+6. History/dictionary persisted locally. `Esc` cancels. No network (except mandatory Desert Ant device-count telemetry).
 
 ## Island state machine
 

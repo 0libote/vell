@@ -347,13 +347,8 @@ const settingInputs = {
   spokenCorrections: document.getElementById('set-spoken-corrections'),
   keepTrainingAudio: document.getElementById('set-training-audio'),
   keepRecordings: document.getElementById('set-keep-recordings'),
-  useTunedModel: document.getElementById('set-tuned-model'),
-  asrDevice: document.getElementById('asr-device-select'),
   microphone: document.getElementById('mic-select'),
 };
-
-const tunedRowEl = document.getElementById('tuned-row');
-const tunedHintEl = document.getElementById('tuned-hint');
 const engineBannerEl = document.getElementById('engine-banner');
 const engineBannerTextEl = document.getElementById('engine-banner-text');
 const engineBannerBtnEl = document.getElementById('engine-banner-btn');
@@ -384,9 +379,9 @@ function thisDevice() { return isMacUi() ? 'this Mac' : 'this PC'; }
 // formatShortcutLabel); these stand in only until the first snapshot lands.
 function defaultShortcutLabel() { return isMacUi() ? 'Cmd+Shift+Space' : 'Ctrl+Win'; }
 function defaultPasteShortcutLabel() { return isMacUi() ? 'Cmd+Option+V' : 'Ctrl+Alt+V'; }
-function gpuPacksOffered(data) {
-  const gpu = (data || {}).gpu || {};
-  return gpu.packsOffered !== false;
+// Voz runs on the CPU everywhere: no GPU packs exist, so none are ever offered.
+function gpuPacksOffered() {
+  return false;
 }
 function engineOffered(data, engine) {
   const list = (data || {}).availableEngines;
@@ -407,11 +402,10 @@ const MAC_COPY = {
   'auto-add-dictionary-scope': 'Learns on this Mac in supported apps. Undo from the flow bar.',
   'privacy-store-label': 'Store data on this Mac',
   'privacy-training-hint': 'Keeps audio behind corrected dictations to train on your voice. Stays on this Mac, off by default.',
-  'help-engines-hint': 'Choose your model when you first open Vell. Parakeet v3 is recommended for a small, fast start. <b>To use the words in your dictionary, try Whisper</b> under Settings › Speech engines. These models run on your Mac.',
-  'help-engine-whisper-lead': 'Uses the words in your dictionary. A larger download than Parakeet, and slower.',
-  'help-engines-note': 'On this Mac, dictation is in English whichever model you use.',
-  'help-privacy-note': 'Your audio stays on this Mac and dictation works offline once your model is downloaded.',
-  'model-welcome-description': 'Choose a free speech model to get started. It runs on this Mac, in English.',
+  'help-engines-hint': 'Vell ships one model: Voz by Desert Ant Labs. Download it once and dictate offline on your Mac.',
+  'help-engines-note': 'Voz understands 25 languages; pick yours under Dictation languages.',
+  'help-privacy-note': 'Your audio stays on this Mac and dictation works offline once Voz is downloaded.',
+  'model-welcome-description': 'Download the Voz speech model to get started. It runs on this Mac.',
 };
 
 // Sections that only mean something on Windows: GPU speed-up packs, the
@@ -465,14 +459,10 @@ function applyPlatformCopy(platform) {
 // Advanced > Downloaded models can list. The renderer cannot require
 // model-plan.js, so the names are repeated here.
 const SPEECH_MODEL_ROWS = Object.freeze([
-  Object.freeze({ id: 'parakeet', name: 'Parakeet v3' }),
-  Object.freeze({ id: 'whisper-turbo', name: 'Whisper large-v3 turbo' }),
-  Object.freeze({ id: 'qwen3-asr', name: 'Qwen3-ASR 1.7B' }),
-  Object.freeze({ id: 'whisper', name: 'Whisper large-v3' }),
+  Object.freeze({ id: 'voz', name: 'Voz' }),
 ]);
 const SPEECH_DOWNLOAD_MODELS = Object.freeze([
-  ['parakeet', 'Parakeet v3'], ['parakeet-fp32', 'Parakeet v3 for GPU'],
-  ['whisper-turbo', 'Whisper large-v3 turbo'], ['qwen3-asr', 'Qwen3-ASR 1.7B'], ['whisper', 'Whisper large-v3'],
+  ['voz', 'Voz'],
 ]);
 // A Cancel that replaces the button under the pointer ignores clicks this long,
 // so a double-click on "Download and use" cannot cancel the download it started.
@@ -486,18 +476,7 @@ const speechModelDetailEl = document.getElementById('speech-model-detail');
 const speechModelNoticeActionsEl = document.getElementById('speech-model-notice-actions');
 const speechModelRepairBtn = document.getElementById('speech-model-repair');
 const speechModelListEl = document.getElementById('speech-model-list');
-const speechGpuRowEl = document.getElementById('speech-gpu-row');
-const speechGpuHintEl = document.getElementById('speech-gpu-hint');
-const speechGpuProgressRowEl = document.getElementById('speech-gpu-progress-row');
-const speechGpuProgressEl = document.getElementById('speech-gpu-progress');
-const speechGpuProgressFillEl = document.getElementById('speech-gpu-progress-fill');
-const speechGpuProgressLabelEl = document.getElementById('speech-gpu-progress-label');
-const speechGpuNoteEl = document.getElementById('speech-gpu-note');
-const speechGpuErrorEl = document.getElementById('speech-gpu-error');
-const speechGpuActionBtn = document.getElementById('speech-gpu-action');
 const speechAdvancedEl = document.getElementById('speech-advanced');
-const speechProcessorRowEl = document.getElementById('speech-processor-row');
-const speechProcessorHintEl = document.getElementById('speech-processor-hint');
 const speechDownloadsRowEl = document.getElementById('speech-downloads-row');
 const speechDownloadsListEl = document.getElementById('speech-downloads-list');
 const speechDownloadsErrorEl = document.getElementById('speech-downloads-error');
@@ -506,20 +485,13 @@ const speechRepairBtn = document.getElementById('speech-repair');
 const speechRemoveAllRowEl = document.getElementById('speech-remove-all-row');
 const speechRemoveAllBtn = document.getElementById('speech-remove-all');
 const speechRemoveAllErrorEl = document.getElementById('speech-remove-all-error');
-// Captured before the custom select upgrades the element, so render can
-// detach and reattach them without rebuilding.
-const speechProcessorOptions = settingInputs.asrDevice
-  ? Object.fromEntries(Array.from(settingInputs.asrDevice.options, (opt) => [opt.value, opt]))
-  : {};
 
 const speechPending = new Set();   // action keys a click has started and not yet settled
 let speechOp = null;               // { kind: 'install'|'repair'|'remove'|'remove-all', row?, component?, key?, pending, localError }
 let speechActiveRow = null;        // engine id the running install is drawn on
 let speechDismissedError = '';     // asrRuntimeState error the user has moved past
-let speechCudaRestartPending = false; // the NVIDIA pack ran; the engine has not restarted on it yet
-const speechArmedAt = new Map();   // engine id or 'gpu' -> ms before which Cancel ignores clicks
+const speechArmedAt = new Map();   // engine id -> ms before which Cancel ignores clicks
 const speechDownloadNodes = new Map(); // Downloaded models key -> <li>
-const qwenAccelInfoRequests = new Set();
 
 const trainingRowEl = document.getElementById('training-row');
 const trainingStatsEl = document.getElementById('training-stats');
@@ -1485,38 +1457,11 @@ function formatClipTime(seconds) {
   return (s / 3600).toFixed(1) + ' hr';
 }
 
-function renderTunedModel(data) {
-  if (!tunedRowEl) return;
-  const tuned = data.tunedModel || null;
-  tunedRowEl.hidden = !tuned || data.asrEngine !== 'whisper';
-  if (settingInputs.useTunedModel) {
-    settingInputs.useTunedModel.checked = data.useTunedModel !== false;
-  }
-  if (!tunedHintEl || !tuned) return;
-  const built = tuned.builtAt ? new Date(tuned.builtAt) : null;
-  const when = built
-    ? built.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-    : 'an earlier run';
-  tunedHintEl.textContent = data.modelIsTuned
-    ? 'Transcribing with the model you trained on ' + when + '.'
-    : 'A model you trained on ' + when + ' is installed but not in use.';
+function asrEngineId() {
+  return 'voz';
 }
 
-function asrEngineId(value) {
-  const id = String(value || '').trim().toLowerCase();
-  return SPEECH_MODEL_ROWS.some((row) => row.id === id) ? id : 'parakeet';
-}
-
-// The engines the cuBLAS pack can actually accelerate. Both Whisper builds run
-// on CTranslate2, which is the only thing that pack speeds up; Qwen ships CPU
-// torch and Parakeet's ONNX Runtime is the DirectML build with no CUDA
-// provider, so neither is ever offered it.
-function usesCtranslate2(engine) {
-  const id = String(engine || '').trim().toLowerCase();
-  return id === 'whisper' || id === 'whisper-turbo';
-}
-
-// Decimal, to match how both downloads are advertised.
+// Decimal, to match how the download is advertised.
 function formatSetupBytes(bytes) {
   const n = Number(bytes) || 0;
   if (n >= 1e9) return (n / 1e9).toFixed(1) + ' GB';
@@ -1562,11 +1507,12 @@ function speechPercent(value) {
   return Number.isFinite(Number(value)) && value !== null ? Math.max(0, Math.min(100, Math.round(Number(value)))) : 0;
 }
 function speechPackBusy(state) { return ['preparing', 'downloading', 'installing'].includes((state || {}).status); }
-function speechDevice(data) { return ['cuda', 'directml', 'cpu'].includes(data.asrDevice) ? data.asrDevice : 'auto'; }
+function speechDevice() {
+  return 'cpu';
+}
 // Mirrors modelForEngine in model-plan.js; the renderer cannot require it.
-function speechComponent(engine, device) {
-  if (engine === 'parakeet') return device === 'directml' ? 'parakeet-fp32' : 'parakeet';
-  return engine;
+function speechComponent() {
+  return 'voz';
 }
 function speechPlanItem(data, id) {
   const items = data && data.modelPlan && Array.isArray(data.modelPlan.items) ? data.modelPlan.items : null;
@@ -1588,12 +1534,8 @@ function speechRuntimeUsable(data) {
 }
 function speechRowInstalled(data, engine) {
   if (!data.modelPlan) return asrEngineId(data.asrEngine) === engine;
-  const item = speechPlanItem(data, speechComponent(engine, speechDevice(data)));
-  if (item && item.installed) return true;
-  // main.js starts Whisper large-v3 from a tuned model without the hosted
-  // weights, but only on a working runtime: repairing one fetches the hosted
-  // 3.1 GB too, so without it the row must say Download, not Use.
-  return engine === 'whisper' && !!data.tunedModel && data.useTunedModel !== false && speechRuntimeUsable(data);
+  const item = speechPlanItem(data, speechComponent(engine));
+  return !!(item && item.installed);
 }
 function speechRowState(data, engine) {
   if (data.asrOperation === 'install' && speechActiveRow === engine) return 'downloading';
@@ -1625,11 +1567,8 @@ function speechJoinNames(names) {
   return names.length <= 1 ? (names[0] || '') : names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1];
 }
 
-// Which row a running install belongs to. asrRuntimeState never names the
-// component it is fetching, so: the row the panel started it on; else
-// large-v3, the only download reporting step 'model'; else the one pack whose
-// byte count matches the total; else the selected model when the plan is
-// missing it (the banner, onboarding and Check and repair fetch plan.missing).
+// Which row a running install belongs to. There is only the Voz row; an
+// install the banner, onboarding or Check and repair started lands there.
 // Once found it sticks for the life of the operation.
 function updateSpeechActiveRow(data) {
   if (data.asrOperation !== 'install') { speechActiveRow = null; return; }
@@ -1637,39 +1576,26 @@ function updateSpeechActiveRow(data) {
   let row = null;
   if (speechOp && speechOp.kind === 'install' && speechOp.pending) {
     row = speechOp.row;
-  } else if (state.step === 'model') {
-    row = 'whisper';
-  } else if (state.step === 'extras' && Number(state.totalBytes) > 0) {
-    const matches = ['parakeet', 'parakeet-fp32', 'whisper-turbo', 'qwen3-asr']
-      .filter((id) => { const item = speechPlanItem(data, id); return item && item.bytes === Number(state.totalBytes); });
-    if (matches.length === 1) row = matches[0] === 'parakeet-fp32' ? 'parakeet' : matches[0];
+  } else if (state.step === 'model' || state.step === 'engine') {
+    row = 'voz';
   }
   if (!row) {
     const selected = asrEngineId(data.asrEngine);
     const missing = (data.modelPlan && data.modelPlan.missing) || [];
-    if (missing.includes(speechComponent(selected, speechDevice(data)))) row = selected;
+    if (missing.includes(speechComponent(selected))) row = selected;
   }
   if (row) speechActiveRow = row;
 }
 
 function renderSpeechEngines(data) {
   if (!speechModelListEl) return;
-  // Only an install or a removal replaces asrRuntimeState. A GPU pack
-  // operation leaves it alone, so an error the user moved past stays dismissed.
+  // Only an install or a removal replaces asrRuntimeState, so an error the
+  // user moved past stays dismissed.
   if (data.asrOperation === 'install' || data.asrOperation === 'remove') speechDismissedError = '';
   if (speechOp && !speechOp.pending && data.asrOperation) speechOp = null;  // a later operation retires the record of the last one
-  // The NVIDIA pack restarts the engine once it lands, but until the old
-  // process exits the snapshot still says 'ready' on the processor.
-  if (speechPackBusy(data.cudaPackState)) speechCudaRestartPending = true;
-  else if (data.engineStatus !== 'ready') speechCudaRestartPending = false;
-  if (!speechPackBusy(data.cudaPackState)) speechPending.delete('gpu:cuda-cancel');
-  if (!speechPackBusy(data.qwenCudaPackState) && !speechPackBusy(data.qwenRocmPackState)) speechPending.delete('gpu:qwen-cancel');
   if (data.asrOperation !== 'install') speechPending.delete('cancel');
   updateSpeechActiveRow(data);
   renderSpeechModelSection(data);
-  renderSpeechGpuRow(data);
-  renderSpeechProcessor(data);
-  renderTunedModel(data);
   renderSpeechDownloads(data);
   renderSpeechMaintenance(data);
 }
@@ -1798,73 +1724,18 @@ function renderSpeechModelRow(data, row) {
   speechShow(errorEl, !!errorText);
 }
 
-// Advanced > Processor. All four options stay in app.html (test-asr.js reads
-// them there); the ones that make no sense on this PC are detached at runtime.
-function renderSpeechProcessor(data) {
-  const select = settingInputs.asrDevice;
-  if (!select) return;
-  // cuda and directml are Windows backends. Where neither exists there is no
-  // choice to make, so the whole row goes rather than offering Auto alone.
-  if (!gpuPacksOffered(data)) {
-    speechShow(speechProcessorRowEl, false);
-    return;
-  }
-  speechShow(speechProcessorRowEl, true);
-  const gpu = data.gpu || {};
-  const vendors = Array.isArray(gpu.vendors) ? gpu.vendors : (gpu.vendor ? [gpu.vendor] : []);
-  const device = speechDevice(data);
-  const amdIntel = vendors.includes('amd') || vendors.includes('intel');
-  const want = ['auto'];
-  if (vendors.includes('nvidia') || device === 'cuda') want.push('cuda');
-  if (amdIntel || device === 'directml') want.push('directml');
-  want.push('cpu');
-  if (Array.from(select.options, (opt) => opt.value).join() !== want.join()) {
-    for (const opt of Object.values(speechProcessorOptions)) if (opt.parentNode && !want.includes(opt.value)) opt.remove();
-    want.forEach((value, i) => { const opt = speechProcessorOptions[value]; if (opt && select.options[i] !== opt) select.insertBefore(opt, select.options[i] || null); });
-  }
-  if (select.value !== device) select.value = device;
-  const off = !!data.asrOperation || speechPending.has('processor');
-  if (select.disabled !== off) select.disabled = off;
-  syncCustomSelect(select);
-  speechSetText(speechProcessorHintEl, amdIntel
-    ? 'Auto keeps Parakeet v3 on the processor; choose AMD or Intel GPU to run it on your graphics card.'
-    : 'Auto uses your graphics card whenever the model in use can.');
-}
-
-// Advanced > Downloaded models, in list order: speech models, then GPU packs.
+// Advanced > Downloaded models: the installed Voz model, if any.
 function speechDownloadEntries(data) {
-  const inUse = speechComponent(asrEngineId(data.asrEngine), speechDevice(data));
+  const inUse = 'voz';
   const entries = [];
-  const packs = gpuPacksOffered(data);
   for (const [id, name] of SPEECH_DOWNLOAD_MODELS) {
-    // parakeet-fp32 is the GPU build of Parakeet, so it belongs with the packs.
-    if (id === 'parakeet-fp32' ? !packs : !engineOffered(data, id)) continue;
+    if (!engineOffered(data, id)) continue;
     const item = speechPlanItem(data, id);
     if (!item || !item.installed) continue;
     entries.push({ key: 'model:' + id, type: 'model', id, name, bytes: item.bytes || 0,
       size: item.bytes ? formatSetupBytes(item.bytes) : '', inUse: id === inUse, line: '' });
   }
-  const cuda = data.cudaPack || {};
-  if (packs && cuda.installed) {
-    entries.push({ key: 'cuda', type: 'cuda', name: 'NVIDIA speed-up for Whisper', size: cuda.installedSize || '771 MB', inUse: false, line: '' });
-  }
-  for (const kind of packs ? ['cuda', 'rocm'] : []) {
-    const pack = (kind === 'rocm' ? data.qwenRocmPack : data.qwenCudaPack) || {};
-    if (!pack.installed) continue;
-    entries.push({ key: 'qwen:' + kind, type: 'qwen', kind,
-      name: kind === 'rocm' ? 'AMD speed-up for Qwen3-ASR' : 'NVIDIA speed-up for Qwen3-ASR',
-      size: pack.installedSize || (kind === 'rocm' ? '6.99 GB' : '5.26 GB'), inUse: false, line: speechQwenPackLine(data, kind) });
-  }
   return entries;
-}
-// A Qwen pack claims the GPU only once the sidecar has verified it and Qwen is running.
-function speechQwenPackLine(data, kind) {
-  const plan = data.qwenAccel || {};
-  if (plan.recommendedPack !== kind) return '';
-  if (plan.uiStatus === 'verified' && plan.backend === kind
-      && asrEngineId(data.asrEngine) === 'qwen3-asr' && data.engineStatus === 'ready') return 'Qwen3-ASR is using your GPU.';
-  if (plan.uiStatus === 'installed') return 'Qwen3-ASR stays on the processor until Vell checks this download on your GPU.';
-  return '';
 }
 
 function speechCreateDownloadItem(key) {
@@ -1932,21 +1803,15 @@ function renderSpeechDownloads(data) {
     if (entry.inUse) { if (hadFocus) speechAdvancedEl.querySelector('summary').focus({ preventScroll: true }); return; }
     const removing = !!speechOp && speechOp.kind === 'remove' && speechOp.key === entry.key && speechOp.pending;
     speechSetText(remove, removing ? 'Removing…' : 'Remove');
-    const packState = entry.type === 'cuda' ? data.cudaPackState
-      : entry.type === 'qwen' ? (entry.kind === 'rocm' ? data.qwenRocmPackState : data.qwenCudaPackState) : null;
-    speechSetDisabled(remove, speechPending.has('remove:' + entry.key) || !!data.asrOperation || speechPackBusy(packState));
+    speechSetDisabled(remove, speechPending.has('remove:' + entry.key) || !!data.asrOperation);
   });
   speechShow(speechDownloadsRowEl, entries.length > 0);
   let error = '';
   if (speechOp && speechOp.kind === 'remove' && !speechOp.pending) {
     if (speechOp.localError) error = speechOp.localError;
-    else if (String(speechOp.key).startsWith('model:')) {
+    else {
       const visible = speechVisibleError(data);
       if (visible && visible.status === 'error') error = visible.message || '';
-    } else {
-      const state = (speechOp.key === 'cuda' ? data.cudaPackState
-        : speechOp.key === 'qwen:rocm' ? data.qwenRocmPackState : data.qwenCudaPackState) || {};
-      if (state.status === 'error') error = state.message || '';
     }
   }
   speechSetText(speechDownloadsErrorEl, error);
@@ -2085,11 +1950,10 @@ async function speechRemoveDownloaded(key) {
     op = { kind: 'remove', key, pending: true, localError: '' };
     speechOp = op;
     render();
-    const next = entry.type === 'model' ? await window.vell.removeSpeechModel(entry.id)
-      : entry.type === 'cuda' ? await window.vell.removeCudaPack()
-        : await window.vell.removeQwenAccel(entry.kind);
+    const next = entry.type === 'model' ? await window.vell.removeSpeechModel(entry.id) : null;
+    if (!next) return;
     op.pending = false;
-    if (next) render(next);
+    render(next);
   } catch (err) {
     if (op) { op.pending = false; op.localError = 'Could not remove ' + entry.name + '. ' + ((err && err.message) ? err.message : 'Try again.'); }
   } finally {
@@ -2098,9 +1962,7 @@ async function speechRemoveDownloaded(key) {
   }
 }
 
-// Advanced > Remove everything. The body names what actually goes: the
-// runtime, Whisper large-v3 and every speech pack; GPU packs and the tuned
-// model stay.
+// Advanced > Remove everything. With one model, that is Voz.
 speechRemoveAllBtn.addEventListener('click', async () => {
   const data = lastPayload || {};
   if (speechIsDisabled(speechRemoveAllBtn) || data.asrOperation || speechPending.has('remove-all') || !window.vell) return;
@@ -2434,189 +2296,17 @@ function toggleDictationLangDraft(id) {
 
 function renderDictationLanguageHint(data) {
   if (!dictationLangHintEl) return;
-  dictationLangHintEl.textContent = 'English on ' + thisDevice() + '.';
+  const list = Array.isArray(data.dictationLanguages) && data.dictationLanguages.length
+    ? data.dictationLanguages : ['en'];
+  const names = list.map((id) => {
+    const found = (data.dictationLanguageCatalog || []).find((l) => l.id === id);
+    return found ? found.name : id;
+  });
+  dictationLangHintEl.textContent = names.join(', ') + ' on ' + thisDevice() + '.';
 }
 
-function qwenAccelKind(plan) {
-  return plan && plan.recommendedPack === 'rocm' ? 'rocm' : 'cuda';
-}
-
-// Under CPU only the Qwen plan returns before its hardware checks, so its
-// `supported` says only that the vendor could work. Whether Auto would really
-// offer the card mirrors resolve() in qwen-accel.js: AMD needs Windows 11, and
-// NVIDIA needs the catalog's minimum driver (qwen-accel-catalog.json
-// cuda.minNvidiaDriver) unless the version is unreadable or in Windows DCH
-// numbering, which the engine's own probe decides. main.js passes no VRAM.
-const SPEECH_QWEN_MIN_NVIDIA_DRIVER = 570;
-function speechQwenGpuUsable(plan, kind) {
-  if (!plan.supported) return false;
-  if (kind === 'rocm') return plan.windows11 !== false;
-  const version = String(plan.driverVersion || '').trim();
-  const match = /(\d+)(?:\.(\d+))?/.exec(version);
-  const have = match ? (Number(match[1]) || 0) + (Number(match[2]) || 0) / 1000 : 0;
-  if (!have || (have < 100 && version.split('.').length >= 4)) return true;
-  return have + 1e-9 >= SPEECH_QWEN_MIN_NVIDIA_DRIVER;
-}
-
-// Settings > Speech engines > Speed up with your GPU. One row, shown only when
-// a download or a setting would move the model in use onto the graphics card,
-// or while a GPU download runs. Each pack speeds up one model: the cuBLAS pack
-// is CTranslate2's (both Whispers), the Qwen packs are Qwen's. Parakeet on an
-// AMD or Intel card is never offered here; that stays behind Advanced >
-// Processor. Returns what to draw, or null to hide the row. First match wins.
-function speechGpuModel(data) {
-  // No packs on this platform means no row: an Apple GPU is already what the
-  // model runs on, and there is nothing to download to get there.
-  if (!gpuPacksOffered(data)) return null;
-  const engine = asrEngineId(data.asrEngine);
-  const device = speechDevice(data);
-  const gpu = data.gpu || {};
-  const cudaState = data.cudaPackState || {};
-  const qPlan = data.qwenAccel || {};
-  const kind = qwenAccelKind(qPlan);
-  const qPack = (kind === 'rocm' ? data.qwenRocmPack : data.qwenCudaPack) || {};
-  const qState = (kind === 'rocm' ? data.qwenRocmPackState : data.qwenCudaPackState) || {};
-  const vendor = kind === 'rocm' ? 'AMD GPU' : 'NVIDIA GPU';
-  const whisperName = engine === 'whisper-turbo' ? 'Whisper large-v3 turbo' : 'Whisper large-v3';
-  const cudaSize = (data.cudaPack && data.cudaPack.downloadSize) || '553 MB';
-  const whisperOffer = 'Your NVIDIA GPU can run ' + whisperName + ' after a one-time ' + cudaSize + ' download.';
-  // The live size from the release listing, never the catalog estimate: while
-  // it is unknown the sentence leaves the number out.
-  const qSize = qPack.downloadSize || '';
-  const qwenOffer = 'Your ' + vendor + ' can run Qwen3-ASR after a one-time ' + (qSize ? qSize + ' ' : '') + 'download.';
-  const qwenFallback = 'Your GPU stopped working with Qwen3-ASR, so it is using the processor.';
-  const packError = (s) => (['error', 'cancelled'].includes(s.status) && s.message
-    ? { error: s.message, errorIsError: s.status === 'error' } : {});
-
-  // A running pack download is always drawn, so its Cancel stays reachable.
-  // The NVIDIA pack leaves the engine running, unless a model download has
-  // paused it meanwhile (the Model notice says so).
-  if (speechPackBusy(cudaState)) {
-    return { hint: whisperOffer, progress: speechPercent(cudaState.progress),
-      note: data.asrOperation ? '' : 'You can keep dictating while it downloads.', action: 'cuda-cancel', label: 'Cancel' };
-  }
-  const qwenBusy = { hint: qPlan.uiStatus === 'fallback' ? qwenFallback : qwenOffer,
-    note: 'Dictation on ' + thisDevice() + ' is paused until this download finishes.', action: 'qwen-cancel', kind, label: 'Cancel' };
-  if (speechPackBusy(qState)) return { ...qwenBusy, progress: speechPercent(qState.progress) };
-  // 'gpu-install' is only ever a Qwen pack. It takes the engine lock at the
-  // click, but the pack reports nothing until the speech process has stopped,
-  // so the row stays with its button in place; Cancel has nothing to stop yet.
-  if (data.asrOperation === 'gpu-install') return { ...qwenBusy, progress: 0, waiting: true };
-  if (data.asrOperation) return null;
-  const rowState = speechRowState(data, engine);
-  if (rowState !== 'in-use' && rowState !== 'loading') return null;
-
-  if (usesCtranslate2(engine) && gpu.vendor === 'nvidia') {
-    if (device === 'cpu' || device === 'directml') {
-      return { hint: 'Your processor setting keeps Whisper off your NVIDIA GPU.', action: 'use-gpu', label: 'Use NVIDIA GPU' };
-    }
-    if (gpu.needsPack) return { hint: whisperOffer, action: 'cuda-install', label: 'Download ' + cudaSize, ...packError(cudaState) };
-    if (data.engineStatus === 'ready' && data.device !== 'cuda' && !speechCudaRestartPending) {
-      return { hint: 'Your NVIDIA GPU could not run Whisper, so it is using the processor.', hintError: true };
-    }
-    return null;
-  }
-  if (engine === 'qwen3-asr' && qPlan.vendor && qPlan.recommendedPack && qPlan.uiStatus !== 'hidden') {
-    if (device === 'cpu') {
-      return speechQwenGpuUsable(qPlan, kind)
-        ? { hint: 'Your processor setting keeps Qwen3-ASR off your ' + vendor + '.', action: 'use-gpu', label: 'Use ' + vendor }
-        : null;
-    }
-    if (qPlan.uiStatus === 'fallback') {
-      return { hint: qwenFallback, hintError: true, action: 'qwen-retry', label: 'Try GPU again', ...packError(qState) };
-    }
-    if (qPlan.uiStatus === 'offer' && !qPack.installed) {
-      const checking = qPack.downloadSizeStatus === 'idle' || qPack.downloadSizeStatus === 'checking';
-      return { hint: qwenOffer,
-        note: qSize ? '' : (checking ? 'Checking download size…' : 'Download size is temporarily unavailable.'),
-        action: 'qwen-install', kind, label: qSize ? 'Download ' + qSize : 'Download', refreshSize: kind, ...packError(qState) };
-    }
-  }
-  return null;
-}
-
-function renderSpeechGpuRow(data) {
-  if (!speechGpuRowEl) return;
-  const m = speechGpuModel(data);
-  const hadFocus = speechGpuRowEl.contains(document.activeElement);
-  speechShow(speechGpuRowEl, !!m);
-  if (!m) { if (hadFocus) speechModelListEl.focus({ preventScroll: true }); return; }
-  if (m.refreshSize) speechRefreshQwenSize(data, m.refreshSize);
-  speechSetText(speechGpuHintEl, m.hint || '');
-  speechGpuHintEl.classList.toggle('is-error', !!m.hintError);
-  const hasBar = m.progress != null;
-  speechShow(speechGpuProgressRowEl, hasBar);
-  if (hasBar) {
-    if (speechGpuProgressFillEl.style.width !== m.progress + '%') speechGpuProgressFillEl.style.width = m.progress + '%';
-    if (speechGpuProgressEl.getAttribute('aria-valuenow') !== String(m.progress)) speechGpuProgressEl.setAttribute('aria-valuenow', String(m.progress));
-    speechSetText(speechGpuProgressLabelEl, m.progress + '%');
-  }
-  speechSetText(speechGpuNoteEl, m.note || '');
-  speechShow(speechGpuNoteEl, !!m.note);
-  speechSetText(speechGpuErrorEl, m.error || '');
-  speechGpuErrorEl.classList.toggle('is-error', !!m.errorIsError);
-  speechShow(speechGpuErrorEl, !!m.error);
-  const btn = speechGpuActionBtn;
-  if (!m.action) {
-    speechShow(btn, false);
-    if (hadFocus && btn === document.activeElement) speechModelListEl.focus({ preventScroll: true });
-    return;
-  }
-  if (btn.dataset.action !== m.action) {
-    if (m.action.endsWith('-cancel')) speechArmedAt.set('gpu', Date.now() + SPEECH_ARM_MS);
-    btn.dataset.action = m.action;
-  }
-  if (btn.dataset.kind !== (m.kind || '')) btn.dataset.kind = m.kind || '';
-  const pending = speechPending.has('gpu:' + m.action);
-  speechSetText(btn, m.action.endsWith('-cancel') && pending ? 'Cancelling…' : m.label);
-  speechSetDisabled(btn, pending || !!m.waiting || (['qwen-install', 'qwen-retry'].includes(m.action) && !!data.asrOperation));
-  speechShow(btn, true);
-}
-
-// One size lookup per pack kind at a time, however often render runs; a
-// failed lookup is retried only after the delay the payload carries.
-function speechRefreshQwenSize(data, kind) {
-  const pack = (kind === 'rocm' ? data.qwenRocmPack : data.qwenCudaPack) || {};
-  if (qwenAccelInfoRequests.has(kind) || !window.vell || !window.vell.refreshQwenAccelInfo) return;
-  if (pack.downloadSizeStatus === 'idle'
-      || (pack.downloadSizeStatus !== 'checking' && Number.isFinite(pack.downloadSizeRefreshAt)
-        && Date.now() >= pack.downloadSizeRefreshAt)) {
-    qwenAccelInfoRequests.add(kind);
-    window.vell.refreshQwenAccelInfo(kind).then((next) => { if (next) render(next); })
-      .catch(() => {}).finally(() => qwenAccelInfoRequests.delete(kind));
-  }
-}
-
-// A hidden dashboard receives no snapshots, so the engine may restart unseen;
-// the next visible snapshot is then trusted as it stands.
-document.addEventListener('visibilitychange', () => { if (document.hidden) speechCudaRestartPending = false; });
-
-speechGpuActionBtn.addEventListener('click', () => {
-  const btn = speechGpuActionBtn;
-  if (speechIsDisabled(btn)) return;
-  const action = btn.dataset.action;
-  const kind = btn.dataset.kind === 'rocm' ? 'rocm' : 'cuda';
-  const key = 'gpu:' + action;
-  if (action.endsWith('-cancel') && Date.now() < (speechArmedAt.get('gpu') || 0)) return;
-  if (speechPending.has(key) || !window.vell) return;
-  const calls = {
-    'cuda-install': () => window.vell.installCudaPack(),
-    'cuda-cancel': () => window.vell.cancelCudaPack(),
-    'qwen-install': () => window.vell.installQwenAccel(kind),
-    'qwen-cancel': () => window.vell.cancelQwenAccel(kind),
-    'qwen-retry': () => window.vell.retryQwenAccel(),
-    'use-gpu': () => patchSettings({ asrDevice: 'auto' }),
-  };
-  if (!calls[action]) return;
-  speechDismissError(lastPayload);
-  speechPending.add(key);
-  render();
-  Promise.resolve().then(calls[action])
-    .then((next) => { if (next && action !== 'use-gpu') render(next); })
-    .catch(() => {})
-    // A cancel stays pending until the pack stops being busy (renderSpeechEngines).
-    .finally(() => { if (!action.endsWith('-cancel')) speechPending.delete(key); render(); });
-});
+// GPU acceleration went away with the CUDA/Qwen packs: Voz runs on the
+// CPU through onnxruntime-node on every platform.
 
 // The privacy row's hint carries the live count, so "kept for 14 days" is
 // followed by what that currently amounts to on this PC.
@@ -6227,50 +5917,6 @@ if (settingInputs.keepTrainingAudio) {
     patchSettings({ keepTrainingAudio: settingInputs.keepTrainingAudio.checked });
   });
 }
-if (settingInputs.useTunedModel) {
-  settingInputs.useTunedModel.addEventListener('change', () => {
-    patchSettings({ useTunedModel: settingInputs.useTunedModel.checked });
-  });
-}
-if (settingInputs.asrDevice) {
-  settingInputs.asrDevice.addEventListener('change', () => speechChangeProcessor(settingInputs.asrDevice.value));
-}
-
-// Parakeet runs different weights on an AMD or Intel GPU than on the
-// processor. When the other precision is not on disk, ask first, download it
-// with the row's own progress and Cancel, and set the processor only once it
-// has landed: setting it first would leave dictation broken until then, and a
-// cancel would leave it broken for good.
-async function speechChangeProcessor(value) {
-  const data = lastPayload || {};
-  const next = ['cuda', 'directml', 'cpu'].includes(value) ? value : 'auto';
-  const prev = speechDevice(data);
-  if (next === prev || speechPending.has('processor')) return;
-  const engine = asrEngineId(data.asrEngine);
-  const nextComponent = speechComponent(engine, next);
-  const item = speechPlanItem(data, nextComponent);
-  const needsDownload = engine === 'parakeet' && nextComponent !== speechComponent(engine, prev) && item && !item.installed;
-  speechPending.add('processor');
-  try {
-    if (!needsDownload) { await patchSettings({ asrDevice: next }); return; }
-    settingInputs.asrDevice.value = prev;
-    syncCustomSelect(settingInputs.asrDevice);
-    const size = item.bytes ? formatSetupBytes(item.bytes) + ' ' : '';
-    const yes = await askConfirm({
-      title: next === 'directml' ? 'Switch Parakeet v3 to your AMD or Intel GPU?' : 'Switch Parakeet v3 back to the processor?',
-      body: 'This needs a separate ' + size + 'download, and dictation on ' + thisDevice() + ' pauses until it finishes.',
-      confirmLabel: 'Download and switch',
-    });
-    if (!yes) return;
-    const snap = await speechInstallModel('parakeet', nextComponent);
-    const done = snap && speechPlanItem(snap, nextComponent);
-    if (done && done.installed) await patchSettings({ asrDevice: next });
-  } finally {
-    speechPending.delete('processor');
-    render();
-  }
-}
-
 if (speechAdvancedEl) {
   speechAdvancedEl.addEventListener('toggle', () => { if (!speechAdvancedEl.open) closeAllCustomSelects(); });
 }
@@ -6371,14 +6017,6 @@ if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
 }
 
 initCustomSelects();
-// Settings > Speech engines > Processor. The trigger is what people operate,
-// so it is named by the row label plus its value; aria-labelledby outranks the
-// value-only aria-label that syncCustomSelect keeps writing.
-if (customSelectMap.has(settingInputs.asrDevice)) {
-  const speechProcessorSelect = customSelectMap.get(settingInputs.asrDevice);
-  speechProcessorSelect.label.id = 'speech-processor-value';
-  speechProcessorSelect.trigger.setAttribute('aria-labelledby', 'speech-processor-label speech-processor-value');
-}
 setView('dictation');
 setSettingsCat('general');
 window.vell.onHistory(render);

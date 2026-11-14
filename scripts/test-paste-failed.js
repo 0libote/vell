@@ -194,13 +194,34 @@ async function main() {
       // The same note an app gets when it is first seen in front, so one app
       // never has two (test-admin-apps.js).
       assert.deepStrictEqual(adminNotes(h), [{ id: 'admin-app:winword.exe', kind: 'paste', title: 'winword.exe runs as administrator',
-        body: 'Windows does not let Voxden hear its shortcuts or type into it while it is in front, '
+        body: 'Windows does not let Vell hear its shortcuts or type into it while it is in front, '
           + 'so a dictation into it waits on the clipboard for your Ctrl+V. '
           + 'To dictate into it as usual, open Settings, System, and choose Restart as administrator.',
         action: { settings: 'system' } }]);
       h.run("mode = 'transcribing'");
       await dictate(h, 'Target runs as administrator');
       assert.strictEqual(adminNotes(h).length, 1, 'a second dictation into the same app adds no second note');
+    } finally { await h.close(); }
+  });
+
+  // The macOS helper answers this when the running binary is not
+  // Accessibility-trusted (e.g. a dev Electron launch). Nothing can be pasted
+  // for the user, but a real keypress needs no grant, so the words stay on
+  // the clipboard for the user's own Cmd+V instead of being restored away.
+  await test('a missing Accessibility grant: the words stay on the clipboard, the log names the grant', async () => {
+    const clip = fakeClipboard(Object.assign({}, USER_COPY));
+    const h = setup(clip);
+    try {
+      h.run("var flashed = []; sendOverlay = (x) => { if (x && x.mode === 'error') flashed.push(x.text); };");
+      await dictate(h, 'Accessibility permission is missing');
+      assertKept(h);
+      assert.deepStrictEqual(failures(h), [{ event: 'paste-failed',
+        reason: 'Paste helper failed: Accessibility permission is missing', exe: 'winword.exe' }]);
+      assert.strictEqual(clip.state['text/plain'], h.run('history.entries[0].text'));
+      assert.strictEqual(h.run('restoreLater'), null, 'a kept paste schedules no restore');
+      // The harness pins platform to win32, so the grant-specific flash cannot
+      // fire here; the bar still reports the failure.
+      assert.strictEqual(h.run('flashed.length'), 1, 'the bar reports the failure');
     } finally { await h.close(); }
   });
 

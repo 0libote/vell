@@ -22,10 +22,10 @@ let snapshot = {};
 let restartCalls = 0;
 let answerRestart = null;
 
-const HINT = 'Only needed for games and apps that run as administrator. Windows asks first; it lasts until Voxden restarts.';
+const HINT = 'Only needed for games and apps that run as administrator. Windows asks first; it lasts until Vell restarts.';
 const NOTE = {
   id: 'admin-app:game.exe', kind: 'paste', title: 'Game.exe runs as administrator',
-  body: 'Windows does not let Voxden hear its shortcuts or type into it while it is in front.',
+  body: 'Windows does not let Vell hear its shortcuts or type into it while it is in front.',
   ts: Date.now(), unread: true, action: { settings: 'system' },
 };
 

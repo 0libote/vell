@@ -171,18 +171,14 @@ for (const engine of caps.ENGINE_IDS) {
     context.included.length + context.dropped.length, rankedMany.length);
 }
 
-ok('a dictionary far larger than the cap still sends its best terms',
-  vocab.contextFor(rankedMany, { engine: 'qwen3-asr' }).included[0] === 'Terminology0');
+ok('with no in-model mechanism nothing is sent in the prompt',
+  vocab.contextFor(rankedMany, { engine: 'voz' }).included.length === 0);
 eq('an engine with no mechanism sends nothing and says everything was dropped',
-  vocab.contextFor(rankedMany, { engine: 'parakeet' }).included.length, 0);
+  vocab.contextFor(rankedMany, { engine: 'voz' }).dropped.length, rankedMany.length);
 
-// Aliases are misrecognitions. Teaching a decoder the wrong spelling is how
-// you get the wrong spelling back.
-const aliased = [vocab.makeEntry('Kharagpur', { aliases: ['karagpur', 'carrot pur'] })];
-const aliasContext = vocab.contextFor(aliased, { engine: 'qwen3-asr' });
-ok('only canonical spellings go into the prompt',
-  aliasContext.text.includes('Kharagpur') && !/karagpur/i.test(aliasContext.text));
-
+// Aliases are misrecognitions. With no in-model prompt they never leave the
+// app: repair matches them against what the engine heard instead.
+// (Covered by the repair and lifecycle suites.)
 // Non-Latin costs more tokens per character, and guessing low is what overruns
 // a prompt window.
 ok('Devanagari is budgeted more expensively than Latin, per character',

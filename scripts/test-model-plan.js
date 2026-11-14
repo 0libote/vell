@@ -1,21 +1,10 @@
 'use strict';
 
-// What a machine has to download, and what it is merely offered.
+// What a machine has to download, and what is merely offered.
 //
-// Setup used to be all-or-nothing. SpeechModelsManager.install() took no
-// argument and fetched every pack; setupDictation called it next to the
-// Whisper download unconditionally; the banner added the lot up and told a
-// first-run user "up to 11.0 GB" before they had dictated a word:
-//
-//   Whisper large-v3   3.10 GB    only if you pick Whisper
-//   Qwen3-ASR 1.7B     4.70 GB    only if you pick Qwen
-//   Parakeet int8      0.66 GB    the CPU fast path
-//   Parakeet float32   2.51 GB    the DirectML fast path
-//
-// Exactly one Parakeet precision can ever load on a given machine, and on the
-// runtime Voxden ships there is no CUDA execution provider at all, so the
-// float32 weights are reachable only when the processor is set to AMD or Intel
-// by hand. These tests hold that line.
+// Vell ships one engine, Desert Ant Voz, whose ~409MB bundle the provider
+// fetches and caches on install. There is nothing else to download and no
+// per-device variants: one model, one plan.
 
 const assert = require('assert');
 const plan = require('../src/model-plan');
@@ -33,141 +22,57 @@ function eq(label, actual, expected) {
   process.stdout.write('ok ' + label + '\n');
 }
 
-// The real catalogue sizes, so the figures below are the ones users see.
-const SIZES = {
-  whisper: 3.1e9,
-  'whisper-turbo': 1620000000,
-  'qwen3-asr': 4700000000,
-  parakeet: 660000000,
-  'parakeet-fp32': 2510000000,
-};
+// The real catalogue size, so the figures below are the ones users see.
+const SIZES = { voz: 409000000 };
 const GB = (n) => Number((n / 1e9).toFixed(2));
 
 function planFor(overrides) {
   return plan.plan(Object.assign({ sizes: SIZES, installed: {} }, overrides));
 }
 
-// --- 1. A first run downloads one engine, not all of them -------------------
-const qwenFirstRun = planFor({ engine: 'qwen3-asr', device: 'auto' });
-eq('a Qwen install needs only Qwen', qwenFirstRun.required, ['qwen3-asr']);
-eq('and that is what it costs', GB(qwenFirstRun.requiredBytes), 4.7);
-ok('which is far less than every model added together',
-  qwenFirstRun.requiredBytes < Object.values(SIZES).reduce((a, b) => a + b, 0) / 2);
+// --- 1. A first run downloads Voz, and nothing else ---------------------------
+const firstRun = planFor({ engine: 'voz', device: 'auto' });
+eq('a Voz install needs only Voz', firstRun.required, ['voz']);
+eq('and that is what it costs', GB(firstRun.requiredBytes), 0.41);
+eq('and nothing else is on offer', firstRun.optional, []);
+eq('and nothing is hidden', firstRun.hidden, []);
 
-eq('a Whisper install needs only Whisper',
-  planFor({ engine: 'whisper', device: 'auto' }).required, ['whisper']);
-eq('a Parakeet install needs only the int8 weights',
-  planFor({ engine: 'parakeet', device: 'auto' }).required, ['parakeet']);
-eq('and that is the smallest install there is',
-  GB(planFor({ engine: 'parakeet', device: 'auto' }).requiredBytes), 0.66);
+// --- 2. Installed means ready ---------------------------------------------------
+const ready = planFor({ engine: 'voz', device: 'auto', installed: { voz: true } });
+ok('with the model installed the plan is ready', ready.ready);
+eq('and nothing is missing', ready.missing, []);
+eq('and nothing costs anything', ready.requiredBytes, 0);
 
-// --- 2. The duplicate Parakeet is never fetched twice -----------------------
-for (const device of ['auto', 'cpu', 'cuda']) {
-  const p = planFor({ engine: 'qwen3-asr', device });
-  ok('on ' + device + ', the float32 Parakeet is not even offered',
-    p.hidden.includes('parakeet-fp32') && !p.optional.includes('parakeet-fp32'));
-  ok('and the int8 build is the one on offer', p.optional.includes('parakeet'));
-}
-const directml = planFor({ engine: 'qwen3-asr', device: 'directml' });
-ok('choosing the AMD or Intel processor offers the float32 build instead',
-  directml.optional.includes('parakeet-fp32') && !directml.optional.includes('parakeet'));
-eq('and Parakeet as a primary engine there needs the float32 build',
-  planFor({ engine: 'parakeet', device: 'directml' }).required, ['parakeet-fp32']);
+// --- 3. Switching engine always lands on Voz ------------------------------------
+eq('an unknown engine falls back to Voz',
+  plan.missingFor({ engine: 'whisper', device: 'auto', sizes: SIZES, installed: {} }), ['voz']);
 
-for (const p of [qwenFirstRun, directml, planFor({ engine: 'whisper', device: 'cpu' })]) {
-  ok('no plan ever asks for both Parakeet precisions',
-    !(p.required.concat(p.optional).includes('parakeet')
-      && p.required.concat(p.optional).includes('parakeet-fp32')));
-}
-
-// The sidecar's own rule, mirrored: int8 on the CPU, float32 on a GPU.
-eq('auto resolves to the int8 pack', plan.parakeetPackFor('auto'), 'parakeet');
-eq('cpu resolves to the int8 pack', plan.parakeetPackFor('cpu'), 'parakeet');
-eq('cuda resolves to the int8 pack, because the runtime has no CUDA provider',
-  plan.parakeetPackFor('cuda'), 'parakeet');
-eq('directml resolves to the float32 pack', plan.parakeetPackFor('directml'), 'parakeet-fp32');
-
-// --- 3. The fast English path is a separate, small download -----------------
-const fast = qwenFirstRun.items.find((i) => i.id === 'parakeet');
-eq('the fast path is optional', fast.role, 'optional');
-eq('and costs 0.66 GB', GB(fast.bytes), 0.66);
-ok('and says what it is for', /fast/i.test(fast.summary) && /multilingual/i.test(fast.summary));
-
-// Both Whisper builds recognise Hindi, so both stay on offer; Parakeet is the
-// engine this check is about, and it drops out.
-eq('a Hindi dictation is not offered an English-only engine',
-  planFor({ engine: 'qwen3-asr', device: 'auto', language: 'hi' }).optional, ['whisper', 'whisper-turbo']);
-ok('and Parakeet is hidden rather than shown as unavailable',
-  planFor({ engine: 'qwen3-asr', device: 'auto', language: 'hi' }).hidden.includes('parakeet'));
-ok('choosing Parakeet itself does not offer Parakeet again',
-  !planFor({ engine: 'parakeet', device: 'auto' }).optional.includes('parakeet'));
-
-// --- 4. Other engines are an offer, not a requirement -----------------------
-eq('a Qwen user is offered Whisper as a fallback',
-  qwenFirstRun.optional.includes('whisper'), true);
-eq('but does not need it to dictate', qwenFirstRun.missing, ['qwen3-asr']);
-const qwenReady = planFor({ engine: 'qwen3-asr', device: 'auto', installed: { 'qwen3-asr': true } });
-ok('with its engine installed the plan is ready', qwenReady.ready);
-eq('and nothing is missing', qwenReady.missing, []);
-ok('even though the other engines are still absent', qwenReady.optional.length > 0);
-
-// --- 5. Switching engine names the download instead of failing --------------
-eq('switching to Whisper with only Qwen installed asks for Whisper',
-  plan.missingFor({ engine: 'whisper', device: 'auto', sizes: SIZES, installed: { 'qwen3-asr': true } }),
-  ['whisper']);
-eq('switching back costs nothing',
-  plan.missingFor({ engine: 'qwen3-asr', device: 'auto', sizes: SIZES, installed: { 'qwen3-asr': true } }),
-  []);
-eq('switching the processor to AMD or Intel needs the float32 weights',
-  plan.missingFor({ engine: 'parakeet', device: 'directml', sizes: SIZES, installed: { parakeet: true } }),
-  ['parakeet-fp32']);
-
-// --- 6. Every engine the picker offers has a plan ---------------------------
-for (const engine of Object.keys(asr.ASR_ENGINES)) {
-  for (const device of asr.ASR_DEVICES) {
-    const p = planFor({ engine, device });
-    eq(engine + '/' + device + ' requires exactly one model', p.required.length, 1);
-    ok(engine + '/' + device + ' accounts for every component',
-      p.required.length + p.optional.length + p.hidden.length === plan.COMPONENT_IDS.length);
-    ok(engine + '/' + device + ' costs less than the old all-in download',
-      p.requiredBytes < 5e9);
-  }
-}
-
-// --- 7. Which engines a platform offers at all ------------------------------
-//
-// Windows offers all four. A Mac offers three: Qwen3-ASR is left out of this
-// first build because its GPU packs are Windows PyTorch builds with no macOS
-// equivalent, which would leave a Mac user downloading the largest model
-// (4.7 GB) to run the slowest engine. Parakeet leads because it is the one
-// that is fast on an Apple CPU.
+// --- 4. Both platforms offer Voz and only Voz -------------------------------------
 const capabilities = require('../src/asr-capabilities');
-eq('Windows offers every engine, in the catalogue order',
-  plan.availableEngines('win32'), [...capabilities.ENGINE_IDS]);
-eq('a Mac offers the three that run well on its CPU',
-  plan.availableEngines('darwin'), ['parakeet', 'whisper-turbo', 'whisper']);
-ok('Qwen3-ASR is not offered on a Mac in this build',
-  !plan.availableEngines('darwin').includes('qwen3-asr'));
-ok('and every engine a Mac does offer is a real engine',
+eq('Windows offers Voz',
+  plan.availableEngines('win32'), ['voz']);
+eq('a Mac offers Voz too',
+  plan.availableEngines('darwin'), ['voz']);
+ok('and it is a real engine',
   plan.availableEngines('darwin').every((id) => capabilities.ENGINE_IDS.includes(id)));
 eq('an unknown platform is a developer build and sees everything',
   plan.availableEngines('freebsd'), [...capabilities.ENGINE_IDS]);
 eq('the list is a copy, so a caller cannot edit the catalogue',
   (() => { plan.availableEngines('darwin').push('qwen3-asr'); return plan.availableEngines('darwin'); })(),
-  ['parakeet', 'whisper-turbo', 'whisper']);
+  ['voz']);
 eq('the platform defaults to this machine',
   plan.availableEngines(), plan.availableEngines(process.platform));
 
 eq('engineOffered agrees with the list on Windows',
-  capabilities.ENGINE_IDS.map((id) => plan.engineOffered(id, 'win32')), [true, true, true, true]);
-eq('and on a Mac, where Qwen is the one that is not',
-  capabilities.ENGINE_IDS.map((id) => plan.engineOffered(id, 'darwin')), [true, true, false, true]);
-ok('engineOffered takes the value as typed', plan.engineOffered(' Parakeet ', 'darwin'));
+  capabilities.ENGINE_IDS.map((id) => plan.engineOffered(id, 'win32')), [true]);
+eq('and on a Mac',
+  capabilities.ENGINE_IDS.map((id) => plan.engineOffered(id, 'darwin')), [true]);
+ok('engineOffered takes the value as typed', plan.engineOffered(' Voz ', 'darwin'));
 ok('and nothing else is an engine', !plan.engineOffered('nonsense', 'win32'));
 ok('nor is nothing at all', !plan.engineOffered('', 'darwin') && !plan.engineOffered(undefined, 'win32'));
 
-// Every engine a platform offers has to have a model plan behind it, or the
-// picker would show an engine that cannot be downloaded.
+// The offered engine has to have a model plan behind it, or the picker would
+// show an engine that cannot be downloaded.
 for (const platform of ['win32', 'darwin']) {
   for (const engine of plan.availableEngines(platform)) {
     eq(platform + ' offers ' + engine + ', and it requires exactly one model',
@@ -175,10 +80,15 @@ for (const platform of ['win32', 'darwin']) {
   }
 }
 
-// --- 8. Sizes come from the caller, not from here ---------------------------
+// --- 5. Sizes come from the caller, not from here -------------------------------
 eq('a component with no size reported costs nothing',
-  plan.plan({ engine: 'whisper', device: 'auto', sizes: {}, installed: {} }).requiredBytes, 0);
-eq('an unknown engine falls back to Whisper',
-  plan.modelForEngine('nonsense', 'auto'), 'whisper');
+  plan.plan({ engine: 'voz', device: 'auto', sizes: {}, installed: {} }).requiredBytes, 0);
+eq('an unknown engine falls back to Voz',
+  plan.modelForEngine('nonsense', 'auto'), 'voz');
+
+// --- 6. Only Voz is a known engine -----------------------------------------------
+eq('asr knows only Voz', Object.keys(asr.ASR_ENGINES), ['voz']);
+eq('and Voz is the default', asr.DEFAULT_ASR_ENGINE, 'voz');
+eq('unknown engines normalise to Voz', asr.normalizeAsrEngine('whisper'), 'voz');
 
 process.stdout.write('all ' + checks + ' model plan checks passed\n');

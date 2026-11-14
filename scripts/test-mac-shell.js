@@ -165,15 +165,15 @@ function loadAfterPack(execLog, platformName) {
   await afterPack(context);
   const app = path.join('/out/mac-arm64', 'Voxden.app');
   const res = path.join(app, 'Contents', 'Resources');
-  eq('the two Resources binaries are signed before the bundle', log.slice(0, 2).map((c) => c[c.length - 1]),
-    [path.join(res, 'pack-tools', '7za'), path.join(res, 'helper', 'voxden-helper')]);
-  const bundle = log[2];
+  eq('the helper binary is signed before the bundle', log.slice(0, 1).map((c) => c[c.length - 1]),
+    [path.join(res, 'helper', 'voxden-helper')]);
+  const bundle = log[1];
   ok('the bundle is signed ad hoc, deep, with the hardened runtime and entitlements',
     bundle[0] === 'codesign' && bundle.includes('--deep') && bundle[bundle.indexOf('--sign') + 1] === '-'
     && bundle[bundle.indexOf('--options') + 1] === 'runtime'
     && bundle[bundle.indexOf('--entitlements') + 1].endsWith('entitlements.mac.plist') && bundle[bundle.length - 1] === app);
-  eq('and then verified strictly', log[3], ['codesign', '--verify', '--deep', '--strict', '--verbose=2', app]);
-  eq('four codesign calls in all', log.length, 4);
+  eq('and then verified strictly', log[2], ['codesign', '--verify', '--deep', '--strict', '--verbose=2', app]);
+  eq('three codesign calls in all', log.length, 3);
 
   const winLog = [];
   await loadAfterPack(winLog, 'win32').afterPack({ electronPlatformName: 'win32', appOutDir: 'x', packager: context.packager });
@@ -202,7 +202,7 @@ function loadAfterPack(execLog, platformName) {
       await h.run("onTranscript('Words worth keeping')");
       eq(platform + ': the words are kept', h.run('history.entries[0].text'), 'Words worth keeping');
       if (platform === 'darwin') {
-        eq('darwin: the bar names Accessibility', said, ['Allow Voxden in Accessibility to paste']);
+        eq('darwin: the bar names Accessibility', said, ['Allow Vell in Accessibility to paste — text is on the clipboard']);
         eq('darwin: and the system prompt is raised', prompts, [false, true]);
       } else {
         eq('win32: the bar is unchanged', said, ['Paste failed — text saved in history']);

@@ -158,7 +158,7 @@ app.whenReady().then(async () => {
     assert.strictEqual(computed.actions, '1', 'the Recover button does not wait for a hover');
     // A crash carries no reason of its own, so the card explains itself.
     assert.match(await text(card('r2') + ' .recovery-facts'),
-      /^8 sec · .+ · Voxden closed before this dictation finished$/);
+      /^8 sec · .+ · Vell closed before this dictation finished$/);
 
     // --- what the button says it costs --------------------------------
 

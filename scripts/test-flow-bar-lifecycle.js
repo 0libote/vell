@@ -242,7 +242,7 @@ await check('a deferred idle surface restore uses current recording input state'
       if (++attempts === 1) throw new Error('Native surface unavailable');
       show();
     };
-    f.h.run('overlayHover = false; setOverlayMouseIgnore(true)');
+    f.h.run('settings.alwaysShowFlowBar = true; overlayHover = false; setOverlayMouseIgnore(true)');
     f.tick(19000, true, false);
     assert.strictEqual(win.isVisible(), false);
     assert.strictEqual(win.ignoreMouse, true);

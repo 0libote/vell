@@ -27,9 +27,7 @@ const { createClipboardPaste, readRestorable } = require('./clipboard-paste');
 const { createScreenCapture } = require('./screen-capture');
 const { ownWindowId } = require('./window-id');
 const macShell = require('./mac-shell');
-const models = require('./models');
 const asr = require('./asr');
-const hinglish = require('./hinglish');
 const hotkeys = require('./hotkeys');
 const flowBar = require('./flow-bar');
 const { normalizePreference: normalizeFlowMotion } = require('./flow-motion');
@@ -37,20 +35,10 @@ const appTheme = require('./app-theme');
 const { createHealthMonitor, createFrameMonitor, timerLateness } = require('./overlay-health');
 const { createDiagLog } = require('./diag');
 const announcements = require('./announcements');
-const { createSidecarQueue } = require('./sidecar-queue');
 const { createMediaController } = require('./media-controller');
-const { AsrRuntimeManager } = require('./asr-runtime');
-const { AsrModelManager } = require('./asr-model');
-const { SpeechModelsManager } = require('./speech-models');
+const { VozModelManager } = require('./voz-model');
+const { createProvider, ensureVoz } = require('./transcription-provider');
 const cleanRemove = require('./clean-remove');
-const { CudaPackManager } = require('./cuda-pack');
-const gpu = require('./gpu');
-const qwenAccel = require('./qwen-accel');
-const { QwenAccelPackManager, pathWithRuntimeBins } = require('./qwen-accel-pack');
-const { validateQwenProbe } = require('./qwen-verification');
-const { createDownloadProgressGate } = require('./release-download');
-const { startSidecarAfterGpuDetection } = require('./startup-gpu');
-const warmStart = require('./warm-start');
 const elevation = require('./elevation');
 
 app.setName('Vell');
@@ -98,51 +86,21 @@ let lastTarget = { hwnd: '0', exe: '', title: '' };
 let overlayHwnd = '0';
 let historyHwnd = '0';
 let mode = 'idle';
-let engine = 'webspeech';
-let engineModel = 'large-v3';
-let engineDevice = 'cpu';
-let engineBackend = 'faster-whisper';
-let engineFastBackend = '';
-let engineVocabulary = '';
-let engineFastVocabulary = '';
-let engineFastModel = '';
-let engineFastDevice = '';
-let engineWarning = '';
+let engineError = '';
+let engineProgress = null;
 // Set when a hotkey could not be registered at launch and the app fell back to
 // a different chord. Shown in settings until the shortcut is changed.
 let hotkeyNotice = '';
-let engineFix = '';
-let engineFixEngine = '';
-let engineError = '';
-let engineProgress = null;
 let pttReleasePending = false;
 // Only the shortcut that began a physical hold can release or cancel it.
 let pttOwner = null;
 let hwndTimer = null;
-let sidecar = null;
 let sidecarReady = false;
 let sidecarState = 'starting';
-let sidecarRestarts = 0;
-let sidecarRestartNow = false;
-let sidecarStartToken = 0;
-let sidecarProbe = null;
-let sidecarRestartTimer = null;
-// A cold app launch only probes the speech runtime. The multi-gigabyte model
-// process is requested by the first dictation, so opening Vell never competes
-// with the desktop for disk, RAM, CPU and GPU all at once.
 let sidecarStartRequested = false;
 let asrOperation = null;
 let asrSetupController = null;
-let sidecarQueue = createSidecarQueue();
 let sidecarReadyWaiters = [];
-let sidecarBuf = '';
-let sidecarProgressBuf = '';
-// Set while the speech engine is being deleted. Windows will not remove a
-// directory whose python.exe is running, so the sidecar has to be stopped and
-// seen to exit first -- and its exit handler otherwise schedules a restart
-// five seconds later, which would put a live interpreter straight back inside
-// the directory and make the delete fail all over again.
-let removingAsrRuntime = false;
 let recordingStartedAt = 0;
 let lastDurationMs = 0;
 let dictationTiming = null;
@@ -165,7 +123,7 @@ let vocabularyDirty = true;
 // panel. Never contains audio or transcript text -- only term names the user
 // typed in themselves and the decisions taken about them.
 let lastVocabularyReport = null;
-// What the sidecar said about the dictation it just finished.
+// What Voz reported about the dictation it just finished.
 let lastAsrReport = null;
 let history = { entries: [] };
 let historyAnalyticsRevision = 0;
@@ -189,7 +147,7 @@ let settings = {
   gameShortcut: GAME_SHORTCUT_DEFAULT,
   gameShortcutEnabled: false,
   launchAtLogin: false,
-  alwaysShowFlowBar: true,
+  alwaysShowFlowBar: false,
   flowBarStyle: 'island',
   flowBarMotion: 'system',
   // Where the user dragged the flow bar to, as the screen point its bottom
@@ -201,7 +159,6 @@ let settings = {
   suggestionsEnabled: true,
   keepTrainingAudio: false,
   keepRecordings: false,
-  useTunedModel: true,
   asrEngine: asr.DEFAULT_ASR_ENGINE,
   asrDevice: 'auto',
   dictationLanguage: 'en',
@@ -224,33 +181,7 @@ let settings = {
   spokenCorrections: false,
 };
 
-let asrRuntimeManager = null;
-let asrModelManager = null;
-let speechModelsManager = null;
-let cudaPackManager = null;
-let cudaPackState = { status: 'idle', progress: null, message: '' };
-let qwenCudaPackManager = null;
-let qwenRocmPackManager = null;
-let qwenCudaPackState = { status: 'idle', progress: null, message: '' };
-let qwenRocmPackState = { status: 'idle', progress: null, message: '' };
-const whisperCudaProgressGate = createDownloadProgressGate();
-const qwenCudaProgressGate = createDownloadProgressGate();
-const qwenRocmProgressGate = createDownloadProgressGate();
-let qwenAccelSessionBlock = null;
-let engineQwenBackend = 'cpu';
-let engineComputeType = '';
-let engineGpuName = '';
-let engineGpuArch = '';
-let engineTorchVersion = '';
-let enginePackId = '';
-let engineQwenProbe = false;
-let engineQwenInit = false;
-let engineFallbackReason = '';
-let gpuRenderer = '';
-// What Electron reports about the graphics on this PC, resolved once at
-// startup. Empty until it answers, which is why gpuPlan treats an empty list
-// as "no usable GPU" rather than guessing.
-let gpuDevices = [];
+let vozModelManager = null;
 // One state for the whole first-run setup. The engine and the weights are two
 // downloads but not two decisions -- neither is any use without the other, so
 // the user is shown one operation with one bar.
@@ -355,7 +286,6 @@ let SETTINGS_FILE;
 let NOTIFICATIONS_FILE;
 let WIN32;
 let HELPER;
-let SIDECAR;
 let MODELS;
 let ASR_RUNTIME;
 let ASR_MODELS;
@@ -385,7 +315,6 @@ function initPaths() {
     VOCAB_SEED = path.join(res, 'scripts', 'vocabulary-seed.json');
     WIN32 = path.join(res, 'scripts', 'win32.ps1');
     HELPER = path.join(res, 'helper', 'voxden-helper');
-    SIDECAR = path.join(res, 'sidecar', 'transcribe.py');
     MODELS = path.join(app.getPath('userData'), 'models');
     ASR_RUNTIME = path.join(app.getPath('userData'), 'asr-runtime');
     ASR_MODELS = path.join(app.getPath('userData'), 'asr-models');
@@ -404,7 +333,6 @@ function initPaths() {
     NOTIFICATIONS_FILE = path.join(DATA, 'notifications.json');
     WIN32 = path.join(ROOT, 'scripts', 'win32.ps1');
     HELPER = path.join(ROOT, 'build', 'mac-helper', 'voxden-helper');
-    SIDECAR = path.join(ROOT, 'sidecar', 'transcribe.py');
     MODELS = path.join(ROOT, 'models');
     ASR_RUNTIME = path.join(ROOT, 'models', 'asr-runtime');
     ASR_MODELS = path.join(ROOT, 'models', 'asr-models');
@@ -414,114 +342,9 @@ function initPaths() {
     ICON_PNG = path.join(ROOT, 'assets', 'icon.png');
     ICON_ICO = path.join(ROOT, 'assets', 'icon.ico');
   }
-  asrRuntimeManager = new AsrRuntimeManager({
-    root: ASR_RUNTIME,
-    bundledRoot: app.isPackaged ? path.join(process.resourcesPath, 'speech-runtime')
-      : path.join(ROOT, 'dist-runtime-v3'),
-    validateRuntime: (python, signal) => new Promise((resolve, reject) => {
-      execFile(python, ['-I', '-c', 'import faster_whisper, onnx_asr; from qwen_asr import Qwen3ASRModel'],
-        { windowsHide: true, timeout: 120000, signal }, err => err ? reject(
-          new Error('The speech engine could not load on ' + macShell.deviceName(process.platform) + '. ' + err.message)) : resolve());
-    }),
-    releaseApiUrl: process.env.VOXDEN_ASR_RUNTIME_RELEASE_API || undefined,
-    onProgress: (state) => reportSetup('engine', state),
-  });
-  asrModelManager = new AsrModelManager({
-    root: ASR_MODELS,
-    cacheRoot: MODELS,
-    purgeLegacy: app.isPackaged,
-    releaseApiUrl: process.env.VOXDEN_ASR_MODEL_RELEASE_API || undefined,
+  vozModelManager = new VozModelManager({
+    dataDir: DATA,
     onProgress: (state) => reportSetup('model', state),
-  });
-  speechModelsManager = new SpeechModelsManager({
-    root: path.join(ASR_MODELS, 'extras'),
-    cacheRoot: MODELS,
-    purgeLegacy: app.isPackaged,
-    onProgress: state => reportSetup('extras', state),
-  });
-  // The three GPU packs are Windows builds: two cuBLAS DLLs, a Windows CUDA
-  // PyTorch and a Windows ROCm PyTorch. There is nothing to download on a Mac,
-  // so the managers are simply not built there and every handler that would
-  // reach one already answers with the snapshot unchanged when it is null.
-  // Building them is the last thing initPaths does, so this returns; anything
-  // added below here has to move above this line.
-  if (!currentGpuPlan().packsOffered) return;
-  cudaPackManager = new CudaPackManager({
-    root: CUDA_PACK,
-    releaseApiUrl: process.env.VOXDEN_CUDA_PACK_RELEASE_API || undefined,
-    onProgress: (state) => {
-      cudaPackState = Object.assign({}, cudaPackState, state);
-      if (whisperCudaProgressGate(cudaPackState)) broadcast();
-    },
-  });
-  const validateQwenAccel = (kind) => (python, signal) => new Promise((resolve, reject) => {
-    const env = Object.assign({}, process.env, {
-      PYTHONNOUSERSITE: '1',
-      PYTHONUTF8: '1',
-      PYTHONPATH: path.dirname(SIDECAR),
-      PATH: pathWithRuntimeBins(python, process.env.PATH),
-      VOXDEN_QWEN_ACCEL: kind,
-      VOXDEN_OFFLINE: '1',
-    });
-    if (speechModelsManager) {
-      env.VOXDEN_QWEN_ASR_MODEL = speechModelsManager.directory('qwen3-asr');
-    }
-    execFile(python, ['-I', SIDECAR, '--probe-qwen-accel'], {
-      windowsHide: true,
-      timeout: 300000,
-      signal,
-      env,
-    }, (err, stdout) => {
-      let parsed = null;
-      try { parsed = JSON.parse(String(stdout || '').trim().split('\n').pop()); } catch (_) {}
-      try {
-        if (err) throw new Error(parsed?.qwen_error || parsed?.error || err.message);
-        if (parsed?.backend !== kind) throw new Error('The accelerator reported the wrong GPU backend.');
-        resolve(validateQwenProbe(parsed));
-      } catch (failure) {
-        reject(failure);
-      }
-    });
-  });
-  // 7zip-bin ships its binaries under win/mac/linux folders; only Windows has the .exe suffix.
-  const sevenZipBinaryPath = () => {
-    if (process.platform === 'win32') {
-      return app.isPackaged ? path.join(process.resourcesPath, 'pack-tools', '7za.exe')
-        : path.join(ROOT, 'node_modules', '7zip-bin', 'win', 'x64', '7za.exe');
-    }
-    const folder = process.platform === 'darwin' ? 'mac' : process.platform;
-    return app.isPackaged ? path.join(process.resourcesPath, 'pack-tools', '7za')
-      : path.join(ROOT, 'node_modules', '7zip-bin', folder, process.arch, '7za');
-  };
-  const qwenDistribution = {
-    onDownloadInfo: () => broadcast(),
-    extractorPath: sevenZipBinaryPath(),
-    baseRuntimeRoot: () => {
-      const installed = asrRuntimeManager && asrRuntimeManager.installed();
-      return installed?.pythonPath ? path.dirname(installed.pythonPath) : null;
-    },
-  };
-  qwenCudaPackManager = new QwenAccelPackManager({
-    ...qwenDistribution,
-    kind: 'cuda',
-    root: QWEN_CUDA_PACK,
-    releaseApiUrl: process.env.VOXDEN_QWEN_CUDA_PACK_RELEASE_API || undefined,
-    validateRuntime: validateQwenAccel('cuda'),
-    onProgress: (state) => {
-      qwenCudaPackState = Object.assign({}, qwenCudaPackState, state);
-      if (qwenCudaProgressGate(qwenCudaPackState)) broadcast();
-    },
-  });
-  qwenRocmPackManager = new QwenAccelPackManager({
-    ...qwenDistribution,
-    kind: 'rocm',
-    root: QWEN_ROCM_PACK,
-    releaseApiUrl: process.env.VOXDEN_QWEN_ROCM_PACK_RELEASE_API || undefined,
-    validateRuntime: validateQwenAccel('rocm'),
-    onProgress: (state) => {
-      qwenRocmPackState = Object.assign({}, qwenRocmPackState, state);
-      if (qwenRocmProgressGate(qwenRocmPackState)) broadcast();
-    },
   });
 }
 
@@ -611,31 +434,9 @@ function trayImage() {
   return img.resize({ width: 32, height: 32 });
 }
 
-// Engines whose backend no longer exists at all. A value left behind in
-// settings.json outlives the option that set it, so a removal is only half the
-// job without this. qwen3-asr is deliberately not here: its backend is alive
-// and works on a Python that carries torch and qwen_asr, so it is gated on
-// detection rather than retired -- see engineAvailability.
-const RETIRED_ASR_ENGINES = new Set(['voxtral']);
-
-// The engine to assume when a settings file names none. The larger models are
-// checked first because either one present means the user chose to fetch it;
-// Parakeet is what a machine with nothing downloaded starts on.
-function inheritedAsrEngine() {
-  try {
-    if (speechModelsManager && speechModelsManager.installed('qwen3-asr')) return 'qwen3-asr';
-    if (speechModelsManager && speechModelsManager.installed('whisper-turbo')) return 'whisper-turbo';
-    if (asrModelManager && asrModelManager.installed()) return 'whisper';
-  } catch (_) {}
-  return asr.DEFAULT_ASR_ENGINE;
-}
-
-// Which engine a downloaded pack belongs to, for a download that was asked to
-// switch to what it fetched. The two Parakeet precisions are one engine.
+// Which engine a downloaded component belongs to. There is only Voz.
 function engineForComponent(id) {
-  const wanted = String(id || '').trim().toLowerCase();
-  if (wanted === 'parakeet' || wanted === 'parakeet-fp32') return 'parakeet';
-  return Object.prototype.hasOwnProperty.call(asr.ASR_ENGINES, wanted) ? wanted : '';
+  return String(id || '').trim().toLowerCase() === 'voz' ? 'voz' : '';
 }
 
 function loadSettings() {
@@ -647,7 +448,7 @@ function loadSettings() {
     gameShortcut: GAME_SHORTCUT_DEFAULT,
     gameShortcutEnabled: false,
     launchAtLogin: false,
-    alwaysShowFlowBar: true,
+    alwaysShowFlowBar: false,
     flowBarStyle: 'island',
     flowBarMotion: 'system',
     flowBarAnchor: null,
@@ -657,7 +458,6 @@ function loadSettings() {
     autoAddToDictionary: true,
     keepTrainingAudio: false,
     keepRecordings: false,
-    useTunedModel: true,
     asrEngine: asr.DEFAULT_ASR_ENGINE,
     localModelChosen: false,
     asrDevice: 'auto',
@@ -682,7 +482,7 @@ function loadSettings() {
       settings = Object.assign({}, defaults, raw);
       // Existing users keep their selection; new installs explicitly persist false.
       settings.localModelChosen = typeof raw.localModelChosen === 'boolean'
-        ? raw.localModelChosen : !!raw.asrEngine || inheritedAsrEngine() !== asr.DEFAULT_ASR_ENGINE;
+        ? raw.localModelChosen : !!raw.asrEngine;
       if (settings.dictateMode !== 'ptt' && settings.dictateMode !== 'toggle') {
         settings.dictateMode = 'toggle';
       }
@@ -702,21 +502,17 @@ function loadSettings() {
       settings.dictationLanguages = asr.normalizeDictationLanguages(
         raw.dictationLanguages !== undefined ? raw.dictationLanguages : raw.dictationLanguage);
       settings.dictationLanguage = settings.dictationLanguages[0];
-      if (raw.asrEngine === undefined) {
-        // A settings file with no engine key predates the picker. Its owner
-        // has whatever model the default of that day fetched, so keep them on
-        // it rather than sending a working install off to download Parakeet.
-        settings.asrEngine = inheritedAsrEngine();
+      if (raw.asrEngine === undefined || settings.asrEngine !== 'voz') {
+        // One engine now: an old file names whatever the picker used to
+        // offer. Point it at Voz without rewriting the user's file here; the
+        // save below persists it once.
+        settings.asrEngine = 'voz';
         migratedEngine = true;
       }
-      settings.asrEngine = asr.normalizeAsrEngine(settings.asrEngine);
-      if (RETIRED_ASR_ENGINES.has(String(raw.asrEngine || '').trim().toLowerCase())) {
-        settings.asrEngine = 'qwen3-asr';
-        migratedEngine = true;
-      }
-      settings.asrDevice = asr.normalizeAsrDevice(settings.asrDevice);
-      // Local sentence correction and the settings around it were removed;
-      // a settings file from before then still carries their keys.
+      settings.asrEngine = 'voz';
+      settings.asrDevice = 'cpu';
+      // The old per-engine models are gone with the sidecar; a settings file
+      // from before still carries their keys.
       delete settings.smartRewriteEndpoint;
       delete settings.smartRewriteModel;
       delete settings.smartRewriteEnabled;
@@ -956,10 +752,8 @@ function currentVocabulary() {
 
 // The terms offered to a dictation, in the order they deserve the budget.
 // Language filtering happens here: a Devanagari term has no business in the
-// prompt for an English dictation, and including it is both wasted budget and
-// a false-substitution risk.
-// Local-only: there is no plan and no cloud, so every policy is free/offline
-// and local engines hear English.
+// Local-only: there is no plan and no cloud; the picker always offers every
+// Voz language.
 function dictationPolicy() {
   return { plan: 'free', cloud: false };
 }
@@ -983,24 +777,19 @@ function dictationLanguages() {
 }
 
 // The language the text rules run in: commands, numbers, tone, the
-// dictionary, Hinglish. English wins whenever it is on the list, because a
-// mixed dictation is an English sentence with other words in it. Local
-// engines are English-only, so the text rules always use English.
+// dictionary. English wins whenever it is on the list, because a mixed
+// dictation is an English sentence with other words in it. Otherwise the
+// first selected language is what the transcript is treated as.
 function textLanguage() {
-  if (!asr.dictationLanguageUnlocked(dictationPolicy())) return 'en';
   const list = dictationLanguages();
-  return list.includes('en') || list.includes('hg') ? 'en' : asr.engineLanguageId(list[0]);
+  if (list.includes('en')) return 'en';
+  return asr.engineLanguageId(list[0]);
 }
 
-// Whether the Hindi an engine writes should come back as Hinglish. Local-only
-// builds never unlock extra languages, so this is always false.
-function wantsHinglish() {
-  return asr.dictationLanguageUnlocked(dictationPolicy()) && dictationLanguages().includes('hg');
-}
-
-// The language an engine is told. Local engines are always told English.
-function engineLanguage(_engine) {
-  return asr.wireLanguage(dictationLanguages(), dictationPolicy());
+// The language the engine is told. Voz takes no language input, so this is
+// the language the text rules run in.
+function engineLanguage() {
+  return textLanguage();
 }
 
 function vocabularyForDictation(language) {
@@ -1030,68 +819,58 @@ function snapshot() {
     phrases: dictionary.phrases,
     pendingPhrases: dictionary.pending || [],
     variantCount: (dictionary.variants || []).length,
-    engine,
-    engineStatus: sidecarState,
-    model: engineModel,
-    device: engineDevice,
-    // What the app will actually run, which on a Mac is not always what the
-    // settings file says. The picker marks its selection from this, so a
-    // stored engine this platform does not offer must not come back here.
-    asrEngine: effectiveEngine(),
-    asrDevice: effectiveDevice(),
-    asrEngineActive: engineBackend,
-    asrEngineWarning: engineWarning,
-    asrEngineFix: engineFix,
-    asrEngineFixEngine: engineFixEngine,
-    asrEngineAvailable: engineAvailability,
-    usingManagedRuntime: usingManagedRuntime(),
+    engine: 'voz',
+    engineStatus: vozModelManager && vozModelManager.installed() ? 'ready' : 'missing',
+    model: 'Voz',
+    device: 'cpu',
+    // Voz is the only engine, running in-process on the CPU.
+    asrEngine: 'voz',
+    asrDevice: 'cpu',
+    asrEngineActive: 'voz',
+    asrEngineWarning: '',
+    asrEngineFix: '',
+    asrEngineFixEngine: '',
+    asrEngineAvailable: { voz: true },
+    usingManagedRuntime: false,
     asrEngineError: engineError,
-    asrRuntime: asrRuntimeManager ? asrRuntimeManager.snapshot() : null,
-    asrModel: asrModelManager ? asrModelManager.snapshot() : null,
-    speechModels: speechModelsManager ? speechModelsManager.snapshot() : null,
+    // No separate runtime to download: Electron plus onnxruntime-node is the
+    // runtime, and it ships inside the app.
+    asrRuntime: { installed: true },
+    // The Voz model is the only model. It keeps the asrModel shape so the
+    // settings rows and the banner keep working unchanged.
+    asrModel: vozModelManager ? vozModelManager.snapshot() : null,
+    speechModels: { packs: [], installed: true, downloadBytes: 0 },
     // What this configuration needs, what it is offered, and what each costs.
     // The renderer shows the required figure rather than the sum of everything
     // that exists, because the sum was never what anybody had to download.
-    modelPlan: (asrModelManager && speechModelsManager) ? currentModelPlan() : null,
+    modelPlan: vozModelManager ? currentModelPlan() : null,
     asrOperation: asrOperation ? asrOperation.kind : null,
     asrRuntimeState,
     asrRuntimeWouldHelp: asrRuntimeWouldHelp(),
     localModelChosen: settings.localModelChosen === true,
     asrEngineProgress: engineProgress,
-    fastEngine: engineFastBackend,
-    // Whether every dictation is going through Parakeet, not just the fast
-    // ones. The settings hint says so out loud, and must not re-derive the
-    // rule -- a second copy is how a hint ends up describing routing that
-    // stopped happening.
-    gpu: currentGpuPlan(),
+    fastEngine: null,
+    gpu: null,
     // Which OS this is, and which engines it offers. The renderer draws the
     // model chooser from these two rather than from a hardcoded list, so an
     // engine that cannot run here is never on screen to be picked.
     platform: process.platform,
     availableEngines: modelPlan.availableEngines(process.platform),
-    cudaPack: cudaPackManager ? cudaPackManager.snapshot() : null,
-    cudaPackState,
-    qwenAccel: currentQwenAccelPlan(),
-    qwenCudaPack: qwenCudaPackManager ? qwenCudaPackManager.snapshot() : null,
-    qwenCudaPackState,
-    qwenRocmPack: qwenRocmPackManager ? qwenRocmPackManager.snapshot() : null,
-    qwenRocmPackState,
-    asrFastOnCpu: asr.prefersFastAsr({
-      device: engineDevice,
-      fastEngine: engineFastBackend,
-      language: engineLanguage(settings.asrEngine),
-    }),
-    fastModel: engineFastModel,
-    fastDevice: engineFastDevice,
+    cudaPack: null,
+    cudaPackState: null,
+    qwenAccel: null,
+    qwenCudaPack: null,
+    qwenCudaPackState: null,
+    qwenRocmPack: null,
+    qwenRocmPackState: null,
+    asrFastOnCpu: false,
+    fastModel: null,
+    fastDevice: null,
     // What the dictionary can actually do on the engine that is running.
-    // 'context' and 'initial_prompt' mean the terms are given to the model
-    // before it decodes; 'unsupported' means the engine has no such input and
-    // the dictionary is applied to the transcript afterwards. Reporting it is
-    // the point: a request that cannot be honoured must not look like one that
-    // was.
-    vocabularyMechanism: engineVocabulary,
-    fastVocabularyMechanism: engineFastVocabulary,
-    vocabularyBudget: capabilities.vocabularyBudget(engineBackend),
+    // Voz takes no vocabulary input, so terms are applied after recognition.
+    vocabularyMechanism: 'repair',
+    fastVocabularyMechanism: 'repair',
+    vocabularyBudget: capabilities.vocabularyBudget('voz'),
     vocabularyTerms: currentVocabulary().length,
     lastDictationVocabulary: lastVocabularyReport,
     dictateMode: settings.dictateMode,
@@ -1122,9 +901,9 @@ function snapshot() {
     recordings: corpus.recordingStats(),
     recoveries: recoveryList(),
     training: corpus.stats(),
-    useTunedModel: settings.useTunedModel !== false,
-    tunedModel: tunedModelInfo(),
-    modelIsTuned: usingTunedModel(),
+    useTunedModel: false,
+    tunedModel: null,
+    modelIsTuned: false,
     dictationLanguage: textLanguage(),
     dictationLanguages: dictationLanguages(),
     dictationLanguageUnlocked: asr.dictationLanguageUnlocked(dictationPolicy()),
@@ -1212,115 +991,77 @@ function runAsrOperation(kind, work) {
   const operation = { kind, promise: null };
   asrOperation = operation;
   operation.promise = Promise.resolve().then(async () => {
-    // A user action takes priority over background cleanup. Wait for any
-    // deletion already in flight without swallowing their install/remove.
-    await Promise.all([qwenCudaPackManager?.stopCleanup?.(), qwenRocmPackManager?.stopCleanup?.()]);
     return work();
   }).finally(() => {
     asrOperation = null;
     asrSetupController = null;
-    removingAsrRuntime = false;
-    if (!isQuitting && ((kind === 'install' && !asrIsDisabled() && asrRuntimeManager?.installed())
-        || kind === 'gpu-install' || kind === 'gpu-remove')) {
-      restartSidecar();
-    }
     broadcast();
   }).then(() => snapshot());
   return operation.promise;
 }
 
-// What this PC needs for the engine and processor it is set to, and what it is
-// merely being offered. One call, so the banner, the settings panel and the
-// downloader cannot disagree about the size of the download.
+// What this PC needs for the engine it is set to, and what is merely being
+// offered. One call, so the banner, the settings panel and the downloader
+// cannot disagree about the size of the download.
 function currentModelPlan(overrides) {
   const opts = overrides || {};
-  const speech = speechModelsManager ? speechModelsManager.snapshot() : { packs: [] };
-  const model = asrModelManager ? asrModelManager.snapshot() : {};
-  const sizes = { whisper: model.downloadBytes || 0 };
-  const installed = { whisper: !!model.installed };
-  for (const pack of speech.packs || []) {
-    sizes[pack.id] = pack.downloadBytes || 0;
-    installed[pack.id] = !!pack.installed;
-  }
+  const voz = vozModelManager ? vozModelManager.snapshot() : { installed: false, downloadBytes: 0 };
+  const sizes = { voz: voz.downloadBytes || 0 };
+  const installed = { voz: !!voz.installed };
   return modelPlan.plan({
-    // The engine and processor this platform will honour, so the download the
-    // banner names is the one the sidecar would actually need.
+    // The engine this build will honour, so the download the banner names is
+    // the one transcription actually needs.
     engine: effectiveEngine(opts.engine || settings.asrEngine),
-    device: effectiveDevice(opts.device || settings.asrDevice),
-    language: opts.language || engineLanguage(opts.engine || settings.asrEngine),
-    gpu: currentGpuPlan(),
+    device: 'cpu',
+    language: opts.language || textLanguage(),
     sizes,
     installed,
   });
 }
 
-// Split a plan's component ids by which manager owns the download.
-function componentsByManager(ids) {
-  const wanted = new Set(ids || []);
-  return {
-    whisper: wanted.has('whisper'),
-    speech: [...wanted].filter((id) => id !== 'whisper'),
-  };
-}
-
 // Install exactly the components named, or the ones the current settings
-// require when nothing is named.
-//
-// This used to fetch every engine plus both Parakeet precisions unconditionally
-// -- 11.0 GB before a first-run user had said a word, most of it for engines
-// they had not chosen and a duplicate of a model only one precision of which
-// can ever load. What a configuration actually needs is src/model-plan.js.
+// require when nothing is named. There is one component: the Voz model,
+// fetched and cached by its own provider.
 async function setupDictation(signal, options) {
   const opts = options || {};
-  const runtime = asrRuntimeManager.snapshot();
   const plan = currentModelPlan();
   const wanted = opts.components && opts.components.length
-    ? opts.components
+    ? opts.components.filter((id) => id === 'voz')
     : plan.missing;
-  const parts = componentsByManager(wanted);
-  const model = asrModelManager.snapshot();
-  const engineBytes = runtime.installed && !runtime.needsUpgrade ? 0 : Math.max(runtime.downloadBytes, 50e6);
-  const modelBytes = parts.whisper && !model.installed ? model.downloadBytes : 0;
-  const extrasBytes = speechModelsManager.pendingBytes(parts.speech);
-  const total = engineBytes + modelBytes + extrasBytes || 1;
-  setupWeights = { engine: engineBytes / total, model: modelBytes / total, extras: extrasBytes / total };
+  const vozBytes = wanted.includes('voz') && vozModelManager && !vozModelManager.installed()
+    ? vozModelManager.snapshot().downloadBytes : 0;
+  const total = vozBytes || 1;
+  setupWeights = { engine: 0, model: vozBytes / total, extras: 0 };
   const names = wanted.map((id) => (modelPlan.COMPONENTS[id] || {}).name || id);
   asrRuntimeState = {
     status: 'preparing',
     progress: 0,
     message: names.length ? 'Preparing ' + names.join(' and ') + '…' : 'Preparing dictation…',
-    step: 'engine',
+    step: 'model',
   };
   saveAsrSetupState();
   broadcast();
-  await fs.promises.mkdir(ASR_MODELS, { recursive: true });
-  const disk = await fs.promises.statfs(ASR_MODELS);
-  // Whisper assembly temporarily needs both its parts and the finished file.
-  const required = (engineBytes ? 1.5e9 : 0) + modelBytes * 2 + extrasBytes + 512e6;
+  await fs.promises.mkdir(DATA, { recursive: true });
+  const disk = await fs.promises.statfs(DATA);
+  const required = vozBytes + 512e6;
   if (disk.bavail * disk.bsize < required) {
     throw new Error('Speech setup needs about ' + Math.ceil(required / 1e9)
-      + ' GB of free disk space, including temporary files. Free some space and try again.');
+      + ' GB of free disk space. Free some space and try again.');
   }
   await cancelListen();
-  removingAsrRuntime = true;
-  await stopPythonProcesses();
   const checkCancelled = () => {
     if (signal.aborted) throw Object.assign(new Error('Setup cancelled. Download again to resume.'), { code: 'CANCELLED' });
   };
   checkCancelled();
-  await asrRuntimeManager.install();
-  checkCancelled();
-  if (parts.whisper) {
-    await asrModelManager.install();
+  if (wanted.includes('voz') && vozModelManager) {
+    await vozModelManager.install({
+      onProgress: (fraction) => reportSetup('model', { status: 'downloading', progress: Math.round(fraction * 100) }),
+    });
     checkCancelled();
   }
-  if (parts.speech.length) {
-    await speechModelsManager.install(parts.speech);
-    checkCancelled();
-  }
-  fs.rmSync(asrDisabledPath(), { force: true });
   settings.localModelChosen = true;
   saveSettings();
+  setSidecarState('ready');
   asrRuntimeState = {
     status: 'installed',
     progress: 100,
@@ -1375,11 +1116,14 @@ function tidyModelStorage() {
     // models/writer that nothing will ever load again, plus its log.
     await cleanRemove.removeTree(path.join(MODELS, 'writer')).catch(() => {});
     await fs.promises.rm(path.join(DATA, 'local-correction.log'), { force: true }).catch(() => {});
-    if (!usingManagedRuntime()) return;
-    if (asrModelManager && asrModelManager.installed()) await asrModelManager.purgeLegacy();
-    if (speechModelsManager) {
-      const installed = speechModelsManager.snapshot().packs.filter(p => p.installed).map(p => p.id);
-      if (installed.length) await speechModelsManager.purgeLegacy(installed);
+    // The Python sidecar and everything it ran on -- runtimes, model packs,
+    // GPU packs, the Hub cache -- are gone: Voz runs in-process. Remove their
+    // trees outright so a previous install's gigabytes do not linger. The Voz
+    // bundle itself lives in the OS cache and is managed by its own provider.
+    for (const root of [ASR_RUNTIME, ASR_MODELS, CUDA_PACK, QWEN_CUDA_PACK, QWEN_ROCM_PACK,
+        path.join(MODELS, 'extras'),
+        path.join(MODELS, 'huggingface')]) {
+      await cleanRemove.removeTree(root).catch(() => {});
     }
   })().catch(err => console.error('model storage tidy failed:', err && err.message ? err.message : err));
 }
@@ -1396,8 +1140,7 @@ function loadAsrSetupState() {
   }
   if (!saved || typeof saved !== 'object') return;
   if (!['preparing', 'error', 'cancelled'].includes(saved.status)) return;
-  if (asrRuntimeManager && asrModelManager && speechModelsManager
-    && asrRuntimeManager.installed() && currentModelPlan().ready) return;
+  if (vozModelManager && vozModelManager.installed() && currentModelPlan().ready) return;
   asrRuntimeState = {
     status: saved.status === 'preparing' ? 'cancelled' : saved.status,
     progress: null,
@@ -1609,72 +1352,14 @@ function ps(args, timeoutMs) {
   });
 }
 
-function findPython() {
-  const configured = String(process.env.VOXDEN_PYTHON || '').trim();
-  if (configured) return configured;
-  const managed = asrRuntimeManager && asrRuntimeManager.installed();
-  if (managed) return managed.pythonPath;
-  // Installed builds never borrow Python from PATH or open the Store alias.
-  if (app.isPackaged) return null;
-  // A dev checkout's virtualenv, which is laid out differently on each
-  // platform: Scripts/python.exe on Windows, bin/python3 everywhere else.
-  // Falling back to the PATH name keeps `npm start` working in a shell that
-  // has already activated an environment.
-  if (process.platform === 'darwin') {
-    const venv = path.join(ROOT, '.venv', 'bin', 'python3');
-    return fs.existsSync(venv) ? venv : 'python3';
-  }
-  const local = path.join(ROOT, '.venv', 'Scripts', 'python.exe');
-  return fs.existsSync(local) ? local : 'python.exe';
-}
+// Transcription runs in-process through onnxruntime-node: there is no
+// interpreter to find and no sidecar to launch. Readiness is the model.
 
-function findSidecarPython() {
-  const configured = String(process.env.VOXDEN_PYTHON || '').trim();
-  if (configured) return configured;
-  const engine = process.env.VOXDEN_ASR_ENGINE || (settings && settings.asrEngine);
-  if (String(engine || '').toLowerCase() === 'qwen3-asr' && !qwenAccelSessionBlock) {
-    const plan = currentQwenAccelPlan();
-    if (qwenAccel.shouldUseAccelPython(plan, 'qwen3-asr')) {
-      const manager = plan.recommendedPack === 'rocm' ? qwenRocmPackManager : qwenCudaPackManager;
-      const installed = manager && manager.installed();
-      if (installed && installed.pythonPath && fs.existsSync(installed.pythonPath)) {
-        return installed.pythonPath;
-      }
-    }
-  }
-  return findPython();
-}
-
-// Vell transcribes through a Python sidecar it does not bundle. When that
-// interpreter is missing entirely, `execFile` fails before the sidecar can
-// explain anything, so the explanation has to come from here. On a clean
-// Windows box `python.exe` resolves to the Microsoft Store stub, which exits
-// non-zero without ever running the script -- indistinguishable from ENOENT
-// as far as the user is concerned, and the same fix applies to both.
-function pythonLaunchError(err, py) {
-  const code = err && err.code;
-  const usedPathLookup = py === 'python.exe' || py === 'python3';
-  if (code === 'ETIMEDOUT') {
-    return 'The speech engine took too long to start. Restart Vell to try again.';
-  }
-  if (code === 'ENOENT' || usedPathLookup) {
-    return 'The speech engine is not set up on ' + macShell.deviceName(process.platform) + ' yet.';
-  }
-  return 'Vell could not run the speech engine (' + path.basename(py) + ').';
-}
-
-// Whether the Set up button has something to fix. A machine with no
-// interpreter and one whose interpreter lacks faster-whisper are the same
-// problem to a user, and the same download solves both -- but so is a setup
-// that stopped halfway, which is not a failure the sidecar can report.
+// Whether the Set up button has something to fix: the Voz model is missing,
+// or a setup run failed or was cancelled halfway.
 function asrRuntimeWouldHelp() {
-  if (!asrRuntimeManager || !asrModelManager || !speechModelsManager) return false;
-  // What is missing for the engine actually selected, not for all three. A
-  // Qwen user with no Whisper download is not a broken install, and telling
-  // them to fetch 3.1 GB to fix nothing is how "up to 11.0 GB" happened.
-  return asrIsDisabled() || !asrRuntimeManager.installed()
-    || asrRuntimeManager.snapshot().needsUpgrade || !currentModelPlan().ready
-    || sidecarState === 'unavailable';
+  if (!vozModelManager) return false;
+  return !vozModelManager.installed();
 }
 
 function sendOverlay(extra) {
@@ -1700,12 +1385,12 @@ function sendOverlay(extra) {
   overlayWin.webContents.send('state', Object.assign({
     mode,
     prepareOnly: mediaPreparing,
-    engine,
-    engineStatus: sidecarState,
-    model: engineModel,
-    device: engineDevice,
-    asrEngineActive: engineBackend,
-    fastEngine: engineFastBackend,
+    engine: 'voz',
+    engineStatus: vozModelManager && vozModelManager.installed() ? 'ready' : 'missing',
+    model: 'Voz',
+    device: 'cpu',
+    asrEngineActive: 'voz',
+    fastEngine: null,
     dictateMode: settings.dictateMode,
     pttLocked,
     shortcut: settings.shortcut,
@@ -3487,6 +3172,16 @@ async function pasteText(text, { game = false, pasteLast = false } = {}) {
         err.keepClipboard = true;
         throw err;
       }
+      // macOS posts Cmd+V through the helper, which the system allows only
+      // for Accessibility-trusted binaries. Without the grant nothing can be
+      // pasted for the user -- but the words are already on the clipboard,
+      // and a real keypress needs no grant, so they stay there for the
+      // user's own Cmd+V instead of being restored away half a second later.
+      if (/Accessibility permission is missing/.test(answer)) {
+        const err = new Error('Paste helper failed: Accessibility permission is missing');
+        err.keepClipboard = true;
+        throw err;
+      }
       const why = !answer ? 'no answer'
         : /could not be focused/.test(answer) ? 'target could not be focused'
         : /no longer in front/.test(answer) ? 'game no longer in front'
@@ -3501,7 +3196,16 @@ async function pasteCapturePayload(value, hwnd, valid, image) {
   const send = async () => {
     if (!valid() || !hwnd || hwnd === '0' || isOurHwnd(hwnd)) throw new Error('Choose the destination app again.');
     const pasted = await ps(['paste', '-Hwnd', hwnd]);
-    if (!String(pasted).split(/\r?\n/).includes('VELL_OK')) throw new Error('Paste failed. Click your chat box and retry.');
+    if (!String(pasted).split(/\r?\n/).includes('VELL_OK')) {
+      // Same as dictation: without the Accessibility grant the helper cannot
+      // paste, but the user's own keypress can, so the words stay put.
+      if (/Accessibility permission is missing/.test(String(pasted))) {
+        const err = new Error('Paste failed. Accessibility permission is missing — the text stays on the clipboard for your Cmd+V.');
+        err.keepClipboard = true;
+        throw err;
+      }
+      throw new Error('Paste failed. Click your chat box and retry.');
+    }
   };
   if (image) return clipboardPaste.pasteImage(value, send);
   return clipboardPaste.paste(value, send);
@@ -3698,21 +3402,21 @@ function vocabularyDiagnostics(result) {
     lostCapabilities: report.lostCapabilities || [],
   };
   return {
-    selectedEngine: report.selectedEngine || engineBackend || '',
-    selectedDevice: report.selectedDevice || settings.asrDevice || '',
+    selectedEngine: report.selectedEngine || 'voz',
+    selectedDevice: report.selectedDevice || 'cpu',
     engine: actualEngine,
-    device: asrReport.device || report.device || '',
-    backend: asrReport.backend || report.backend || engineQwenBackend || 'cpu',
-    gpuName: asrReport.gpuName || engineGpuName || '',
-    gpuArch: asrReport.gpuArch || engineGpuArch || '',
-    driverVersion: (currentGpuPlan() && gpuDevices[0] && gpuDevices[0].driverVersion) || '',
-    torchVersion: asrReport.torchVersion || engineTorchVersion || '',
-    packId: asrReport.packId || enginePackId || '',
-    computeType: asrReport.computeType || engineComputeType || '',
-    probePassed: asrReport.probePassed || engineQwenProbe,
-    initPassed: asrReport.initPassed || engineQwenInit,
-    fallbackReason: asrReport.fallbackReason || report.fallbackReason || engineFallbackReason || '',
-    sidecarWarning: engineWarning || '',
+    device: asrReport.device || report.device || 'cpu',
+    backend: asrReport.backend || report.backend || 'cpu',
+    gpuName: '',
+    gpuArch: '',
+    driverVersion: '',
+    torchVersion: '',
+    packId: '',
+    computeType: '',
+    probePassed: false,
+    initPassed: false,
+    fallbackReason: asrReport.fallbackReason || report.fallbackReason || '',
+    sidecarWarning: '',
     audioSec: asrReport.audioSec || 0,
     recognitionSec: asrReport.recognitionSec || 0,
     rtf: asrReport.rtf || 0,
@@ -3757,14 +3461,10 @@ function composeTranscript(raw, tone, quality) {
     || (lastVocabularyReport && lastVocabularyReport.engine)
     || asrEngineFor(quality);
   const usedQuality = (lastVocabularyReport && lastVocabularyReport.quality) || quality;
-  // Every engine writes a Hindi word in Hindi script. Someone dictating in
-  // English with Hindi mixed in wants "aap kidhar se ho", so the script is
-  // turned back into letters before cleanup and the dictionary see it. The
-  // raw transcript is kept as the engine gave it.
+  // Every engine writes what it hears; Voz has no Hindi, so there is no
+  // script to romanize. The raw transcript is kept as the engine gave it.
   const said = raw;
-  const spoken = wantsHinglish()
-    ? hinglish.romanizeHindi(said)
-    : said;
+  const spoken = said;
 
   // Verbatim pastes what was said. Repeat collapsing and the tone's filler
   // removal both take words out, so neither runs.
@@ -3886,7 +3586,11 @@ async function onTranscript(raw, sessionToken = recordingSessionToken) {
     addHistoryEntry(composed.text, composed.meta);
     const admin = !!(err && err.adminTarget);
     if (admin) noteAdminApp(lastTarget.exe);
-    flashError(needsAccess ? 'Allow Vell in Accessibility to paste'
+    // Name the binary that needs the grant: in a dev launch that is Electron,
+    // not Vell. The words stay on the clipboard (keepClipboard), so a real
+    // keypress -- which needs no grant -- still pastes them.
+    const trustedName = (process.execPath ? path.basename(process.execPath).replace(/\.exe$/i, '') : '') || 'Vell';
+    flashError(needsAccess ? 'Allow ' + trustedName + ' in Accessibility to paste — text is on the clipboard'
       : admin ? ADMIN_PASTE_FLASH
       : err && err.fullscreenInFront ? FULLSCREEN_PASTE_FLASH
       : 'Paste failed — text saved in history');
@@ -4339,135 +4043,30 @@ function startHwndPoll() {
   }, HWND_TICK_MS);
 }
 
-function tunedModelInfo() {
-  return models.tunedModelInfo(MODELS);
-}
+// --- Voz lifecycle -----------------------------------------------------------
+// There is no sidecar process anymore: Voz runs in-process through
+// onnxruntime-node, loaded once and reused. "Ready" means the model bundle is
+// on disk; the first transcription of the session compiles it (~10s, then
+// warm). The state machine below keeps the old shape (states, waiters,
+// broadcasts) so the overlay, tray and banner keep working unchanged.
 
-// Whether the sidecar is running on the interpreter Vell installed rather
-// than one the user manages. It carries all three backends; end users never run pip.
-function usingManagedRuntime() {
-  const py = findSidecarPython();
-  const managed = asrRuntimeManager && asrRuntimeManager.installed();
-  if (managed && py === managed.pythonPath) return true;
-  const cuda = qwenCudaPackManager && qwenCudaPackManager.installed();
-  if (cuda && py === cuda.pythonPath) return true;
-  const rocm = qwenRocmPackManager && qwenRocmPackManager.installed();
-  if (rocm && py === rocm.pythonPath) return true;
-  return false;
-}
-
-function usingCpuManagedRuntime(py) {
-  const managed = asrRuntimeManager && asrRuntimeManager.installed();
-  return !!(managed && py === managed.pythonPath);
-}
-
-function hostedModelPath() {
-  const hosted = asrModelManager && asrModelManager.installed();
-  return hosted ? hosted.path : null;
-}
-
-// Whether the selected engine is Whisper turbo, which is a speech-catalog
-// pack rather than the hosted release the plain Whisper engine loads.
-function turboSelected() {
-  return asr.normalizeAsrEngine(process.env.VOXDEN_ASR_ENGINE || settings.asrEngine) === 'whisper-turbo';
-}
-
-// The model faster-whisper is told to load.
-//
-// Turbo resolves to its own pack and to nothing else. A fine-tune under
-// models/voxden-tuned was converted from large-v3 and is not a turbo model, so
-// letting the tuned branch answer here would quietly load a different model
-// than the engine picker names. An explicit VOXDEN_MODEL still wins, the same
-// way it does on every other engine.
-function resolveModel() {
-  if (turboSelected()) {
-    if (process.env.VOXDEN_MODEL) return process.env.VOXDEN_MODEL;
-    return speechModelsManager
-      ? speechModelsManager.directory('whisper-turbo')
-      : models.DEFAULT_MODEL;
-  }
-  return models.resolveModel(MODELS, settings, process.env, hostedModelPath());
-}
-
-function usingTunedModel() {
-  if (turboSelected()) return false;
-  return models.usingTunedModel(MODELS, settings, process.env, hostedModelPath());
-}
-
+// The provider is already warm and serving transcriptions.
 function restartSidecar() {
-  clearTimeout(sidecarRestartTimer);
-  sidecarRestartTimer = null;
-  sidecarRestarts = 0;
-  sidecarStartToken += 1;
-  if (sidecarProbe) { sidecarProbe.kill(); sidecarProbe = null; }
-  if (asrOperation || removingAsrRuntime || isQuitting) return;
-  if (!sidecar) {
-    // A settings change while cold makes the probed launch plan stale: the
-    // engine or processor it was built for is no longer the one selected.
-    // Probe again; the warm start that follows picks up the new choice.
-    if (sidecarState === 'standby') {
-      clearSidecarLaunchPlan();
-      startSidecar(true);
-      return;
-    }
-    startSidecar();
-    return;
-  }
-  sidecarRestartNow = true;
-  try { sidecar.kill(); } catch (_) {}
+  if (!vozModelManager || !vozModelManager.installed()) return;
+  ensureVozReady().catch(() => {});
 }
 
-// Stop every process holding the managed interpreter open, and wait for the
-// handles to actually go. kill() only asks; the file stays locked until the
-// process is gone, which is why this waits for 'exit' rather than returning
-// as soon as the signal is sent.
-function stopPythonProcesses(timeoutMs) {
-  ++sidecarStartToken;
-  clearTimeout(sidecarRestartTimer);
-  sidecarRestartTimer = null;
-  sidecarRestartNow = false;
-  sidecarStartRequested = false;
-  clearSidecarLaunchPlan();
+// Nothing external to stop: transcription runs in this process.
+function stopPythonProcesses() {
+  sidecarReadyWaiters.forEach((waiter) => {
+    try { clearTimeout(waiter.timer); } catch (_) {}
+    try { waiter.reject(new Error('speech engine not ready')); } catch (_) {}
+  });
+  sidecarReadyWaiters = [];
   sidecarReady = false;
   sidecarBuf = '';
   sidecarProgressBuf = '';
-  finishSidecarWaiters(new Error('speech engine not ready'));
-  sidecarQueue.rejectAll(new Error('speech engine not ready'));
-  const waits = [];
-  const stop = (proc) => {
-    if (!proc || proc.exitCode !== null || proc.signalCode !== null) return;
-    waits.push(new Promise((resolve, reject) => {
-      let done = false;
-      let timer;
-      const finish = () => {
-        if (done) return;
-        done = true;
-        clearTimeout(timer);
-        resolve();
-      };
-      proc.once('exit', finish);
-      proc.once('error', finish);
-      // A process that will not die must not hang the click for ever. The
-      // removal then fails on a locked file and says so, which is a better
-      // outcome than a button that never returns.
-      timer = setTimeout(() => {
-        if (done) return;
-        done = true;
-        reject(new Error('The speech process is still closing. Please try again.'));
-      }, Number(timeoutMs) || 10000);
-      try { proc.kill(); } catch (_) { finish(); }
-    }));
-  };
-  stop(sidecar);
-  stop(sidecarProbe);
-  sidecarProbe = null;
-  engineProgress = null;
-  engineFastBackend = '';
-  engineVocabulary = '';
-  engineFastVocabulary = '';
-  engineAvailability = {};
-  setSidecarState('unavailable');
-  return Promise.all(waits);
+  return Promise.resolve();
 }
 
 function setSidecarState(state) {
@@ -4488,445 +4087,42 @@ function finishSidecarWaiters(err) {
 }
 
 function sidecarMayBecomeReady() {
-  if (sidecar && sidecarReady) return false;
-  if (sidecarRestartNow) return true;
-  if (sidecar) return true;
   return sidecarState === 'standby'
     || sidecarState === 'starting'
     || sidecarState === 'loading';
 }
 
-// --- Warm start ---------------------------------------------------------------
-// A cold launch probes the runtime first (cheap: a find_spec per engine), and
-// the probe leaves behind everything the real process needs -- interpreter,
-// environment, accelerator choice. The model process is then started later,
-// at the first pause in the user's input (see warm-start.js), rather than on
-// the first dictation: loading a multi-gigabyte model is exactly the work a
-// user should never be waiting on with the microphone already open, and also
-// not the work that should stall the desktop the moment the app appears.
-// Starting it straight from the plan also skips the second --check that used
-// to sit in front of every cold dictation.
-//
-// VOXDEN_LAZY_ASR=1 keeps the old behaviour of waiting for the first
-// dictation, for machines where the memory is better spent elsewhere.
-let sidecarLaunchPlan = null;
-let sidecarWarmTimer = null;
-// True until the first model process of this app session has been started.
-let sidecarColdLaunch = true;
-
-function lazyAsr() {
-  return String(process.env.VOXDEN_LAZY_ASR || '').trim() === '1';
-}
-
-function clearSidecarLaunchPlan() {
-  sidecarLaunchPlan = null;
-  if (sidecarWarmTimer) {
-    clearTimeout(sidecarWarmTimer);
-    sidecarWarmTimer = null;
-  }
-}
-
-function systemIdleSeconds() {
-  try {
-    return powerMonitor.getSystemIdleTime();
-  } catch (_) {
-    return NaN;
-  }
-}
-
+// Warm the provider in the background once the model is on disk, so the first
+// dictation does not pay the compile cost with the microphone already open.
+// Fire and forget: a failure surfaces on first transcribe instead.
+let vozWarmStarted = false;
 function scheduleSidecarWarmStart() {
-  // Warming is for the engine that is about to be asked to transcribe.
-  if (sidecarWarmTimer || lazyAsr()) return;
-  const startedAt = Date.now();
-  const gateOnIdle = sidecarColdLaunch;
-  const loginLaunch = gateOnIdle && process.argv.includes('--hidden');
-  const tick = () => {
-    sidecarWarmTimer = null;
-    if (!sidecarLaunchPlan || sidecarState !== 'standby') return;
-    const verdict = warmStart.decide({
-      elapsedMs: Date.now() - startedAt,
-      idleSeconds: systemIdleSeconds(),
-      loginLaunch,
-      gateOnIdle,
-    });
-    if (verdict.start) {
-      spawnSidecarServe(sidecarLaunchPlan);
-      return;
-    }
-    sidecarWarmTimer = setTimeout(tick, verdict.delayMs);
-  };
-  const first = warmStart.decide({ elapsedMs: 0, loginLaunch, gateOnIdle });
-  sidecarWarmTimer = setTimeout(tick, first.delayMs);
+  if (vozWarmStarted || isQuitting) return;
+  if (!vozModelManager || !vozModelManager.installed()) return;
+  vozWarmStarted = true;
+  ensureVozReady().catch(() => { vozWarmStarted = false; });
 }
+
+function clearSidecarLaunchPlan() {}
 
 function requestSidecarStart() {
-  sidecarStartRequested = true;
-  if (sidecarState !== 'standby' || sidecar || sidecarProbe) return;
-  // The probe already ran for this configuration; go straight to the model.
-  if (sidecarLaunchPlan) {
-    spawnSidecarServe(sidecarLaunchPlan);
-    return;
-  }
-  // While the startup probe is running, retain the request. Its callback will
-  // launch the real process after GPU detection and capability checks finish.
+  if (sidecarState !== 'starting' && sidecarState !== 'standby') return;
   startSidecar();
 }
 
 function waitForSidecarReady(timeoutMs) {
-  if (sidecar && sidecarReady) return Promise.resolve();
-  if (!sidecarMayBecomeReady()) {
-    return Promise.reject(new Error('speech engine not ready'));
-  }
-  return new Promise((resolve, reject) => {
-    const waiter = { resolve, reject, timer: null };
-    waiter.timer = setTimeout(() => {
-      sidecarReadyWaiters = sidecarReadyWaiters.filter((item) => item !== waiter);
-      reject(new Error('speech engine not ready'));
-    }, Number(timeoutMs) || 600000);
-    sidecarReadyWaiters.push(waiter);
-  });
+  if (vozModelManager && vozModelManager.installed()) return Promise.resolve();
+  return Promise.reject(new Error('The Voz model is not installed. Download it in Settings, Speech engines.'));
 }
 
-function startSidecar(probeOnly) {
-  if (isQuitting || removingAsrRuntime || asrOperation || sidecar || sidecarProbe) return;
-  const checkOnly = probeOnly === true;
-  if (!checkOnly) sidecarStartRequested = false;
-  clearSidecarLaunchPlan();
-  const startToken = ++sidecarStartToken;
-  const py = findSidecarPython();
-  // What this platform will run, not merely what is stored: a settings file
-  // naming an engine this build does not offer here falls back rather than
-  // sending the sidecar after a model that is not on the picker.
-  const selected = effectiveEngine(process.env.VOXDEN_ASR_ENGINE || settings.asrEngine);
-  const selectedDevice = effectiveDevice(process.env.VOXDEN_DEVICE || settings.asrDevice);
-  const managed = usingManagedRuntime();
-  const cpuManaged = usingCpuManagedRuntime(py);
-  // Parakeet is two packs, and which one counts depends on the processor: the
-  // float32 weights are only ever loaded on DirectML. Asking model-plan keeps
-  // that rule in one place instead of two that can drift.
-  const requiredPack = modelPlan.modelForEngine(selected, selectedDevice);
-  const hasSelectedModel = requiredPack === 'whisper'
-    ? (hostedModelPath() || usingTunedModel())
-    : speechModelsManager && speechModelsManager.installed(requiredPack);
-  if (asrIsDisabled() || !py || (managed && !hasSelectedModel)) {
-    engine = 'webspeech';
-    engineProgress = null;
-    // Name the download rather than the state. Switching engine is the common
-    // way to land here now that setup fetches only what was selected, and
-    // "setup is incomplete" reads as a fault when it is a one-click offer.
-    const missing = modelPlan.COMPONENTS[requiredPack];
-    const size = speechModelsManager && requiredPack !== 'whisper'
-      ? speechModelsManager.pendingBytes([requiredPack])
-      : (asrModelManager ? asrModelManager.snapshot().downloadBytes : 0);
-    engineError = (missing && managed && py && !asrIsDisabled())
-      ? missing.name + ' is not downloaded yet ('
-        + (size / 1e9).toFixed(1) + ' GB). Download it in Settings to use this engine.'
-      : 'Dictation is disabled until speech setup is complete. Download it in Settings.';
-    setSidecarState('unavailable');
-    finishSidecarWaiters(new Error('speech engine not ready'));
+function startSidecar() {
+  if (isQuitting || asrOperation) return;
+  if (vozModelManager && vozModelManager.installed()) {
+    setSidecarState('ready');
+    scheduleSidecarWarmStart();
     return;
   }
-  const qwenPlan = currentQwenAccelPlan();
-  const accelKind = (qwenPlan.usePackPython && (qwenPlan.recommendedPack === 'cuda' || qwenPlan.recommendedPack === 'rocm'))
-    ? qwenPlan.recommendedPack
-    : 'cpu';
-  const env = Object.assign({}, process.env, {
-    HF_HOME: process.env.HF_HOME || path.join(MODELS, 'huggingface'),
-    VOXDEN_MODEL_DIR: MODELS,
-    VOXDEN_MODEL: resolveModel(),
-    // Explicit developer overrides remain available; packaged builds use the managed runtime.
-    VOXDEN_ASR_ENGINE: selected,
-    VOXDEN_DEVICE: selectedDevice,
-    // Belt and braces for the router inside the sidecar: a request carrying a
-    // vocabulary must not be handed to a backend that cannot take one, even
-    // when it arrives by a path that did not go through asrQualityFor.
-    VOXDEN_REQUIRE_VOCABULARY: '1',
-    VOXDEN_QWEN_ACCEL: process.env.VOXDEN_QWEN_ACCEL || accelKind,
-    VOXDEN_QWEN_PACK_ID: qwenPlan.recommendedPack === 'rocm'
-      ? (qwenPlan.rocmPack && qwenPlan.rocmPack.id) || ''
-      : (qwenPlan.pack && qwenPlan.pack.id) || '',
-    VOXDEN_QWEN_PACK_VERSION: qwenPlan.recommendedPack === 'rocm'
-      ? (qwenPlan.rocmPack && qwenPlan.rocmPack.version) || ''
-      : (qwenPlan.pack && qwenPlan.pack.version) || '',
-    // The optional CUDA pack, if it is installed. find_cuda_bin_dirs has
-    // always read this variable and has always scanned nvidia/*/bin below it,
-    // so the pack needed no sidecar change -- it is installed in the layout
-    // pip would have written and named here.
-    VOXDEN_CUDA_BIN: process.env.VOXDEN_CUDA_BIN
-      || (cudaPackManager && cudaPackManager.installed()
-        ? cudaPackManager.installed().packDir
-        : ''),
-    PYTHONUTF8: '1',
-    PYTHONIOENCODING: 'utf-8',
-    PYTHONUNBUFFERED: '1',
-    PYTHONPATH: path.dirname(SIDECAR),
-    PATH: pathWithRuntimeBins(py, process.env.PATH),
-    // Xet stalls on the first Hub shard for some Windows networks.
-    HF_HUB_DISABLE_XET: process.env.HF_HUB_DISABLE_XET || '1',
-    ...(qwenAccelSessionBlock ? { VOXDEN_QWEN_FORCE_CPU: '1' } : {}),
-    ...(managed ? {
-      HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1', VOXDEN_OFFLINE: '1',
-      PYTHONNOUSERSITE: '1',
-      VOXDEN_QWEN_ASR_MODEL: speechModelsManager.directory('qwen3-asr'),
-      // V2 and v3 share filenames. Only a matching, verified v3 receipt may
-      // expose a managed pack, including when Parakeet is an optional fast path.
-      VOXDEN_PARAKEET_INT8_DIR: speechModelsManager.installed('parakeet')
-        ? speechModelsManager.directory('parakeet') : path.join(ASR_MODELS, 'missing-v3', 'parakeet'),
-      VOXDEN_PARAKEET_FP32_DIR: speechModelsManager.installed('parakeet-fp32')
-        ? speechModelsManager.directory('parakeet-fp32') : path.join(ASR_MODELS, 'missing-v3', 'parakeet-fp32'),
-      ...(cpuManaged ? {
-        VOXDEN_TORCH_DEVICE: asrRuntimeManager.installed().torchDevice || 'cpu',
-      } : {}),
-    } : {}),
-  });
-  engineProgress = null;
-  engineError = '';
-  engineFix = '';
-  engineFixEngine = '';
-  sidecarProgressBuf = '';
-  setSidecarState('starting');
-  sidecarProbe = execFile(py, [SIDECAR, '--check'], { timeout: 60000, windowsHide: true, env }, (err, stdout) => {
-    if (startToken !== sidecarStartToken || isQuitting) return;
-    sidecarProbe = null;
-    // Parse before looking at `err`. A missing dependency makes the sidecar
-    // report the problem on stdout and then exit 1, which execFile surfaces as
-    // an error -- so checking `err` first would throw away the one message that
-    // actually tells the user which package to install.
-    let parsed = null;
-    try { parsed = JSON.parse(String(stdout).trim().split('\n').pop()); } catch (_) {}
-    if (!parsed || !parsed.ok) {
-      engine = 'webspeech';
-      engineError = (parsed && parsed.error)
-        ? String(parsed.error)
-        : pythonLaunchError(err, py);
-      setSidecarState('unavailable');
-      finishSidecarWaiters(new Error('speech engine not ready'));
-      return;
-    }
-    if (err) {
-      engine = 'webspeech';
-      engineError = pythonLaunchError(err, py);
-      setSidecarState('unavailable');
-      finishSidecarWaiters(new Error('speech engine not ready'));
-      return;
-    }
-    if (parsed.model) engineModel = String(parsed.model);
-    if (parsed.device) engineDevice = String(parsed.device);
-    if (parsed.engine) engineBackend = String(parsed.engine);
-    engineWarning = parsed.warning ? String(parsed.warning) : '';
-    engineFix = parsed.warning_fix ? String(parsed.warning_fix) : '';
-    engineFixEngine = parsed.warning_fix_engine ? String(parsed.warning_fix_engine) : '';
-    engineAvailability = (parsed.engines && typeof parsed.engines === 'object')
-      ? parsed.engines
-      : {};
-    // A choice this PC cannot honour is not a choice. Users who picked
-    // Qwen3-ASR back when the picker offered it unconditionally kept that value
-    // through every update, and it bought them a permanent "not installed on
-    // this PC" banner for an engine no Vell download has ever supplied. The
-    // sidecar has already fallen back to Whisper by this point, so this only
-    // makes the stored setting agree with what is running.
-    // Preserve the user's selection through missing/removed dependencies.
-    // Setup restores it instead of silently changing Qwen to Whisper.
-    const plan = { py, env, cpuManaged, accelKind };
-    if (checkOnly && !sidecarStartRequested) {
-      sidecarLaunchPlan = plan;
-      setSidecarState('standby');
-      scheduleSidecarWarmStart();
-      return;
-    }
-    spawnSidecarServe(plan);
-  });
-}
-
-// The log is one append stream per sidecar process rather than a synchronous
-// append per stderr chunk: a model download reports progress several times a
-// second, and each of those used to block the main thread on disk while the
-// machine was already busy loading a model.
-let sidecarLog = null;
-
-const SIDECAR_LOG_MAX_BYTES = 4 * 1024 * 1024;
-
-function openSidecarLog() {
-  closeSidecarLog();
-  const file = path.join(DATA, 'sidecar.log');
-  try {
-    const stat = fs.statSync(file);
-    if (stat.size > SIDECAR_LOG_MAX_BYTES) fs.truncateSync(file, 0);
-  } catch (_) {}
-  try {
-    sidecarLog = fs.createWriteStream(file, { flags: 'a' });
-    sidecarLog.on('error', () => { sidecarLog = null; });
-  } catch (_) {
-    sidecarLog = null;
-  }
-}
-
-function closeSidecarLog() {
-  if (!sidecarLog) return;
-  try { sidecarLog.end(); } catch (_) {}
-  sidecarLog = null;
-}
-
-function spawnSidecarServe(plan) {
-  if (isQuitting || removingAsrRuntime || asrOperation || sidecar || sidecarProbe) return;
-  const { py, env, cpuManaged, accelKind } = plan;
-  clearSidecarLaunchPlan();
-  sidecarStartRequested = false;
-  sidecarColdLaunch = false;
-  setSidecarState('loading');
-  sidecar = spawn(py, [SIDECAR, '--serve'], {
-    env,
-    windowsHide: true,
-    stdio: ['pipe', 'pipe', 'pipe'],
-  });
-  // Model initialization should yield to the foreground desktop. This does
-  // not make recognition slow once loaded: normal priority comes back with
-  // the ready handshake, so a dictation the user is waiting on is not
-  // starved by whatever else the machine is doing.
-  if (process.platform === 'win32' && sidecar.pid) {
-    try { os.setPriority(sidecar.pid, os.constants.priority.PRIORITY_BELOW_NORMAL); } catch (_) {}
-  }
-  const launched = sidecar;
-  sidecarBuf = '';
-  openSidecarLog();
-  sidecar.stdout.setEncoding('utf8');
-  sidecar.stderr.on('data', (chunk) => {
-    const parsedProgress = asr.parseEngineProgress(sidecarProgressBuf, String(chunk));
-    sidecarProgressBuf = parsedProgress.buffer;
-    if (parsedProgress.progress) {
-      const nextProgress = {
-        phase: parsedProgress.progress.phase,
-        percent: parsedProgress.progress.percent,
-        detail: parsedProgress.progress.detail || '',
-      };
-      if (!engineProgress
-        || engineProgress.phase !== nextProgress.phase
-        || engineProgress.percent !== nextProgress.percent
-        || engineProgress.detail !== nextProgress.detail) {
-        engineProgress = nextProgress;
-        broadcast();
-      }
-    }
-    if (sidecarLog) {
-      try { sidecarLog.write(String(chunk)); } catch (_) {}
-    }
-  });
-  sidecar.stdout.on('data', (chunk) => {
-    sidecarBuf += chunk;
-    let idx;
-    while ((idx = sidecarBuf.indexOf('\n')) >= 0) {
-      const line = sidecarBuf.slice(0, idx).trim();
-      sidecarBuf = sidecarBuf.slice(idx + 1);
-      if (!line) continue;
-      let msg;
-      try { msg = JSON.parse(line); } catch (_) { continue; }
-      // A model that failed to load says why on stdout and exits. That line
-      // carries no request id, so it used to be dropped on the floor, the
-      // user was told "not ready", and the same failing load was repeated
-      // three more times. Keep the reason, and do not retry a load that
-      // has just explained it cannot succeed.
-      if (msg.ok === false && msg.id === undefined && !msg.ready) {
-        engineError = String(msg.error || engineError || 'The speech engine could not load.');
-        sidecarRestarts = 3;
-        continue;
-      }
-      if (msg.ready) {
-        sidecarReady = true;
-        engineProgress = null;
-        engine = 'whisper';
-        if (process.platform === 'win32' && launched.pid) {
-          try { os.setPriority(launched.pid, os.constants.priority.PRIORITY_NORMAL); } catch (_) {}
-        }
-        if (msg.model) engineModel = String(msg.model);
-        if (msg.device) engineDevice = String(msg.device);
-        if (msg.engine) engineBackend = String(msg.engine);
-        engineFastBackend = msg.fast_engine ? String(msg.fast_engine) : '';
-        engineFastModel = msg.fast_model ? String(msg.fast_model) : '';
-        engineFastDevice = msg.fast_device ? String(msg.fast_device) : '';
-        engineWarning = msg.warning ? String(msg.warning) : '';
-        engineFix = msg.warning_fix ? String(msg.warning_fix) : '';
-        engineFixEngine = msg.warning_fix_engine ? String(msg.warning_fix_engine) : '';
-        // How the running engine takes a vocabulary, straight from the
-        // engine rather than inferred here. The settings panel needs to be
-        // able to say "your dictionary is sent to the model" or "applied
-        // after recognition" without either side guessing.
-        engineVocabulary = msg.vocabulary ? String(msg.vocabulary) : '';
-        engineFastVocabulary = msg.fast_vocabulary ? String(msg.fast_vocabulary) : '';
-        applyQwenSidecarReport(msg);
-        engineError = '';
-        sidecarRestarts = 0;
-        setSidecarState('ready');
-        cleanupVerifiedQwenPack(msg, py, launched);
-        continue;
-      }
-      if (!sidecarQueue.dispatch(msg)) continue;
-    }
-  });
-  // spawn reports a missing or unrunnable interpreter through 'error', not
-  // 'exit'. With no listener that is an unhandled EventEmitter error, which
-  // in the main process means an uncaught exception and a crash dialog --
-  // on exactly the machine this app is meant to set itself up on.
-  // A failed spawn can emit both, and a second pass would schedule a second
-  // restart on the same death.
-  let gone = false;
-  sidecar.on('error', () => handleSidecarGone());
-  sidecar.on('exit', () => handleSidecarGone());
-  sidecar.stdin.on('error', () => handleSidecarGone());
-  function handleSidecarGone() {
-    if (gone) return;
-    gone = true;
-    if (sidecar !== launched) return;
-    closeSidecarLog();
-    sidecar = null;
-    sidecarReady = false;
-    engineProgress = null;
-    sidecarProgressBuf = '';
-    engine = 'webspeech';
-    engineFastBackend = '';
-engineVocabulary = '';
-engineFastVocabulary = '';
-    engineFastModel = '';
-    engineFastDevice = '';
-    engineQwenBackend = 'cpu';
-    engineComputeType = '';
-    engineGpuName = '';
-    engineGpuArch = '';
-    engineTorchVersion = '';
-    enginePackId = '';
-    engineQwenProbe = false;
-    engineQwenInit = false;
-    engineFallbackReason = '';
-    setSidecarState('unavailable');
-    sidecarQueue.rejectAll(new Error('sidecar exited'));
-    if (removingAsrRuntime || asrOperation || isQuitting) {
-      sidecarRestartNow = false;
-      finishSidecarWaiters(new Error('speech engine not ready'));
-    } else if (!sidecarRestartNow && !cpuManaged && accelKind !== 'cpu' && !qwenAccelSessionBlock) {
-      qwenAccelSessionBlock = {
-        backend: accelKind,
-        reason: 'The GPU accelerator process exited. Dictation will continue as CPU Qwen.',
-        at: Date.now(),
-      };
-      sidecarRestartNow = false;
-      sidecarRestarts = 0;
-      if (!isQuitting) {
-        setSidecarState('starting');
-        sidecarRestartTimer = setTimeout(() => startSidecar(), 250);
-      }
-    } else if (sidecarRestartNow) {
-      sidecarRestartNow = false;
-      if (!isQuitting) {
-        setSidecarState('starting');
-        sidecarRestartTimer = setTimeout(() => startSidecar(), 250);
-      }
-    } else if (!isQuitting && sidecarRestarts < 3) {
-      sidecarRestarts += 1;
-      setSidecarState('starting');
-      sidecarRestartTimer = setTimeout(() => startSidecar(), 5000);
-    } else {
-      finishSidecarWaiters(new Error('speech engine not ready'));
-    }
-  }
+  setSidecarState('unavailable');
 }
 
 function friendlyEngineError(msg) {
@@ -5102,136 +4298,28 @@ function recoveryList() {
 }
 
 // What the recogniser is asked for, which is not always what the dictation is.
-// An accurate dictation on a CPU still goes through Parakeet and still gets
-// the same cleanup afterwards -- only the model changes.
-// What this PC can do about GPU dictation. One call, so the environment the
-// sidecar is started with and the card the user reads are answering the same
-// question -- a second copy is how a settings panel ends up offering a
-// download that the engine will not use.
+// There is no GPU plan: Voz runs on the CPU through onnxruntime-node on every
+// platform, so there are no packs and no processor choice.
 function currentGpuPlan() {
-  // The platform is passed rather than left to the default so that every
-  // answer in this process -- the plan, the engine list, the pack managers --
-  // comes from the same `process`, which is what a harness replaces.
-  return gpu.gpuPlan(gpuDevices, !!(cudaPackManager && cudaPackManager.installed()), process.platform);
+  return { packsOffered: false, device: 'cpu' };
 }
 
 // The engine this platform actually offers.
 //
-// settings.json travels: a file copied from a Windows PC, or restored into a
-// Mac install from a backup, can name qwen3-asr, which this build does not
-// offer on a Mac. Starting the sidecar on it would download 4.7 GB to run an
-// engine the picker does not even show. The correction is made here, on the
-// way out, and the file is left alone -- the Windows install that made the
-// choice is still entitled to it.
-function effectiveEngine(engine) {
-  const chosen = asr.normalizeAsrEngine(engine === undefined ? settings.asrEngine : engine);
-  if (modelPlan.engineOffered(chosen, process.platform)) return chosen;
-  const offered = modelPlan.availableEngines(process.platform);
-  return offered.includes('parakeet') ? 'parakeet' : (offered[0] || chosen);
+// Vell ships one engine, so every setting, override and stale file resolves
+// to Voz here. The file is left alone.
+function effectiveEngine() {
+  return 'voz';
 }
 
-// The processor setting this platform can honour. 'cuda' and 'directml' name
-// Windows accelerators; on a machine with no packs on offer they are not a
-// choice that means anything, and handing one to the sidecar would only make
-// it resolve a provider it does not have. 'auto' is what the setting meant.
-function effectiveDevice(device) {
-  const chosen = asr.normalizeAsrDevice(device === undefined ? settings.asrDevice : device);
-  if (currentGpuPlan().packsOffered) return chosen;
-  return chosen === 'cuda' || chosen === 'directml' ? 'auto' : chosen;
+// The processor setting is always the CPU: Voz runs on onnxruntime-node,
+// which has no GPU path in the app process.
+function effectiveDevice() {
+  return 'cpu';
 }
 
-function cleanupVerifiedQwenPack(msg, python, launched) {
-  if (!app.isPackaged || isQuitting || asrOperation || !sidecarReady || !sidecar
-      || sidecar !== launched || !msg.ready || msg.engine !== 'qwen3-asr'
-      || !msg.probe_passed || !msg.init_passed || msg.fallback_reason) return Promise.resolve(null);
-  const kind = msg.backend;
-  if (kind !== 'cuda' && kind !== 'rocm') return Promise.resolve(null);
-  const manager = qwenAccelManager(kind);
-  if (!manager?.cleanupLegacyFiles) return Promise.resolve(null);
-  return manager.cleanupLegacyFiles({ kind, id: msg.pack_id, pythonPath: python,
-    importOk: true, tensorProbeOk: true, qwenProbeOk: true },
-  () => !isQuitting && !asrOperation && sidecar === launched && sidecarReady
-    && engineQwenBackend === kind && engineQwenProbe && engineQwenInit)
-    .then(result => {
-      if (result?.removedFiles) diagLog('qwen-pack-cleanup', {
-        kind, files: result.removedFiles, bytes: result.removedBytes,
-      });
-      return result;
-    }).catch(error => {
-      // Cleanup never makes a working speech engine fail startup. A lock or
-      // interrupted scan can be retried after the next verified startup.
-      if (!isQuitting && !asrOperation) console.error('GPU leftover cleanup deferred:', error.message);
-      return null;
-    });
-}
-
-function applyQwenSidecarReport(msg) {
-  const report = msg || {};
-  const backend = String(report.backend || '').trim().toLowerCase();
-  engineQwenBackend = backend === 'cuda' || backend === 'rocm' ? backend : 'cpu';
-  engineComputeType = String(report.compute_type || '');
-  engineGpuName = String(report.gpu_name || '');
-  engineGpuArch = String(report.gpu_arch || '');
-  engineTorchVersion = String(report.torch_version || '');
-  enginePackId = String(report.pack_id || '');
-  engineQwenProbe = !!report.probe_passed;
-  engineQwenInit = !!report.init_passed;
-  engineFallbackReason = String(report.fallback_reason || '');
-  if (engineQwenBackend !== 'cpu' && qwenAccelSessionBlock) qwenAccelSessionBlock = null;
-}
-
-function currentQwenAccelPlan() {
-  const cudaSnap = qwenCudaPackManager ? qwenCudaPackManager.snapshot() : {};
-  const rocmSnap = qwenRocmPackManager ? qwenRocmPackManager.snapshot() : {};
-  return qwenAccel.resolve({
-    device: settings.asrDevice,
-    engine: settings.asrEngine,
-    language: engineLanguage(settings.asrEngine),
-    devices: gpuDevices,
-    renderer: gpuRenderer,
-    cudaPack: {
-      installed: !!cudaSnap.installed,
-      healthy: !!cudaSnap.healthy,
-      verified: engineQwenBackend === 'cuda',
-      failureReason: cudaSnap.failureReason || '',
-    },
-    rocmPack: {
-      installed: !!rocmSnap.installed,
-      healthy: !!rocmSnap.healthy,
-      verified: engineQwenBackend === 'rocm',
-      failureReason: rocmSnap.failureReason || '',
-    },
-    sessionFailure: qwenAccelSessionBlock,
-    sidecar: {
-      backend: engineQwenBackend,
-      bf16: engineComputeType === 'bfloat16',
-      computeType: engineComputeType,
-      probePassed: engineQwenProbe,
-      initPassed: engineQwenInit,
-    },
-  });
-}
-
-// Electron knows the graphics without spawning anything, and it reports PCI
-// vendor ids, which is the one identifier that survives a driver update or a
-// rename. A failure here is not worth reporting: the plan then says "no usable
-// GPU", which is the same answer as a PC that has none, and dictation still
-// runs on the CPU.
-async function detectGpu() {
-  try {
-    const info = await app.getGPUInfo('complete');
-    gpuDevices = (info && Array.isArray(info.gpuDevice)) ? info.gpuDevice : [];
-    gpuRenderer = (info && info.auxAttributes && info.auxAttributes.glRenderer) || '';
-  } catch (_) {
-    try {
-      const info = await app.getGPUInfo('basic');
-      gpuDevices = (info && Array.isArray(info.gpuDevice)) ? info.gpuDevice : [];
-    } catch (__) {
-      gpuDevices = [];
-    }
-    gpuRenderer = '';
-  }
-}
+// GPU acceleration went away with the CUDA/Qwen packs: Voz runs on the CPU
+// through onnxruntime-node on every platform.
 
 // Plan which engine will recognise this clip.
 //
@@ -5243,46 +4331,38 @@ async function detectGpu() {
 // prompt for the engine that will actually run.
 function planDictationRoute(options) {
   const opts = options || {};
-  const language = opts.language || engineLanguage(settings.asrEngine);
+  const language = opts.language || textLanguage();
   const requested = style.normalizeDictationQuality(
     opts.requestedQuality || opts.quality || settings.dictationQuality
   );
-  const heuristic = requested === 'auto'
-    ? currentDictationQuality()
-    : requested;
   const ranked = opts.ranked || vocabularyForDictation(language);
-  const requireInModel = capabilities.shouldRequireInModelVocabulary(requested);
   const plan = capabilities.planRoute({
-    engine: engineBackend,
-    fastEngine: engineFastBackend,
+    engine: 'voz',
     language,
-    device: engineDevice,
-    quality: heuristic === 'fast' || requested === 'fast' ? 'fast' : 'accurate',
-    termCount: ranked.length,
-    requireInModelVocabulary: requireInModel,
+    termCount: ranked.length || Math.max(0, Number(opts.termCount) || 0),
   });
-  const usingFast = !!(engineFastBackend && plan.engine === engineFastBackend);
   return {
     language,
     requested,
-    heuristic,
+    heuristic: requested,
     ranked,
     plan,
-    requireInModel,
-    engine: plan.engine,
-    sidecarQuality: usingFast ? 'fast' : 'accurate',
+    requireInModel: false,
+    engine: 'voz',
+    vocabularyVia: plan.vocabularyVia,
+    fallbackFrom: null,
+    sidecarQuality: 'accurate',
   };
 }
 
-// Whether an "accurate" dictation should still be handed to the fast engine.
-function asrQualityFor(quality) {
-  return planDictationRoute({ quality }).sidecarQuality;
+// Voz is the only engine, so there is no fast path to route to.
+function asrQualityFor() {
+  return 'accurate';
 }
 
-// Which engine will run this clip, for callers that have not yet heard back
-// from the sidecar. History prefers the sidecar-reported engine.
-function asrEngineFor(quality) {
-  return planDictationRoute({ quality }).engine;
+// Which engine will run this clip. History prefers the reported engine.
+function asrEngineFor() {
+  return 'voz';
 }
 
 function currentDictationQuality() {
@@ -5290,118 +4370,80 @@ function currentDictationQuality() {
   return style.dictationPath(category, settings, lastTarget, lastDurationMs);
 }
 
-async function sidecarTranscribe(wavPath, options) {
+let vozProviderInstance = null;
+function sharedVozProvider() {
+  if (!vozProviderInstance) vozProviderInstance = createProvider('voz');
+  return vozProviderInstance;
+}
+
+// Transcribe a saved WAV through the Voz provider and record what the
+// pipeline downstream needs: the engine that ran, and word-level segments
+// for repair and retry. Throws when the model is not installed so the banner
+// can explain it instead of failing silently.
+async function vozTranscribe(wavPath, options) {
   const opts = options || {};
+  if (!vozModelManager || !vozModelManager.installed()) {
+    throw new Error('The Voz model is not installed. Download it in Settings, Speech engines.');
+  }
+  const language = opts.language || textLanguage();
+  const work = sharedVozProvider().transcribe({ wavPath, language });
+  const timeoutMs = Number(opts.timeoutMs) > 0 ? Number(opts.timeoutMs) : 120000;
+  let timer = null;
   try {
-    return await sidecarTranscribeAttempt(wavPath, opts);
-  } catch (err) {
-    const backend = engineQwenBackend;
-    const blocked = qwenAccelSessionBlock && qwenAccelSessionBlock.backend;
-    const gpuKind = (backend === 'cuda' || backend === 'rocm')
-      ? backend
-      : ((blocked === 'cuda' || blocked === 'rocm') ? blocked : '');
-    if (!opts._cpuRetry && gpuKind) {
-      if (!qwenAccelSessionBlock) {
-        qwenAccelSessionBlock = {
-          backend: gpuKind,
-          reason: (err && err.message) || 'GPU recognition failed.',
-          at: Date.now(),
-        };
-      }
-      sidecarReady = false;
-      restartSidecar();
-      return sidecarTranscribeAttempt(wavPath, Object.assign({}, opts, { _cpuRetry: true }));
-    }
-    throw err;
+    const result = await Promise.race([
+      work,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('Voz timed out transcribing the recording.')), timeoutMs);
+      }),
+    ]);
+    lastAsrReport = {
+      engine: 'voz',
+      device: 'cpu',
+      vocabulary: '',
+      routed: 'voz',
+      segments: (result && result.segments) || null,
+      modelRecognitionMs: 0,
+    };
+    lastVocabularyReport = {
+      selectedEngine: 'voz',
+      selectedDevice: 'cpu',
+      backend: 'cpu',
+      gpuName: '',
+      computeType: '',
+      packId: '',
+      fallbackReason: '',
+      engine: 'voz',
+      device: 'cpu',
+      language,
+      requestedQuality: opts.requestedQuality,
+      quality: opts.quality,
+      mechanism: 'repair',
+      via: 'repair',
+      offered: 0,
+      sent: 0,
+      tokens: 0,
+      dropped: 0,
+      droppedTerms: [],
+      reason: '',
+      fallbackFrom: '',
+      degraded: false,
+      lostCapabilities: [],
+      summary: 'Voz',
+    };
+    return (result && result.text) || '';
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 
-async function sidecarTranscribeAttempt(wavPath, options) {
-  const opts = options || {};
-  requestSidecarStart();
-  await waitForSidecarReady(600000);
-  return new Promise((resolve, reject) => {
-    if (!sidecar || !sidecarReady) {
-      reject(new Error('speech engine not ready'));
-      return;
-    }
-    const id = sidecarQueue.nextId();
-    sidecarQueue.register(id, (msg) => {
-      if (!msg || !msg.ok) {
-        reject(new Error(friendlyEngineError((msg && msg.error) || 'speech engine failed')));
-        return;
-      }
-      lastAsrReport = Object.assign({
-        engine: String(msg.engine || ''),
-        device: String(msg.device || ''),
-        vocabulary: String(msg.vocabulary || ''),
-        routed: String(msg.routed || ''),
-        segments: Array.isArray(msg.segments) ? msg.segments : null,
-        modelRecognitionMs: Number(msg.recognition_sec) > 0
-          ? Math.round(Number(msg.recognition_sec) * 1000)
-          : 0,
-      }, qwenAccel.sidecarDiagnostics(msg));
-      if (msg.backend) applyQwenSidecarReport(msg);
-      if (lastVocabularyReport) {
-        lastVocabularyReport.actualEngine = lastAsrReport.engine;
-        lastVocabularyReport.device = lastAsrReport.device || lastVocabularyReport.device;
-        if (lastAsrReport.engine && lastVocabularyReport.engine
-            && lastAsrReport.engine !== lastVocabularyReport.engine) {
-          lastVocabularyReport.reason = lastVocabularyReport.reason
-            || ('Sidecar ran ' + capabilities.engineLabel(lastAsrReport.engine)
-              + ' instead of ' + capabilities.engineLabel(lastVocabularyReport.engine) + '.');
-        }
-      }
-      resolve(msg.text || '');
-    }, reject, Number(opts.timeoutMs) > 0 ? Number(opts.timeoutMs) : 60000);
-    const language = opts.language || engineLanguage(settings.asrEngine);
-    const route = planDictationRoute({
-      language,
-      quality: opts.quality,
-      requestedQuality: opts.requestedQuality,
-    });
-    const engine = route.engine;
-    const context = vocabulary.contextFor(route.ranked, { engine, language: route.language });
-    const payload = { path: wavPath, language: route.language, id };
-    if (context.text) payload.prompt = context.text;
-    payload.termCount = route.ranked.length;
-    payload.requireVocabulary = route.requireInModel;
-    if (opts.vad === false) payload.vad = false;
-    if (route.sidecarQuality === 'fast' || route.sidecarQuality === 'accurate') {
-      payload.quality = route.sidecarQuality;
-    }
-    lastVocabularyReport = {
-      selectedEngine: engineBackend || '',
-      selectedDevice: settings.asrDevice || '',
-      backend: engineQwenBackend || 'cpu',
-      gpuName: engineGpuName || '',
-      computeType: engineComputeType || '',
-      packId: enginePackId || '',
-      fallbackReason: engineFallbackReason || '',
-      engine,
-      device: engineDevice || '',
-      language: route.language,
-      requestedQuality: route.requested,
-      quality: route.sidecarQuality,
-      heuristicQuality: route.heuristic,
-      mechanism: context.mechanism || 'unsupported',
-      via: route.plan.vocabularyVia,
-      offered: route.ranked.length,
-      sent: context.budget.terms,
-      tokens: context.budget.tokens,
-      dropped: context.dropped.length,
-      droppedTerms: context.dropped.slice(0, 8),
-      reason: route.plan.reason || '',
-      fallbackFrom: route.plan.fallbackFrom || '',
-      degraded: !!route.plan.degraded,
-      lostCapabilities: route.plan.lostCapabilities || [],
-      summary: capabilities.summarizeRoute(route.plan, {
-        quality: route.sidecarQuality,
-        termsSent: context.budget.terms,
-      }),
-    };
-    sidecar.stdin.write(JSON.stringify(payload) + '\n');
-  });
+// Resolve when the Voz model is ready to transcribe, warming the provider in
+// the background on the way. Rejects when there is no model to load so the
+// banner can explain instead of failing silently.
+async function ensureVozReady() {
+  if (!vozModelManager || !vozModelManager.installed()) {
+    throw new Error('The Voz model is not installed. Download it in Settings, Speech engines.');
+  }
+  await ensureVoz();
 }
 
 function dictationHotkeyHandler() {
@@ -6065,7 +5107,7 @@ ipcMain.on('cancelled', (e) => {
 async function transcribeSavedFile(file) {
   const seconds = corpus.wavSeconds(file);
   const opts = { timeoutMs: transcriptionTimeout(seconds) };
-  return sidecarTranscribe(file, opts);
+  return vozTranscribe(file, opts);
 }
 
 // Only the app's own pages run in its windows: a file under this folder.
@@ -6133,7 +5175,7 @@ ipcMain.handle('transcribe-local', async (_e, wav, options) => {
   const local = async () => {
     tmp = path.join(os.tmpdir(), 'vell-' + Date.now() + '-' + process.hrtime.bigint() + '.wav');
     await fs.promises.writeFile(tmp, buf);
-    return sidecarTranscribe(tmp, opts);
+    return vozTranscribe(tmp, opts);
   };
   try {
     const text = await local();
@@ -6154,10 +5196,6 @@ ipcMain.handle('park-audio', async (_e, wav) => {
 ipcMain.handle('app-load', async () => snapshot());
 ipcMain.handle('local-model-setup', (_event, engine) => {
   if (!Object.prototype.hasOwnProperty.call(asr.ASR_ENGINES, engine)) throw new Error('Choose a supported speech model.');
-  // An engine this platform does not offer is never in the picker, so this is
-  // only reachable from a stale renderer or a replayed message -- and the cost
-  // of letting it through is a multi-gigabyte download for an engine that
-  // would then be corrected away on every read.
   if (!modelPlan.engineOffered(engine, process.platform)) throw new Error('Choose a supported speech model.');
   return runAsrOperation('install', async () => {
     asrSetupController = new AbortController();
@@ -6189,21 +5227,19 @@ ipcMain.handle('asr-runtime-install', () => runAsrOperation('install', async () 
   } catch (err) {
     asrRuntimeState = {
       status: asrSetupController.signal.aborted || (err && err.code === 'CANCELLED') ? 'cancelled' : 'error',
-      progress: null, step: asrRuntimeState.step || 'engine',
+      progress: null, step: asrRuntimeState.step || 'model',
       message: err && err.message ? err.message : 'Dictation could not be set up.',
     };
   }
   saveAsrSetupState();
 }));
-// Download one optional component -- the fast English path, or another engine
-// to switch to later. Same operation lock and the same progress reporting as a
-// first-time setup, because to a user it is the same thing happening.
+// Download the Voz model (or re-download it). Same operation lock and the
+// same progress reporting as a first-time setup, because to a user it is the
+// same thing happening.
 //
-// `options.select` switches to the engine the pack belongs to once it is on
-// disk. That is the Settings upgrade card: "Download Qwen and switch" is one
-// click, not a download followed by a trip to the engine picker. The switch
-// happens only after a successful install, so a cancelled or failed download
-// leaves the working engine exactly where it was.
+// `options.select` switches to the engine the download belongs to once it is
+// on disk. With a single engine that is always Voz, so the switch is a no-op
+// kept for the call shape.
 ipcMain.handle('speech-model-install', (_e, id, options) => {
   const wanted = String(id || '').trim();
   if (!modelPlan.COMPONENT_IDS.includes(wanted)) return snapshot();
@@ -6216,12 +5252,7 @@ ipcMain.handle('speech-model-install', (_e, id, options) => {
       const nextEngine = select ? engineForComponent(wanted) : '';
       if (nextEngine && nextEngine !== settings.asrEngine) {
         settings.asrEngine = nextEngine;
-        engineWarning = '';
-        engineFix = '';
-        engineFixEngine = '';
         saveSettings();
-        // The operation lock restarts the sidecar when this install
-        // finishes, and that restart reads the engine set here.
       }
     } catch (err) {
       asrRuntimeState = {
@@ -6235,165 +5266,40 @@ ipcMain.handle('speech-model-install', (_e, id, options) => {
   });
 });
 
-// Remove one model the settings list as installed but the chosen engine does
-// not need. The engine's own model goes with "Remove engine and model"; this
-// leaves the engine, the switch that enables dictation, and every other model
-// exactly as they are. Same operation lock as an install, so a removal cannot
+// Remove the Voz model. Dictation needs it back before it can run again;
+// the banner says so. Same operation lock as an install, so a removal cannot
 // run under a download or under another removal.
 ipcMain.handle('speech-model-remove', (_e, id) => {
   const wanted = String(id || '').trim();
-  const component = modelPlan.COMPONENTS[wanted];
-  if (!component) return snapshot();
+  if (wanted !== 'voz' || !vozModelManager) return snapshot();
   if (asrOperation) return asrOperation.promise;
   return runAsrOperation('remove', async () => {
-    removingAsrRuntime = true;
-    asrRuntimeState = { status: 'removing', progress: null, step: component.manager,
-      message: 'Removing ' + component.name + '…' };
+    asrRuntimeState = { status: 'removing', progress: null, step: 'model',
+      message: 'Removing Voz…' };
     broadcast();
     try {
       await cancelListen();
-      await stopPythonProcesses();
-      if (component.manager === 'model') {
-        if (asrModelManager) await asrModelManager.remove();
-      } else if (speechModelsManager) {
-        await speechModelsManager.remove([wanted]);
-      }
-      const engineInstalled = !!(asrRuntimeManager && asrRuntimeManager.installed());
-      asrRuntimeState = { status: engineInstalled ? 'installed' : 'idle', progress: null, step: '',
-        message: component.name + ' was removed from ' + macShell.deviceName(process.platform) + '.' };
+      await vozModelManager.remove();
+      setSidecarState('unavailable');
+      asrRuntimeState = { status: 'removed', progress: null, step: 'done',
+        message: 'Voz was removed. Download it again in Settings to dictate.' };
     } catch (err) {
-      asrRuntimeState = { ...removeFailure(component.name, err), step: component.manager };
+      asrRuntimeState = { ...removeFailure('Voz', err), step: 'model' };
     }
     saveAsrSetupState();
-  }).then((result) => {
-    // The operation lock held the restart back. The process comes back now,
-    // on whatever is still installed; if that no longer includes the model
-    // the chosen engine needs, it says so and offers the download.
-    restartSidecar();
-    return result;
   });
 });
 
-ipcMain.handle('cuda-pack-install', async () => {
-  if (!cudaPackManager) return snapshot();
-  try {
-    await cudaPackManager.install();
-    // cuBLAS is read when CTranslate2 loads the model, so a running sidecar
-    // would keep using the CPU it started on. Restarting is the difference
-    // between a download that works now and one that works after a restart
-    // nobody told the user to perform.
-    restartSidecar();
-  } catch (err) {
-    cudaPackState = {
-      status: err && err.code === 'CANCELLED' ? 'cancelled' : 'error',
-      progress: null,
-      message: err && err.message ? err.message : 'NVIDIA GPU support could not be installed.',
-    };
-  }
-  broadcast();
-  return snapshot();
-});
-ipcMain.handle('cuda-pack-cancel', async () => {
-  if (cudaPackManager) cudaPackManager.cancel();
-  return snapshot();
-});
-// A pack's libraries are open in the speech process for as long as it runs,
-// and Windows will not delete an open file: removing under a live process
-// used to fail half way and leave a pack that was neither installed nor gone,
-// or sit on a locked handle until the click looked hung. So the process is
-// stopped and gone before the first file is touched, and comes back
-// afterwards on whatever is still installed. The flag keeps the exit handler
-// from restarting it in between.
-async function removeWithProcessStopped(remove) {
-  removingAsrRuntime = true;
-  try {
-    await stopPythonProcesses();
-    return await remove();
-  } finally {
-    removingAsrRuntime = false;
-  }
-}
-
+// GPU packs went away with the CUDA/Qwen runtimes: Voz runs on the CPU
+// through onnxruntime-node on every platform, so there is nothing to
+// install, cancel or remove here.
 function removeFailure(label, err) {
   return { status: 'error', progress: null,
     message: 'Could not remove ' + label + ': ' + (err && err.message ? err.message : 'Unknown error') + '. Try again.' };
 }
 
-ipcMain.handle('cuda-pack-remove', async () => {
-  if (cudaPackManager) {
-    try {
-      await removeWithProcessStopped(() => cudaPackManager.remove());
-      cudaPackState = { status: 'idle', progress: null, message: '' };
-    } catch (err) {
-      cudaPackState = removeFailure('NVIDIA GPU support', err);
-    }
-    // Back to the CPU.
-    restartSidecar();
-  }
-  broadcast();
-  return snapshot();
-});
-
-function qwenAccelManager(kind) {
-  return String(kind || '').trim().toLowerCase() === 'rocm' ? qwenRocmPackManager : qwenCudaPackManager;
-}
-
-function installQwenAcceleration(kind) {
-  return runAsrOperation('gpu-install', async () => {
-    const manager = qwenAccelManager(kind);
-    if (!manager) return snapshot();
-    const label = manager.label;
-    try {
-      qwenAccelSessionBlock = null;
-      await removeWithProcessStopped(() => manager.install());
-    } catch (err) {
-      const state = {
-        status: err && err.code === 'CANCELLED' ? 'cancelled' : 'error',
-        progress: null,
-        message: err && err.message ? err.message : (label + ' could not be installed.'),
-      };
-      if (manager.kind === 'rocm') qwenRocmPackState = state;
-      else qwenCudaPackState = state;
-    }
-  });
-}
-ipcMain.handle('qwen-accel-install', (_e, kind) => installQwenAcceleration(kind));
-ipcMain.handle('qwen-accel-info', async (_e, kind) => {
-  if (kind !== 'cuda' && kind !== 'rocm') return snapshot();
-  await qwenAccelManager(kind)?.refreshDownloadInfo();
-  return snapshot();
-});
-ipcMain.handle('qwen-accel-cancel', async (_e, kind) => {
-  const manager = qwenAccelManager(kind);
-  if (manager) manager.cancel();
-  return snapshot();
-});
-ipcMain.handle('qwen-accel-remove', (_e, kind) => runAsrOperation('gpu-remove', async () => {
-  const manager = qwenAccelManager(kind);
-  if (manager) {
-    let state;
-    try {
-      await removeWithProcessStopped(() => manager.remove());
-      state = { status: 'idle', progress: null, message: '' };
-    } catch (err) {
-      state = removeFailure(manager.label, err);
-    }
-    if (manager.kind === 'rocm') qwenRocmPackState = state;
-    else qwenCudaPackState = state;
-    qwenAccelSessionBlock = null;
-  }
-}));
-ipcMain.handle('qwen-accel-retry', () => {
-  const kind = currentQwenAccelPlan().recommendedPack;
-  return kind ? installQwenAcceleration(kind) : snapshot();
-});
 ipcMain.handle('asr-runtime-cancel', () => {
   if (asrSetupController) asrSetupController.abort();
-  if (asrRuntimeManager) asrRuntimeManager.cancel();
-  if (asrModelManager) asrModelManager.cancel();
-  if (speechModelsManager) speechModelsManager.cancel();
-  if (qwenCudaPackManager) qwenCudaPackManager.cancel();
-  if (qwenRocmPackManager) qwenRocmPackManager.cancel();
   if (asrOperation && asrOperation.kind === 'install') {
     asrRuntimeState = { ...asrRuntimeState, status: 'cancelling', message: 'Cancelling setup…' };
     broadcast();
@@ -6401,8 +5307,7 @@ ipcMain.handle('asr-runtime-cancel', () => {
   return snapshot();
 });
 ipcMain.handle('asr-runtime-remove', () => runAsrOperation('remove', async () => {
-  removingAsrRuntime = true;
-  asrRuntimeState = { status: 'removing', progress: null, step: 'engine', message: 'Removing speech engines and models…' };
+  asrRuntimeState = { status: 'removing', progress: null, step: 'model', message: 'Removing the Voz model…' };
   broadcast();
   try {
     // Persist the user's intent before touching files. A failed delete or an
@@ -6410,21 +5315,15 @@ ipcMain.handle('asr-runtime-remove', () => runAsrOperation('remove', async () =>
     fs.mkdirSync(ASR_RUNTIME, { recursive: true });
     fs.writeFileSync(asrDisabledPath(), '{}');
     await cancelListen();
-    await stopPythonProcesses();
-    if (asrRuntimeManager) await asrRuntimeManager.remove();
-    if (asrModelManager) await asrModelManager.remove();
-    if (speechModelsManager) await speechModelsManager.remove();
+    if (vozModelManager) await vozModelManager.remove();
     asrRuntimeState = { status: 'removed', progress: null,
-      message: 'Speech engines removed. Dictation is disabled until you set it up again.', step: '' };
+      message: 'Voz removed. Dictation is disabled until you set it up again.', step: 'done' };
   } catch (err) {
-    asrRuntimeState = { status: 'error', progress: null, step: 'engine',
-      message: 'Could not remove the speech engine: ' + (err.message || 'Unknown error')
+    asrRuntimeState = { status: 'error', progress: null, step: 'model',
+      message: 'Could not remove the speech model: ' + (err.message || 'Unknown error')
         + '. Dictation remains disabled. Try Remove again.' };
   }
-  engineError = 'Speech engines are disabled. Set up dictation to use them again.';
-  engineWarning = '';
-  engineFix = '';
-  engineFixEngine = '';
+  engineError = 'Speech is disabled. Set up dictation to use it again.';
   setSidecarState('unavailable');
   saveAsrSetupState();
 }));
@@ -6627,28 +5526,16 @@ ipcMain.handle('settings-set', async (_e, patch) => {
     settings.flowBarMotion = normalizeFlowMotion(patch.flowBarMotion);
   }
 
-  // Switching models means reloading the engine, so this cannot ride along
-  // with the plain booleans above.
-  if (typeof patch.useTunedModel === 'boolean'
-      && patch.useTunedModel !== settings.useTunedModel) {
-    settings.useTunedModel = patch.useTunedModel;
-    if (tunedModelInfo()) restartSidecar();
-  }
+  // The Whisper fine-tune is gone with the old engines; an old file may
+  // still carry the switch, which is now inert.
+  delete settings.useTunedModel;
 
-  const nextAsrEngine = patch.asrEngine === undefined
-    ? settings.asrEngine
-    : asr.normalizeAsrEngine(patch.asrEngine);
-  const nextAsrDevice = patch.asrDevice === undefined
-    ? settings.asrDevice
-    : asr.normalizeAsrDevice(patch.asrDevice);
+  const nextAsrEngine = 'voz';
+  const nextAsrDevice = 'cpu';
   if (nextAsrEngine !== settings.asrEngine || nextAsrDevice !== settings.asrDevice) {
     settings.asrEngine = nextAsrEngine;
     settings.asrDevice = nextAsrDevice;
-    engineWarning = '';
-    engineFix = '';
-    engineFixEngine = '';
     engineError = '';
-    restartSidecar();
   }
 
   // Turning either kind of keeping off means those recordings go, not just
@@ -7050,13 +5937,10 @@ if (!gotLock) {
     powerMonitor.on('unlock-screen', () => rearmOverlayAfterWake('unlock-screen'));
     powerMonitor.on('suspend', () => pauseOverlayHealth('suspend'));
     powerMonitor.on('lock-screen', () => pauseOverlayHealth('lock-screen'));
-    // Qwen's interpreter is selected from the detected GPU vendor. Starting
-    // before getGPUInfo resolves locks a verified CUDA or ROCm installation to
-    // CPU until something else happens to restart the sidecar.
-    // Probe imports and model availability, but defer the expensive --serve
-    // process until the user starts dictating.
-    //
-    await startSidecarAfterGpuDetection(detectGpu, startSidecar, broadcast, { probeOnly: true });
+    // Warm the Voz model in the background once it is on disk, so the first
+    // dictation does not pay the compile cost with the microphone already
+    // open. Fire and forget: a failure surfaces on first transcribe instead.
+    startSidecar();
   });
 
   app.on('before-quit', (event) => {
@@ -7070,14 +5954,7 @@ if (!gotLock) {
       mode = 'cancel';
       sendOverlay({ mode: 'cancel', text: 'Cancelled' });
     }
-    if (asrRuntimeManager) asrRuntimeManager.cancel();
-    if (asrModelManager) asrModelManager.cancel();
-    if (speechModelsManager) speechModelsManager.cancel();
     if (asrSetupController) asrSetupController.abort();
-    if (qwenCudaPackManager) qwenCudaPackManager.cancel();
-    if (qwenRocmPackManager) qwenRocmPackManager.cancel();
-    clearTimeout(sidecarRestartTimer);
-    if (sidecarProbe) sidecarProbe.kill();
     backgroundMedia.close().finally(() => {
       mediaShutdownDone = true;
       app.quit();
@@ -7099,12 +5976,6 @@ if (!gotLock) {
     if (overlayRecreateTimer) clearTimeout(overlayRecreateTimer);
     if (overlayReflowTimer) clearTimeout(overlayReflowTimer);
     if (hwndTimer) clearInterval(hwndTimer);
-    clearSidecarLaunchPlan();
-    closeSidecarLog();
-    if (sidecar) {
-      try { sidecar.stdin.write('QUIT\n'); } catch (_) {}
-      sidecar.kill();
-    }
     corpus.clearRetry();
   });
 }

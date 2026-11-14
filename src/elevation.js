@@ -153,7 +153,7 @@ function encodeCommand(script) {
 // -- killed, timed out, never started -- is a failure like any other.
 function startResult(stdout) {
   const lines = String(stdout || '').split(/\r?\n/).map((line) => line.trim());
-  const line = lines.find((l) => l.startsWith('VOXDEN_')) || '';
+  const line = lines.find((l) => l.startsWith('VELL_')) || '';
   if (line === 'VELL_OK') return { ok: true };
   if (line === 'VELL_CANCELLED') return { ok: false, reason: CANCELLED };
   return { ok: false, reason: FAILED, detail: line.replace(/^VELL_FAILED\s*/, '').slice(0, 200) };
