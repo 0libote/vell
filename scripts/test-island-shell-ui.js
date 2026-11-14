@@ -176,7 +176,7 @@ app.whenReady().then(async () => {
     const bar = document.querySelector('.titlebar');
     const rect = el => { const r = el.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width }; };
     const island = rect(document.getElementById('island'));
-    const lockup = rect(bar.querySelector('.brand-lockup'));
+    const lockup = rect(bar.querySelector('.brand-lockup, .titlebar-start'));
     const buttons = [...bar.querySelectorAll('.titlebar-end > :not([hidden])')].map(rect);
     const parts = [...document.querySelectorAll('#island > :not([hidden])')].filter(el => getComputedStyle(el).display !== 'none').map(rect);
     const links = [...document.querySelectorAll('.island-link')].map(link => {

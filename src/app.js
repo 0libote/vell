@@ -5303,7 +5303,7 @@ for (const btn of navButtons) {
 // the plan and the figure on show.
 const titlebarEl = document.querySelector('.titlebar');
 const islandEl = document.getElementById('island');
-const titlebarStartEl = titlebarEl.querySelector('.brand-lockup');
+const titlebarStartEl = titlebarEl.querySelector('.brand-lockup, .titlebar-start');
 const titlebarEndEl = titlebarEl.querySelector('.titlebar-end');
 const ISLAND_LAST_RUNG = 5;
 const ISLAND_GUTTER = 12;
@@ -5318,10 +5318,11 @@ function setIslandRung(rung) {
 function fitIsland() {
   if (!titlebarEl.clientWidth) return;
   const frame = titlebarEl.clientWidth - 2 * ISLAND_GUTTER;
+  const startWidth = titlebarStartEl ? titlebarStartEl.offsetWidth : 0;
   let rung = 0;
   for (; rung < ISLAND_LAST_RUNG; rung++) {
     setIslandRung(rung);
-    if (islandEl.offsetWidth + titlebarStartEl.offsetWidth + titlebarEndEl.offsetWidth <= frame) break;
+    if (islandEl.offsetWidth + startWidth + titlebarEndEl.offsetWidth <= frame) break;
   }
   setIslandRung(rung);
 }

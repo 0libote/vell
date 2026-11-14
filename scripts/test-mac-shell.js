@@ -116,7 +116,7 @@ eq('no hard-coded "this PC" in user-facing strings of main.js (console lines asi
 
 // --- the renderer --------------------------------------------------------------
 
-ok('the Mac title bar makes room for the traffic lights', /html\[data-platform="darwin"\] \.titlebar \.brand-lockup \{ padding-left: 84px; \}/.test(shellCss));
+ok('the Mac title bar makes room for the traffic lights', /html\[data-platform="darwin"\] \.titlebar \.titlebar-start,\s*\nhtml\[data-platform="darwin"\] \.titlebar \.brand-lockup \{ padding-left: 84px; \}/.test(shellCss));
 ok('and has no caption buttons to leave room for', /html\[data-platform="darwin"\] \.titlebar-end \{ padding-right: 16px; \}/.test(shellCss));
 ok('only a Mac snapshot marks the document', /if \(next !== 'darwin'\) return;\s*\n\s*\/\/[^\n]*\n\s*document\.documentElement\.dataset\.platform = 'darwin';/.test(appSrc));
 ok('no updater bridge remains in the renderer', !/window\.vell\.(checkForUpdates|installUpdate|openChangelog)/.test(appSrc));

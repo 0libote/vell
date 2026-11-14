@@ -27,11 +27,13 @@
    two end cells so the island's column stays centred on the window: the Windows
    caption buttons on the right, and on a Mac the traffic lights on the left
    (main.js places them at x 18 through about 70). */
+.titlebar .titlebar-start,
 .titlebar .brand-lockup {
   justify-self: start;
   padding-left: 16px;
 }
 
+html[data-platform="darwin"] .titlebar .titlebar-start,
 html[data-platform="darwin"] .titlebar .brand-lockup { padding-left: 84px; }
 
 /* --- The island ------------------------------------------------------------ */
@@ -40,7 +42,7 @@ html[data-platform="darwin"] .titlebar .brand-lockup { padding-left: 84px; }
    gives every property a ten-microsecond transition, which would hold the
    widths fitIsland() reads one frame behind its own class changes. The
    controls that do transition name their properties below. */
-.titlebar :is(.island, .island *, .brand-lockup *) { transition-property: none; }
+.titlebar :is(.island, .island *, .brand-lockup *, .titlebar-start) { transition-property: none; }
 
 .island {
   -webkit-app-region: no-drag;

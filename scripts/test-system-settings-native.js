@@ -114,7 +114,7 @@ app.whenReady().then(async () => {
       // free strip between the logo and the island is what drags the window.
       const points = await run(`(() => {
         const title = document.querySelector('.titlebar').getBoundingClientRect();
-        const lockup = document.querySelector('.titlebar .brand-lockup').getBoundingClientRect();
+        const lockup = document.querySelector('.titlebar .brand-lockup, .titlebar .titlebar-start').getBoundingClientRect();
         const island = document.querySelector('.titlebar .island').getBoundingClientRect();
         const close = document.getElementById('settings-close').getBoundingClientRect();
         return { title: { x: Math.round((lockup.right + island.left) / 2), y: title.top + title.height / 2 },

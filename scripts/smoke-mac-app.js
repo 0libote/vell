@@ -159,7 +159,7 @@ async function main() {
         // into a .01ms transition; the page learns it is on a Mac in this same
         // tick, so the padding would read as its start value. Finish it first.
         titlebarPadding: (() => {
-          const lockup = document.querySelector('.titlebar .brand-lockup');
+          const lockup = document.querySelector('.titlebar .brand-lockup, .titlebar .titlebar-start');
           for (const animation of lockup.getAnimations()) animation.finish();
           return getComputedStyle(lockup).paddingLeft;
         })(),
