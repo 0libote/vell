@@ -285,40 +285,6 @@ function classifyTarget(target, title) {
   return 'other';
 }
 
-const FAST_CATEGORIES = new Set(['personal', 'work']);
-const FAST_AI_EXES = new Set(['chatgpt.exe', 'claude.exe']);
-const FAST_AI_BUNDLES = ['com.openai.chat', 'com.anthropic.claudefordesktop'];
-const FAST_AI_TITLES = [
-  'chatgpt', 'claude', 'cursor agents', 'cursor chat', 'copilot chat',
-];
-const DICTATION_QUALITIES = ['auto', 'fast', 'accurate'];
-
-function normalizeDictationQuality(value) {
-  const id = String(value || '').trim().toLowerCase();
-  return DICTATION_QUALITIES.includes(id) ? id : 'auto';
-}
-
-function isFastDictationTarget(target) {
-  const info = target || {};
-  const bundle = asBundleId(info.exe);
-  if (bundle) {
-    if (bundleMatches(bundle, FAST_AI_BUNDLES)) return true;
-  } else if (FAST_AI_EXES.has(normalizeExe(info.exe))) {
-    return true;
-  }
-  return titleMatches(info.title, FAST_AI_TITLES);
-}
-
-function dictationPath(category, settings, target, durationMs) {
-  const quality = normalizeDictationQuality(settings && settings.dictationQuality);
-  if (quality === 'fast' || quality === 'accurate') return quality;
-  // Auto can favour latency for quick messages, but longer thoughts need the
-  // primary model. Explicit Fast and Accurate choices always win.
-  if (Number(durationMs) >= 8000) return 'accurate';
-  const cat = CATEGORIES.includes(category) ? category : 'other';
-  return FAST_CATEGORIES.has(cat) || isFastDictationTarget(target) ? 'fast' : 'accurate';
-}
-
 function collapseSpaces(text) {
   return String(text || '').replace(/[ \t]+/g, ' ').replace(/ *\n */g, '\n').trim();
 }
@@ -536,12 +502,8 @@ module.exports = {
   STYLES,
   CATEGORIES,
   DEFAULT_WRITING_STYLES,
-  DICTATION_QUALITIES,
   normalizeWritingStyles,
-  normalizeDictationQuality,
   classifyTarget,
-  isFastDictationTarget,
-  dictationPath,
   stripFillers,
   tidyAfterFillerRemoval,
   toneForCategory,

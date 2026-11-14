@@ -170,7 +170,6 @@ let settings = {
   displayNameFrom: '',
   muteMusicWhileDictating: true,
   writingStyles: Object.assign({}, style.DEFAULT_WRITING_STYLES),
-  dictationQuality: 'auto',
   verbatimMode: false,
   verbatimDictionary: false,
   // Spoken numbers written as figures: "one point zero point sixteen" is
@@ -468,7 +467,6 @@ function loadSettings() {
     displayNameFrom: '',
     muteMusicWhileDictating: true,
     writingStyles: Object.assign({}, style.DEFAULT_WRITING_STYLES),
-    dictationQuality: 'auto',
     verbatimMode: false,
     verbatimDictionary: false,
     numbersAsDigits: true,
@@ -520,7 +518,7 @@ function loadSettings() {
       delete settings.selectedTextRewrite;
       delete settings.contextAwareness;
       settings.writingStyles = style.normalizeWritingStyles(settings.writingStyles);
-      settings.dictationQuality = style.normalizeDictationQuality(settings.dictationQuality);
+      delete settings.dictationQuality;
       settings.verbatimMode = !!settings.verbatimMode;
       settings.verbatimDictionary = !!settings.verbatimDictionary;
       settings.numbersAsDigits = settings.numbersAsDigits !== false;
@@ -914,7 +912,7 @@ function snapshot() {
     displayName: settings.displayName || '',
     muteMusicWhileDictating: settings.muteMusicWhileDictating !== false,
     writingStyles: style.normalizeWritingStyles(settings.writingStyles),
-    dictationQuality: style.normalizeDictationQuality(settings.dictationQuality),
+
     verbatimMode: !!settings.verbatimMode,
     verbatimDictionary: !!settings.verbatimDictionary,
     numbersAsDigits: settings.numbersAsDigits !== false,
@@ -1400,7 +1398,6 @@ function sendOverlay(extra) {
     flowBarStyle: settings.flowBarStyle,
     flowBarMotion: settings.flowBarMotion,
     soundsEnabled: settings.soundsEnabled,
-    dictationQuality: settings.dictationQuality,
     microphone: settings.microphone || 'default',
     canRetry: keepingClips() && corpus.hasRetry(),
     // Whether a long dictation should write itself to disk as it goes, so a
@@ -2438,12 +2435,6 @@ function setDictateMode(next) {
   broadcast();
 }
 
-function setDictationQuality(next) {
-  settings.dictationQuality = style.normalizeDictationQuality(next);
-  saveSettings();
-  broadcast();
-}
-
 function setMicrophone(id) {
   const next = String(id || 'default');
   if (settings.microphone === next) return;
@@ -2504,7 +2495,6 @@ function trayMenuSignature() {
     settings.shortcut,
     settings.pasteLastShortcut,
     settings.dictateMode,
-    style.normalizeDictationQuality(settings.dictationQuality),
     settings.verbatimMode ? 'v1' : 'v0',
     settings.muteMusicWhileDictating !== false ? 'm1' : 'm0',
     settings.launchAtLogin ? 'l1' : 'l0',
@@ -2517,7 +2507,6 @@ function trayMenuSignature() {
 
 function buildTrayTemplate() {
   const busy = mode === 'arming' || mode === 'recording';
-  const quality = style.normalizeDictationQuality(settings.dictationQuality);
   const words = macShell.trayLabels(process.platform);
   return [
     { label: 'Open Vell', click: () => openHistory() },
@@ -2544,14 +2533,6 @@ function buildTrayTemplate() {
       submenu: [
         { label: 'Toggle', type: 'radio', checked: !isPtt(), click: () => setDictateMode('toggle') },
         { label: 'Push to talk', type: 'radio', checked: isPtt(), click: () => setDictateMode('ptt') },
-      ],
-    },
-    {
-      label: 'Dictation speed',
-      submenu: [
-        { label: 'Auto', type: 'radio', checked: quality === 'auto', click: () => setDictationQuality('auto') },
-        { label: 'Fast', type: 'radio', checked: quality === 'fast', click: () => setDictationQuality('fast') },
-        { label: 'Accurate', type: 'radio', checked: quality === 'accurate', click: () => setDictationQuality('accurate') },
       ],
     },
     { label: 'Microphone', submenu: microphoneSubmenu() },
@@ -3229,7 +3210,7 @@ function addHistoryEntry(text, meta) {
     if (typeof meta.styleFixes === 'number') entry.styleFixes = meta.styleFixes;
     const traceFields = [
       'rawAsr', 'afterCleanup', 'afterCorrections', 'afterDedupe', 'afterDictionary', 'afterAutoCleanup',
-      'asrEngine', 'dictationQuality', 'pasteLearnPath',
+      'asrEngine', 'pasteLearnPath',
     ];
     for (const field of traceFields) {
       if (typeof meta[field] === 'string') entry[field] = meta[field];
@@ -3421,8 +3402,6 @@ function vocabularyDiagnostics(result) {
     recognitionSec: asrReport.recognitionSec || 0,
     rtf: asrReport.rtf || 0,
     language: report.language || '',
-    requestedQuality: report.requestedQuality || '',
-    effectiveQuality: report.quality || '',
     vocabularyVia: via,
     vocabularyMechanism: asrReport.vocabulary || report.mechanism || '',
     termsOffered: report.offered || 0,
@@ -3443,10 +3422,7 @@ function vocabularyDiagnostics(result) {
     })),
     reason: report.reason || '',
     fallbackFrom: report.fallbackFrom || '',
-    summary: capabilities.summarizeRoute(plan, {
-      quality: report.quality,
-      termsSent: report.sent,
-    }),
+    summary: capabilities.summarizeRoute(plan, {}),
   };
 }
 
@@ -3456,11 +3432,10 @@ function vocabularyDiagnostics(result) {
 // the history page, so a retried transcript is exactly what that dictation
 // would have pasted. Returns an empty text when there was no speech.
 // Local-only: the transcript is worked over on this PC by rules --
-function composeTranscript(raw, tone, quality) {
+function composeTranscript(raw, tone) {
   const engine = (lastAsrReport && lastAsrReport.engine)
     || (lastVocabularyReport && lastVocabularyReport.engine)
-    || asrEngineFor(quality);
-  const usedQuality = (lastVocabularyReport && lastVocabularyReport.quality) || quality;
+    || asrEngineFor();
   // Every engine writes what it hears; Voz has no Hindi, so there is no
   // script to romanize. The raw transcript is kept as the engine gave it.
   const said = raw;
@@ -3488,7 +3463,6 @@ function composeTranscript(raw, tone, quality) {
         afterCleanup: verbatim,
         afterDictionary: verbatimDict.text,
         asrEngine: engine,
-        dictationQuality: usedQuality,
         vocabulary: vocabularyDiagnostics(verbatimDict),
       },
     };
@@ -3541,7 +3515,6 @@ function composeTranscript(raw, tone, quality) {
       afterDictionary: text,
       afterAutoCleanup: proofread,
       asrEngine: engine,
-      dictationQuality: usedQuality,
       vocabulary: vocabularyDiagnostics(dictResult),
     },
   };
@@ -3558,7 +3531,7 @@ async function onTranscript(raw, sessionToken = recordingSessionToken) {
   const tone = style.toneForCategory(category, settings.writingStyles);
   if (sessionToken !== recordingSessionToken) return;
   const composeStarted = Date.now();
-  const composed = composeTranscript(raw, tone, currentDictationQuality());
+  const composed = composeTranscript(raw, tone);
   diagLog('text-processing', { ms: Date.now() - composeStarted, characters: String(raw || '').length });
   if (!composed.text) {
     flashError('No speech');
@@ -3682,7 +3655,7 @@ async function retryEntry(id) {
     }
     const category = entry.category || style.classifyTarget(entry.exe, entry.title);
     const tone = style.toneForCategory(category, settings.writingStyles);
-    const composed = composeTranscript(raw, tone, currentDictationQuality());
+    const composed = composeTranscript(raw, tone);
     if (!composed.text) return { ok: false, reason: 'The engine heard no speech in this recording.' };
     const changed = composed.text !== entry.text;
     const updated = { ...entry };
@@ -3695,7 +3668,7 @@ async function retryEntry(id) {
     }
     updated.original = composed.meta.rawAsr;
     updated.retriedTs = Date.now();
-    for (const field of ['asrEngine', 'dictationQuality', 'afterCleanup', 'afterDedupe', 'afterDictionary', 'afterAutoCleanup']) {
+    for (const field of ['asrEngine', 'afterCleanup', 'afterDedupe', 'afterDictionary', 'afterAutoCleanup']) {
       if (typeof composed.meta[field] === 'string') updated[field] = composed.meta[field];
     }
     // A retry decides corrections afresh: the setting may have changed since.
@@ -3736,7 +3709,7 @@ async function recoverRecording(id) {
     const raw = await transcribeSavedFile(file);
     const category = style.classifyTarget(item.exe, item.title);
     const tone = style.toneForCategory(category, settings.writingStyles);
-    const composed = composeTranscript(raw, tone, currentDictationQuality());
+    const composed = composeTranscript(raw, tone);
     // Nothing heard is not a reason to destroy the evidence: the clip stays
     // shelved so the user can play it, save it, or try a different engine.
     if (!composed.text) return { ok: false, reason: 'The engine heard no speech in this recording.' };
@@ -4321,20 +4294,12 @@ function effectiveDevice() {
 // GPU acceleration went away with the CUDA/Qwen packs: Voz runs on the CPU
 // through onnxruntime-node on every platform.
 
-// Plan which engine will recognise this clip.
-//
-// Order matters, and the old order was the bug: it picked Parakeet from an
-// Auto-resolved Fast heuristic, built the vocabulary prompt for Parakeet
-// (which has no mechanism, so the prompt was empty), then the sidecar only
-// bounced back to Qwen when it saw a nonempty prompt. Count the applicable
-// terms first, ask the capability planner with that count, then size the
-// prompt for the engine that will actually run.
+// One engine hears every clip, so there is nothing to route between. The
+// planner still records which engine ran and how the dictionary was honoured,
+// which is what the history entry and diagnostics read.
 function planDictationRoute(options) {
   const opts = options || {};
   const language = opts.language || textLanguage();
-  const requested = style.normalizeDictationQuality(
-    opts.requestedQuality || opts.quality || settings.dictationQuality
-  );
   const ranked = opts.ranked || vocabularyForDictation(language);
   const plan = capabilities.planRoute({
     engine: 'voz',
@@ -4343,31 +4308,17 @@ function planDictationRoute(options) {
   });
   return {
     language,
-    requested,
-    heuristic: requested,
     ranked,
     plan,
-    requireInModel: false,
     engine: 'voz',
     vocabularyVia: plan.vocabularyVia,
     fallbackFrom: null,
-    sidecarQuality: 'accurate',
   };
-}
-
-// Voz is the only engine, so there is no fast path to route to.
-function asrQualityFor() {
-  return 'accurate';
 }
 
 // Which engine will run this clip. History prefers the reported engine.
 function asrEngineFor() {
   return 'voz';
-}
-
-function currentDictationQuality() {
-  const category = style.classifyTarget(lastTarget.exe, lastTarget.title);
-  return style.dictationPath(category, settings, lastTarget, lastDurationMs);
 }
 
 let vozProviderInstance = null;
@@ -4415,8 +4366,6 @@ async function vozTranscribe(wavPath, options) {
       engine: 'voz',
       device: 'cpu',
       language,
-      requestedQuality: opts.requestedQuality,
-      quality: opts.quality,
       mechanism: 'repair',
       via: 'repair',
       offered: 0,
@@ -5575,10 +5524,6 @@ ipcMain.handle('settings-set', async (_e, patch) => {
     settings.writingStyles = style.normalizeWritingStyles(
       Object.assign({}, settings.writingStyles, patch.writingStyles)
     );
-  }
-
-  if (patch.dictationQuality !== undefined) {
-    settings.dictationQuality = style.normalizeDictationQuality(patch.dictationQuality);
   }
 
   const previousTheme = settings.appTheme;

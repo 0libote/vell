@@ -5,7 +5,7 @@
 // The Island recording bar and the dictation workflow must not depend on any
 // specific speech model. Every engine implements this shape:
 //
-//   provider.transcribe({ wavPath | pcm16, sampleRate, language, vocabularyTerms[], quality })
+//   provider.transcribe({ wavPath | pcm16, sampleRate, language, vocabularyTerms[] })
 //     → Promise<{ text, words: [{text, start, end}], engine, language,
 //                  realtimeFactor, vocabularyVia, status }>
 //

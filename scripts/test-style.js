@@ -10,8 +10,6 @@ const {
   applyVeryCasual,
   stripFillers,
   normalizeWritingStyles,
-  isFastDictationTarget,
-  dictationPath,
 } = require('../src/style');
 
 function pipeline(raw, tone) {
@@ -180,44 +178,6 @@ if (stripFillers('Um you know hello', 'formal') !== 'you know hello') {
 if (stripFillers('I was, you know, thinking', 'formal') !== 'I was thinking') {
   failed += 1;
   console.error('formal aside FAIL', stripFillers('I was, you know, thinking', 'formal'));
-}
-
-const pathCases = [
-  ['Slack.exe', 'project-updates', 'auto', 'fast'],
-  ['Discord.exe', 'general', 'auto', 'fast'],
-  ['ChatGPT.exe', 'ChatGPT', 'auto', 'fast'],
-  ['Cursor.exe', 'Cursor Agents', 'auto', 'fast'],
-  ['OUTLOOK.EXE', 'Inbox', 'auto', 'accurate'],
-  ['chrome.exe', 'Gmail - Inbox', 'auto', 'accurate'],
-  ['Code.exe', 'main.js - Visual Studio Code', 'auto', 'accurate'],
-  ['Slack.exe', 'project-updates', 'accurate', 'accurate'],
-  ['OUTLOOK.EXE', 'Inbox', 'fast', 'fast'],
-  ['com.tinyspeck.slackmacgap', 'project-updates', 'auto', 'fast'],
-  ['com.openai.chat', 'ChatGPT', 'auto', 'fast'],
-  ['com.apple.mail', 'Inbox', 'auto', 'accurate'],
-  ['com.microsoft.VSCode', 'main.js - Visual Studio Code', 'auto', 'accurate'],
-];
-for (const [exe, title, quality, expected] of pathCases) {
-  const cat = classifyTarget(exe, title);
-  const got = dictationPath(cat, { dictationQuality: quality }, { exe, title });
-  if (got !== expected) {
-    failed += 1;
-    console.error('path FAIL', exe, title, quality, 'expected', expected, 'got', got);
-  } else {
-    console.log('path ok', exe, quality, '->', got);
-  }
-}
-if (dictationPath('other', { dictationQuality: 'auto' }, { exe: 'ChatGPT.exe', title: 'ChatGPT' }, 9000) !== 'accurate') {
-  failed += 1;
-  console.error('long auto dictation must use the accurate path');
-}
-if (dictationPath('other', { dictationQuality: 'fast' }, { exe: 'ChatGPT.exe', title: 'ChatGPT' }, 9000) !== 'fast') {
-  failed += 1;
-  console.error('explicit fast must override duration routing');
-}
-if (!isFastDictationTarget({ exe: 'ChatGPT.exe', title: 'ChatGPT' })) {
-  failed += 1;
-  console.error('AI chat fast-target detection FAIL');
 }
 
 // Every tone keeps every word; only capitals and punctuation differ.

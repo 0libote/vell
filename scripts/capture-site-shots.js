@@ -255,7 +255,6 @@ const base = {
   shortcutLabel: 'Ctrl+Win',
   pasteLastShortcutLabel: 'Ctrl+Alt+V',
   dictateMode: 'toggle',
-  dictationQuality: 'auto',
   dictationLanguages: ['en'],
   suggestionsEnabled: true,
   autoAddToDictionary: true,

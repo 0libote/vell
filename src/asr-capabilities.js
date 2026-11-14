@@ -83,14 +83,6 @@ function vocabularyRoute(engine, termCount) {
   return supportsVocabulary(engine) ? vocabularyMechanism(engine) : 'repair';
 }
 
-// Auto and Accurate must keep a vocabulary-capable primary. Explicit Fast is
-// the one setting that is allowed to trade in-model biasing for speed.
-// No in-model vocabulary to require: Voz has no context input, so terms
-// always go via repair.
-function shouldRequireInModelVocabulary() {
-  return false;
-}
-
 // Whether a fast-path swap is allowed to happen for this request.
 //
 // There is only one engine and no faster path to swap to.
@@ -162,7 +154,6 @@ module.exports = {
   vocabularyBudget,
   supportsLanguage,
   vocabularyRoute,
-  shouldRequireInModelVocabulary,
   planRoute,
   engineLabel,
   describeRoute,

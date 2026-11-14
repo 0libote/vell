@@ -21,7 +21,6 @@ const plain = value => JSON.parse(JSON.stringify(value));
     const set = h.handlers.get('settings-set');
     const patches = [
       { dictateMode: 'ptt' }, { dictateMode: 'toggle' },
-      { dictationQuality: 'fast' }, { dictationQuality: 'accurate' }, { dictationQuality: 'auto' },
       { microphone: 'test-usb-microphone' }, { microphone: 'default' },
       { dictationLanguages: ['hi'] }, { dictationLanguages: ['en', 'hg'] }, { dictationLanguages: ['en'] },
       { autoAddToDictionary: false }, { autoAddToDictionary: true },
@@ -35,16 +34,15 @@ const plain = value => JSON.parse(JSON.stringify(value));
       assert.deepStrictEqual(saved[key], value, key + ' is written to the settings file');
       h.run('loadSettings()');
       assert.deepStrictEqual(plain(h.run('settings.' + key)), value, key + ' survives reloading settings');
-      if (['dictateMode', 'dictationQuality', 'microphone'].includes(key)) {
+      if (['dictateMode', 'microphone'].includes(key)) {
         assert.deepStrictEqual(states.at(-1)[key], value, key + ' reaches the recording overlay');
       }
       if (key === 'dictateMode') assert.strictEqual(h.run('isPtt()'), value === 'ptt');
-      if (key === 'dictationQuality') assert.strictEqual(h.run('planDictationRoute({ ranked: [] }).requested'), value);
       if (key === 'dictationLanguages') {
         assert.strictEqual(h.run('engineLanguage()'), 'en');
         assert.strictEqual(h.run('wantsHinglish()'), false);
       }
     }
-    console.log('General settings: 12 preference changes persisted, reloaded, and reached recording mode, microphone, quality and language routing.');
+    console.log('General settings: 9 preference changes persisted, reloaded, and reached recording mode, microphone and language routing.');
   } finally { await h.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

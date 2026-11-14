@@ -76,10 +76,6 @@ const wordsSavedEl = document.getElementById('words-saved');
 const weekBarsEl = document.getElementById('week-bars');
 const modeToggleEl = document.getElementById('mode-toggle');
 const modePttEl = document.getElementById('mode-ptt');
-const qualityAutoEl = document.getElementById('quality-auto');
-const qualityFastEl = document.getElementById('quality-fast');
-const qualityAccurateEl = document.getElementById('quality-accurate');
-
 const settingsCatButtons = document.querySelectorAll('.settings-cat');
 const settingsPanels = document.querySelectorAll('.settings-panel');
 const shortcutDisplayEl = document.getElementById('shortcut-display');
@@ -1409,25 +1405,6 @@ window.matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change',
   if (event.matches) document.getElementById('style-preview-output').getAnimations().forEach(animation => animation.cancel());
 });
 
-function renderDictationQuality(data) {
-  const quality = data && data.dictationQuality === 'fast'
-    ? 'fast'
-    : data && data.dictationQuality === 'accurate'
-      ? 'accurate'
-      : 'auto';
-  const buttons = [
-    [qualityAutoEl, 'auto'],
-    [qualityFastEl, 'fast'],
-    [qualityAccurateEl, 'accurate'],
-  ];
-  for (const [el, id] of buttons) {
-    if (!el) continue;
-    const on = quality === id;
-    el.classList.toggle('active', on);
-    el.setAttribute('aria-checked', on ? 'true' : 'false');
-  }
-}
-
 // Settings > System > Run as administrator. Elevated already, there is nothing
 // to offer, and the row says so instead. A restart Windows did not go through
 // with keeps its reason on screen until the next try.
@@ -2413,7 +2390,6 @@ function renderSettings(payload) {
     : 'Press once to start, again to stop.';
   document.getElementById('general-shortcut-keys').innerHTML = shortcutKbdHtml(label);
   renderHelpDictateStep(mode, label);
-  renderDictationQuality(data);
 
   shortcutDisplayEl.innerHTML = shortcutKbdHtml(label);
   document.getElementById('home-shortcut-keys').innerHTML = shortcutKbdHtml(label);
@@ -5681,13 +5657,6 @@ function pickMode(mode) {
 
 modeToggleEl.addEventListener('click', () => pickMode('toggle'));
 modePttEl.addEventListener('click', () => pickMode('ptt'));
-
-function pickQuality(quality) {
-  patchSettings({ dictationQuality: quality });
-}
-if (qualityAutoEl) qualityAutoEl.addEventListener('click', () => pickQuality('auto'));
-if (qualityFastEl) qualityFastEl.addEventListener('click', () => pickQuality('fast'));
-if (qualityAccurateEl) qualityAccurateEl.addEventListener('click', () => pickQuality('accurate'));
 
 if (settingInputs.verbatimMode) {
   settingInputs.verbatimMode.addEventListener('change', () => {

@@ -162,7 +162,7 @@ next to the existing `recordings:` line.
    user whose cloud is down cannot recover the clip their cloud outage created.
    Reuse `startLocalForBusyCloud` ([main.js:5445](../src/main.js)) for the
    "Cloud busy. Using this PC…" message.
-4. `composeTranscript(raw, tone, currentDictationQuality())` with the tone for
+4. `composeTranscript(raw, tone)` with the tone for
    the stored `exe`/`title` when there is one, the default tone otherwise.
 5. Empty result → leave the clip in place, return
    `"The engine heard no speech in this recording."` A recovery that finds

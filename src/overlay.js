@@ -128,7 +128,6 @@ let canRetry = false;
 // null when Polish is not open to this account.
 let polishOffer = null;
 let polishPending = false;
-let dictationQuality = 'auto';
 let successEntryId = '';
 let lastSuccessText = '';
 let editingSuccess = false;
@@ -1641,9 +1640,9 @@ async function startCapture(useEngine, hold) {
   cloudCapture = cloudReady;
   cloudLanes = cloudCapture && cloudDictation && cloudDictation.lanes === true ? cloudDictation : null;
   engine = useEngine || 'webspeech';
-  // Local Auto needs the finished clip length to choose Fast or Accurate.
-  // Keep the full recording intact in that mode so long dictations are not
-  // prematurely sent through the fast model one chunk at a time.
+  // One engine transcribes every dictation the same way, so there is no
+  // routing decision waiting on the finished clip length. Transcribe
+  // progressively as the user speaks.
   if (cloudCapture && globalThis.voxdenCloudSegments) {
     const segments = globalThis.voxdenCloudSegments;
     try {
@@ -1656,7 +1655,7 @@ async function startCapture(useEngine, hold) {
       cloudLanes = null;
       chunker = segments.createCloudSegmenter();
     }
-  } else if (!cloudCapture && dictationQuality !== 'auto' && wantsLocalAsr() && engineStatus === 'ready' && chunkingApi()) {
+  } else if (!cloudCapture && wantsLocalAsr() && engineStatus === 'ready' && chunkingApi()) {
     chunker = chunkingApi().createChunker();
   }
   setHud('arming');
@@ -2311,7 +2310,6 @@ if (window.vell) {
       if (!soundsEnabled && sfxPlayer) sfxPlayer.stop();
     }
     if (s.playOpeningCue && s.mode === 'idle' && !capturing) playCue('opening');
-    if (s.dictationQuality) dictationQuality = s.dictationQuality;
     if (s.shortcutLabel) shortcutLabel = s.shortcutLabel;
     if (typeof s.canRetry === 'boolean') canRetry = s.canRetry;
     if (typeof s.keepLiveAudio === 'boolean') keepLiveAudio = s.keepLiveAudio;

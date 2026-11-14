@@ -65,7 +65,6 @@ function build(state) {
     shortcut: 'CommandOrControl+Shift+Space',
     pasteLastShortcut: 'CommandOrControl+Alt+V',
     dictateMode: 'toggle',
-    dictationQuality: 'auto',
     verbatimMode: false,
     muteMusicWhileDictating: true,
     launchAtLogin: false,
@@ -84,7 +83,6 @@ function build(state) {
     dictationHotkeyHandler: noop,
     pasteLastDictation: () => Promise.resolve(),
     setDictateMode: noop,
-    setDictationQuality: noop,
     setTrayFlag: noop,
     updater: { checkNow: () => Promise.resolve() },
     broadcast: noop,
@@ -160,8 +158,6 @@ check('otherwise mac and Windows menus have the same shape', labels(mac).length,
 const radios = (tpl, label) => find(tpl, label).submenu.map((s) => s.label + (s.checked ? '*' : ''));
 check('mode radios follow toggle', radios(base, 'Dictation mode'), ['Toggle*', 'Push to talk']);
 check('mode radios follow ptt', radios(build({ settings: { dictateMode: 'ptt' } }), 'Dictation mode'), ['Toggle', 'Push to talk*']);
-check('speed radios follow auto', radios(base, 'Dictation speed'), ['Auto*', 'Fast', 'Accurate']);
-check('speed radios follow accurate', radios(build({ settings: { dictationQuality: 'accurate' } }), 'Dictation speed'), ['Auto', 'Fast', 'Accurate*']);
 
 // The microphone picker. Only a renderer can enumerate devices, so main holds a
 // reported copy; these cover what that copy can do to the menu.
@@ -235,7 +231,7 @@ for (const item of find(base, 'Settings').submenu) {
 const sig = lift('trayMenuSignature');
 for (const field of [
   'settings.shortcut', 'settings.pasteLastShortcut', 'settings.dictateMode',
-  'settings.dictationQuality', 'settings.verbatimMode',
+  'settings.verbatimMode',
   'settings.muteMusicWhileDictating', 'settings.launchAtLogin', 'lastDictationText()',
   'activeMicId()', 'micDefaultId', 'micDevices',
 ]) {
