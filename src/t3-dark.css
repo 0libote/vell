@@ -1,0 +1,322 @@
+/* T3 Code dark-mode treatment for the Vell dashboard.
+   Inspired by the look of T3 Code dark (near-black canvas, hairline borders,
+   quiet grey text, blue accent), re-expressed as overrides on Vell's own
+   tokens and components. No T3 code is used or copied.
+   Applies to the dark theme only; the White theme below is untouched. */
+
+html:not([data-app-theme="white"]) {
+  --bg: #09090b;
+  --titlebar-bg: #09090b;
+  --chrome-text: #a1a1aa;
+  --panel: #121214;
+  --panel-2: #1a1a1e;
+  --surface-hover: #1a1a1f;
+  --surface-selected: #232329;
+  --surface-finish: #121214;
+  --border: #222227;
+  --text: #fafafa;
+  --muted: #a1a1aa;
+  --faint: #71717a;
+  /* T3's accent is blue, not mint. Point the shared accent + legacy mint
+     tokens at it so every control follows in one move. */
+  --mint: #3b82f6;
+  --mint-rgb: 59, 130, 246;
+  --mint-strong: #2563eb;
+  --mint-light: #93c5fd;
+  --mint-soft: rgba(59, 130, 246, 0.12);
+  --accent-surface: rgba(59, 130, 246, 0.12);
+  --on-accent: #ffffff;
+  --brand-border: #222227;
+  --brand-fill: #3b82f6;
+  --premium-border: #222227;
+  --premium-border-soft: #222227;
+  --premium-gradient: #121214;
+  --scroll-thumb: #27272a;
+  --scroll-thumb-hover: #3f3f46;
+  --red: #f87171;
+  --warning: #eab308;
+  --radius-card: 14px;
+  --radius-control: 8px;
+  --product-font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --action-fill: #3b82f6;
+  --action-hover: #2563eb;
+  --control-border: #2c2c31;
+  --dialog-shadow: 0 24px 80px rgba(0, 0, 0, 0.65);
+  --dialog-backdrop: rgba(0, 0, 0, 0.6);
+  /* Drop the green-tinted glow; T3's canvas is flat black. */
+  --main-surface: var(--bg);
+  --writing-surface: #121214;
+  --writing-heading: #fafafa;
+  --writing-accent: #93c5fd;
+}
+
+html:not([data-app-theme="white"]) body.voxden-app {
+  background: var(--bg);
+  letter-spacing: -0.006em;
+}
+
+/* ---- Header island: a quiet pill, active tab a soft fill, accent blue ---- */
+html:not([data-app-theme="white"]) .voxden-app .island {
+  --island-text: rgba(244, 244, 245, 0.6);
+  background: #101013;
+  border-color: #222227;
+  border-radius: 14px;
+  box-shadow: none;
+  font-family: var(--product-font);
+  height: 38px;
+}
+html:not([data-app-theme="white"]) .voxden-app .titlebar .island-link:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fafafa;
+}
+html:not([data-app-theme="white"]) .voxden-app .titlebar .island-link.is-active {
+  background: #26262c;
+  color: #fafafa;
+  box-shadow: none;
+}
+html:not([data-app-theme="white"]) .voxden-app .island-link.is-active .island-icon {
+  color: var(--mint-light);
+}
+html:not([data-app-theme="white"]) .voxden-app .island-rule {
+  background: rgba(255, 255, 255, 0.09);
+}
+html:not([data-app-theme="white"]) .voxden-app .titlebar .titlebar-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+/* ---- Dictation page: flat black canvas, T3-style cards ---- */
+html:not([data-app-theme="white"]) #view-dictation {
+  --dx-display: var(--product-font);
+  --dx-ground: #09090b;
+  --dx-surface: #121214;
+  --dx-surface-2: #1a1a1e;
+  --dx-sel: rgba(59, 130, 246, 0.12);
+  --dx-sel-edge: rgba(59, 130, 246, 0.4);
+  --dx-hair: #1f1f23;
+  --dx-line: #2a2a30;
+  --dx-track: #26262c;
+  --dx-ink: #fafafa;
+  --dx-ink-2: #e4e4e7;
+  --dx-muted: #a1a1aa;
+  --dx-faint: #71717a;
+  --dx-wave: #3f3f46;
+  --dx-kbd: #18181b;
+  --dx-mark: rgba(59, 130, 246, 0.14);
+  --dx-hit: rgba(59, 130, 246, 0.22);
+  --dx-fill: rgba(59, 130, 246, 0.16);
+  --dx-tip: #18181b;
+  --dx-bar: #3f3f46;
+  --dx-field: #121214;
+  --dx-field-edge: #26262c;
+  --dx-shadow-card: none;
+  --dx-shadow-hover: none;
+  --dx-shadow-latest: none;
+  --dx-today-glow: 0 0 12px rgba(59, 130, 246, 0.35);
+  --dx-copy-fill: #3b82f6;
+  --dx-copy-ink: #ffffff;
+}
+
+html:not([data-app-theme="white"]) .voxden-app #view-dictation .pane-body.dictation-page {
+  background: var(--dx-ground);
+}
+html:not([data-app-theme="white"]) #view-dictation .hero-greeting {
+  letter-spacing: -0.022em;
+}
+html:not([data-app-theme="white"]) #view-dictation .dictation-search {
+  border-radius: 10px;
+  font-size: 13px;
+}
+html:not([data-app-theme="white"]) #view-dictation .dictation-search:focus-within {
+  border-color: rgba(59, 130, 246, 0.55);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.16);
+}
+html:not([data-app-theme="white"]) #view-dictation .shortcut-launch kbd {
+  background: #18181b;
+  border-color: #2c2c31;
+  border-radius: 6px;
+  color: #e4e4e7;
+  font-family: var(--product-font);
+}
+
+/* Dictation cards read as T3 thread rows: flat, hairline, no glow. */
+html:not([data-app-theme="white"]) .voxden-app :is(.card, .vocab-overview, .style-preview, .ins-overview, .ins-card, .prefs-list, .help-step, .help-engine) {
+  background: #101013;
+  border-color: #1f1f23;
+  border-radius: 14px;
+  box-shadow: none;
+}
+html:not([data-app-theme="white"]) .voxden-app :is(.card:hover, .dict-row:hover, .dict-row:focus-within) {
+  background: #151518;
+  border-color: #26262c;
+}
+html:not([data-app-theme="white"]) .voxden-app .dict-list {
+  background: #101013;
+  border-color: #1f1f23;
+  border-radius: 14px;
+}
+html:not([data-app-theme="white"]) .voxden-app .dict-row {
+  background: transparent;
+  border-color: #1c1c20;
+}
+
+/* ---- Words panel, voice card, insights ---- */
+html:not([data-app-theme="white"]) #view-dictation .words-card,
+html:not([data-app-theme="white"]) #view-dictation .voice-card {
+  background: #101013;
+  border: 1px solid #1f1f23;
+  border-radius: 14px;
+  box-shadow: none;
+}
+
+/* ---- Primary actions become T3 blue ---- */
+html:not([data-app-theme="white"]) .voxden-app .btn-primary {
+  background: var(--action-fill);
+  border-color: var(--action-fill);
+  border-radius: 8px;
+  color: #fff;
+  box-shadow: none;
+}
+html:not([data-app-theme="white"]) .voxden-app .btn-primary:hover {
+  background: var(--action-hover);
+  border-color: var(--action-hover);
+  color: #fff;
+  transform: none;
+}
+html:not([data-app-theme="white"]) .voxden-app .btn-secondary {
+  background: #151518;
+  border-color: #2a2a30;
+  border-radius: 8px;
+  color: #e4e4e7;
+}
+html:not([data-app-theme="white"]) .voxden-app .btn-secondary:hover {
+  background: #1d1d22;
+  border-color: #3f3f46;
+  color: #fafafa;
+}
+
+/* ---- Inputs, selects, segmented controls ---- */
+html:not([data-app-theme="white"]) .voxden-app :is(.setting-input, .setting-select, .custom-select-trigger, .vocab-field input, .lang-search) {
+  background: #121214;
+  border-color: #2a2a30;
+  border-radius: 8px;
+  color: #fafafa;
+}
+html:not([data-app-theme="white"]) .voxden-app .custom-select-list {
+  background: #17171a;
+  border-color: #2a2a30;
+  border-radius: 10px;
+}
+html:not([data-app-theme="white"]) .voxden-app :is(.segmented, .ins-range, .preview-tones) {
+  background: #131316;
+  border-color: #222227;
+  border-radius: 10px;
+}
+html:not([data-app-theme="white"]) .voxden-app :is(.segmented-btn.active, .ins-range-btn.is-active, .preview-tones button[aria-pressed="true"]) {
+  background: #26262c;
+  border-radius: 7px;
+  color: #fafafa;
+  box-shadow: none;
+}
+html:not([data-app-theme="white"]) .voxden-app kbd,
+html:not([data-app-theme="white"]) .voxden-app .help-step-copy kbd {
+  background: #18181b;
+  border-color: #2e2e33;
+  color: #a1a1aa;
+}
+
+/* ---- Toggles, progress, meters ---- */
+html:not([data-app-theme="white"]) .voxden-app .toggle-track {
+  background: #27272a;
+  border-color: #3f3f46;
+}
+html:not([data-app-theme="white"]) .voxden-app .toggle input:checked + .toggle-track {
+  background: #3b82f6;
+  border-color: #3b82f6;
+}
+html:not([data-app-theme="white"]) .voxden-app .toggle input:checked + .toggle-track::after {
+  background: #fff;
+}
+html:not([data-app-theme="white"]) .voxden-app :is(.ins-progress-track, .ins-profile-progress-track, .speech-setup-progress) {
+  background: #232329;
+}
+html:not([data-app-theme="white"]) .voxden-app :is(.ins-progress-fill, .ins-profile-progress-fill, .speech-setup-progress-fill) {
+  background: #3b82f6;
+  box-shadow: none;
+}
+html:not([data-app-theme="white"]) .voxden-app .mic-meter i,
+html:not([data-app-theme="white"]) .voxden-app .card-player-fill {
+  background: #3b82f6;
+}
+
+/* ---- Dialogs, menus, panels ---- */
+html:not([data-app-theme="white"]) .voxden-app :is(.settings-dialog, .vocab-dialog, .shortcuts-dialog, .notif-panel, .card-menu, .help-menu) {
+  background: #101013;
+  border-color: #26262c;
+  border-radius: 16px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.65);
+}
+html:not([data-app-theme="white"]) .voxden-app :is(.settings-cats, .settings-detail) {
+  background: transparent;
+  border-color: #1f1f23;
+}
+html:not([data-app-theme="white"]) .voxden-app .settings-cat.is-active {
+  background: #1d1d22;
+  color: #fafafa;
+}
+html:not([data-app-theme="white"]) .voxden-app :is(.settings-cat.is-active, .settings-cat:hover) .settings-cat-icon {
+  color: #93c5fd;
+}
+html:not([data-app-theme="white"]) .voxden-app .help-menu-item:hover,
+html:not([data-app-theme="white"]) .voxden-app .help-menu-item:focus-visible {
+  background: #1b1b1f;
+}
+html:not([data-app-theme="white"]) .voxden-app .help-menu-item:hover .help-menu-icon,
+html:not([data-app-theme="white"]) .voxden-app .help-menu-item:focus-visible .help-menu-icon {
+  color: #93c5fd;
+}
+
+/* ---- Page titles: T3-style tight tracking, flat white ---- */
+html:not([data-app-theme="white"]) .voxden-app :is(#view-dictation, #view-dictionary, #view-writing-style, #view-insights, #view-help) .premium-title {
+  color: #fafafa;
+  letter-spacing: -0.022em;
+  -webkit-text-fill-color: currentColor;
+  background: none;
+}
+html:not([data-app-theme="white"]) .voxden-app .settings-panel > h2.settings-panel-title {
+  letter-spacing: -0.02em;
+}
+
+/* ---- Vocabulary demo strip: neutral, not serif ---- */
+html:not([data-app-theme="white"]) .voxden-app .vocab-fix {
+  --fix-bg: #141417;
+  border-color: #222227;
+  border-radius: 12px;
+  font-family: var(--product-font);
+  font-size: 15px;
+}
+
+/* ---- Toasts, badges, misc accent surfaces ---- */
+html:not([data-app-theme="white"]) .voxden-app .learn-toast {
+  background: #141417;
+  border-color: rgba(59, 130, 246, 0.45);
+  border-radius: 12px;
+}
+html:not([data-app-theme="white"]) .voxden-app .card-status {
+  color: #93c5fd;
+}
+html:not([data-app-theme="white"]) .voxden-app .dict-row-arrow {
+  color: #93c5fd;
+}
+html:not([data-app-theme="white"]) .voxden-app .ins-profile-status {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: #222227;
+  color: #93c5fd;
+}
+html:not([data-app-theme="white"]) .voxden-app :is(.shortcut-capture-hint) {
+  color: #93c5fd;
+}
+
+/* Focus rings follow the blue accent. */
+html:not([data-app-theme="white"]) .voxden-app :is(button, a, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline-color: #3b82f6;
+}

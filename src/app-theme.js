@@ -6,7 +6,7 @@
   // White too: only the content panel changes colour.
   const chrome = value => normalize(value) === 'white'
     ? { background: '#0B0D0E', symbols: '#A9B5AE' }
-    : { background: '#101113', symbols: '#a3ada6' };
+    : { background: '#09090b', symbols: '#a1a1aa' };
   const api = { normalize, chrome };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else {

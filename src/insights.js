@@ -174,19 +174,29 @@ function wordDiffCount(a, b) {
   return Math.max(A.length, B.length) - prev[B.length];
 }
 
+function exeBaseLower(exe) {
+  const raw = String(exe || '');
+  if (isBundleId(raw)) return raw.trim().toLowerCase();
+  return raw.toLowerCase().split(/[/\\]/).pop() || '';
+}
+
 function isAiContext(exe, title) {
-  const ex = String(exe || '').toLowerCase();
+  const ex = exeBaseLower(exe);
   const ti = String(title || '').toLowerCase();
-  if (AI_EXE_HINTS.some((h) => ex === h || ex.endsWith('\\' + h))) return true;
+  if (AI_EXE_HINTS.some((h) => ex === h || ex.endsWith('\\' + h) || ex.endsWith('/' + h))) return true;
+  // macOS reports a bundle id instead of an exe: match by product name.
+  if (isBundleId(exe) && /cursor|windsurf|codex/.test(ex)) return true;
   return AI_TITLE_HINTS.some((h) => ti.includes(h));
 }
 
 function aiTarget(exe, title) {
-  const ex = String(exe || '').toLowerCase().split(/[/\\]/).pop() || '';
+  const ex = exeBaseLower(exe);
   const ti = String(title || '').toLowerCase();
   for (const target of AI_TARGETS) {
     if ((target.titles || []).some((hint) => ti.includes(hint))) return target;
     if ((target.exes || []).includes(ex)) return target;
+    // Bundle-id hosts for the same editors (e.g. com.microsoft.VSCode).
+    if (isBundleId(exe) && target.id && ex.includes(target.id)) return target;
   }
   return null;
 }
@@ -200,19 +210,213 @@ function displayBucket(entry) {
 }
 
 function friendlyExe(exe) {
-  const base = String(exe || '').split(/[/\\]/).pop() || '';
+  return friendlyAppName(exe);
+}
+
+// Human-friendly names for macOS bundle ids (the helper reports e.g.
+// com.brave.Browser where Windows reports brave.exe) and Windows exe names.
+// Keys are lower-cased; bundle lookup also matches `prefix.suffix` so
+// com.google.Chrome covers com.google.Chrome.canary.
+const BUNDLE_DISPLAY_NAMES = {
+  'com.brave.browser': 'Brave',
+  'com.google.chrome': 'Chrome',
+  'com.microsoft.edgemac': 'Edge',
+  'org.mozilla.firefox': 'Firefox',
+  'com.apple.safari': 'Safari',
+  'com.apple.safaritechnologypreview': 'Safari Technology Preview',
+  'company.thebrowser.browser': 'Arc',
+  'com.operasoftware.opera': 'Opera',
+  'com.vivaldi.vivaldi': 'Vivaldi',
+  'com.microsoft.vscode': 'VS Code',
+  'com.t3tools.t3code': 'T3 Code',
+  'com.apple.textedit': 'TextEdit',
+  'com.apple.notes': 'Notes',
+  'com.apple.mail': 'Mail',
+  'com.microsoft.outlook': 'Outlook',
+  'com.tinyspeck.slackmacgap': 'Slack',
+  'com.microsoft.teams': 'Teams',
+  'com.microsoft.teams2': 'Teams',
+  'com.notion.id': 'Notion',
+  'com.linear': 'Linear',
+  'com.figma.desktop': 'Figma',
+  'com.hnc.discord': 'Discord',
+  'net.whatsapp.whatsapp': 'WhatsApp',
+  'ru.keepcoder.telegram': 'Telegram',
+  'us.zoom.xos': 'Zoom',
+  'com.apple.ichat': 'Messages',
+  'com.apple.mobilesms': 'Messages',
+  'com.vell.app': 'Vell',
+};
+
+const EXE_DISPLAY_NAMES = {
+  code: 'VS Code',
+  vscode: 'VS Code',
+  devenv: 'Visual Studio',
+  brave: 'Brave',
+  bravebrowser: 'Brave',
+  chrome: 'Chrome',
+  googlechrome: 'Chrome',
+  msedge: 'Edge',
+  microsoftedge: 'Edge',
+  firefox: 'Firefox',
+  safari: 'Safari',
+  arc: 'Arc',
+  opera: 'Opera',
+  vivaldi: 'Vivaldi',
+  cursor: 'Cursor',
+  windsurf: 'Windsurf',
+  winword: 'Word',
+  powerpnt: 'PowerPoint',
+  windowsterminal: 'Terminal',
+  powershell: 'PowerShell',
+  t3code: 'T3 Code',
+  notion: 'Notion',
+  linear: 'Linear',
+  discord: 'Discord',
+  slack: 'Slack',
+  figma: 'Figma',
+};
+
+function humanizeAppSegment(seg) {
+  let s = String(seg || '').replace(/[-_]+/g, ' ').trim();
+  if (!s) return '';
+  // camelCase / PascalCase split: T3Code -> T3 Code, VSCode -> VS Code.
+  s = s.replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim();
+  // "T3code" (lowercase c) still reads as one word; split a trailing
+  // well-known product suffix so the fallback never shows a squashed name.
+  const lower = s.toLowerCase();
+  for (const suffix of ['code', 'note', 'mail', 'chat']) {
+    if (lower.length > suffix.length + 1 && lower.endsWith(suffix)
+      && !s.slice(0, -suffix.length).endsWith(' ')) {
+      const head = s.slice(0, -suffix.length).trim();
+      const tail = s.slice(-suffix.length);
+      s = head + ' ' + tail[0].toUpperCase() + tail.slice(1);
+      break;
+    }
+  }
+  return s.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function isBundleId(exe) {
+  const raw = String(exe || '');
+  return raw.includes('.') && !/\.exe$/i.test(raw);
+}
+
+function friendlyAppName(exe) {
+  const raw = String(exe || '');
+  if (!raw) return 'Unknown app';
+  if (isBundleId(raw)) {
+    const lower = raw.trim().toLowerCase();
+    for (const key of Object.keys(BUNDLE_DISPLAY_NAMES)) {
+      if (lower === key || lower.startsWith(key + '.')) return BUNDLE_DISPLAY_NAMES[key];
+    }
+    const last = raw.split('.').pop() || raw;
+    return humanizeAppSegment(last) || 'Unknown app';
+  }
+  const base = raw.split(/[/\\]/).pop() || '';
   if (!base) return 'Unknown app';
-  return base.replace(/\.exe$/i, '').replace(/[-_]+/g, ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  const key = base.replace(/\.exe$/i, '').replace(/[\s._-]+/g, '').toLowerCase();
+  if (EXE_DISPLAY_NAMES[key]) return EXE_DISPLAY_NAMES[key];
+  return humanizeAppSegment(base.replace(/\.exe$/i, '')) || 'Unknown app';
+}
+
+const BROWSER_EXE_KEYS = new Set(['chrome', 'googlechrome', 'chromium', 'msedge', 'microsoftedge',
+  'firefox', 'brave', 'bravebrowser', 'opera', 'vivaldi', 'arc', 'safari', 'zen']);
+const BROWSER_BUNDLE_PREFIXES = [
+  'com.apple.safari', 'com.google.chrome', 'org.mozilla.firefox', 'com.brave.browser',
+  'com.microsoft.edgemac', 'company.thebrowser.browser', 'com.operasoftware.opera', 'com.vivaldi.vivaldi',
+];
+
+const CODE_EDITOR_EXE_KEYS = new Set(['code', 'vscode', 'cursor', 'windsurf', 'cod', 'devenv', 't3code', 'notepadplusplus']);
+const CODE_EDITOR_BUNDLE_PREFIXES = [
+  'com.microsoft.vscode', 'com.t3tools.t3code', 'com.apple.textedit',
+];
+
+function exeKeyForDisplay(exe) {
+  return String(exe || '').split(/[/\\]/).pop() || '';
+}
+
+function isBrowserTarget(exe) {
+  const raw = String(exe || '');
+  if (!raw) return false;
+  if (isBundleId(raw)) {
+    const lower = raw.trim().toLowerCase();
+    return BROWSER_BUNDLE_PREFIXES.some((p) => lower === p || lower.startsWith(p + '.'));
+  }
+  const key = exeKeyForDisplay(raw).replace(/\.exe$/i, '').replace(/[\s._-]+/g, '').toLowerCase();
+  return BROWSER_EXE_KEYS.has(key);
+}
+
+function isCodeEditorTarget(exe) {
+  const raw = String(exe || '');
+  if (!raw) return false;
+  if (isBundleId(raw)) {
+    const lower = raw.trim().toLowerCase();
+    if (CODE_EDITOR_BUNDLE_PREFIXES.some((p) => lower === p || lower.startsWith(p + '.'))) return true;
+    return /cursor|windsurf|vscode|t3code/i.test(raw);
+  }
+  const key = exeKeyForDisplay(raw).replace(/\.exe$/i, '').replace(/[\s._-]+/g, '').toLowerCase();
+  if (CODE_EDITOR_EXE_KEYS.has(key)) return true;
+  return /cursor|windsurf|t3code/.test(key);
+}
+
+// A browser says little about where the words went: when the window title
+// names a web app (Gmail, Notion, …) group under that app, the way history
+// cards already do, instead of attributing everything to "Brave"/"Chrome".
+const WEB_APP_TITLES = [
+  { id: 'gmail', label: 'Gmail', re: /\bgmail\b/i },
+  { id: 'google-docs', label: 'Google Docs', re: /google docs/i },
+  { id: 'notion', label: 'Notion', re: /\bnotion\b/i },
+  { id: 'linear', label: 'Linear', re: /\blinear\b/i },
+  { id: 'figma', label: 'Figma', re: /\bfigma\b/i },
+  { id: 'github', label: 'GitHub', re: /\bgithub\b/i },
+  { id: 'discord', label: 'Discord', re: /\bdiscord\b/i },
+  { id: 'whatsapp', label: 'WhatsApp', re: /\bwhatsapp\b/i },
+  { id: 'telegram', label: 'Telegram', re: /\btelegram\b/i },
+  { id: 'slack', label: 'Slack', re: /\bslack\b/i },
+];
+
+function webAppTarget(exe, title) {
+  if (!isBrowserTarget(exe)) return null;
+  const t = String(title || '');
+  if (!t) return null;
+  for (const app of WEB_APP_TITLES) {
+    if (app.re.test(t)) return app;
+  }
+  return null;
+}
+
+function leaderboardTag(bucket, exe) {
+  if (bucket === 'ai') return 'AI';
+  if (bucket === 'work') return 'Work';
+  if (bucket === 'email') return 'Email';
+  if (bucket === 'personal') return 'Personal';
+  if (isBrowserTarget(exe)) return 'Browser';
+  if (isCodeEditorTarget(exe)) return 'Code';
+  return 'Other';
 }
 
 function appIdentity(entry) {
   const e = entry || {};
-  if (e.statsOnly === true) return { key: e.appKey, label: e.appLabel };
+  if (e.statsOnly === true) {
+    // Archives from before friendly bundle names stored the raw id
+    // ("Com.Brave.Browser") as the label. Re-resolve those from exe so old
+    // history heals without a migration; keep stored AI/web groupings as-is.
+    if (typeof e.appKey === 'string' && e.appKey.startsWith('exe:') && typeof e.appLabel === 'string'
+      && e.appLabel.includes('.') && e.exe) {
+      return { key: e.appKey, label: friendlyAppName(e.exe) };
+    }
+    return { key: e.appKey, label: e.appLabel };
+  }
   const target = aiTarget(e.exe, e.title);
   if (target) return { key: 'ai:' + target.id, label: target.label };
+  const web = webAppTarget(e.exe, e.title);
+  if (web) return { key: 'web:' + web.id, label: web.label };
   const exe = String(e.exe || '');
-  return { key: 'exe:' + exe.toLowerCase(), label: friendlyExe(exe) };
+  return { key: 'exe:' + exe.toLowerCase(), label: friendlyAppName(exe) };
 }
 
 function hasEntryTarget(entry) {
@@ -547,9 +751,12 @@ function appLeaderboard(entries, range, now, limit) {
     const identity = appIdentity(e);
     let row = apps.get(identity.key);
     if (!row) {
-      row = { key: identity.key, label: identity.label, words: 0, count: 0, cur: 0, prev: 0, buckets: {} };
+      row = { key: identity.key, label: identity.label, words: 0, count: 0, cur: 0, prev: 0, buckets: {}, exe: e.exe || '' };
       apps.set(identity.key, row);
     }
+    // Keep a concrete exe for the display tag (browser vs code vs generic).
+    // Stats-only rows reuse the stored identity but still carry exe.
+    if (!row.exe && e.exe) row.exe = e.exe;
     const w = metrics.entryWordCount(e);
     if (e.ts >= rankFrom && e.ts <= ts) {
       row.words += w;
@@ -581,6 +788,7 @@ function appLeaderboard(entries, range, now, limit) {
       share: totalWords > 0 ? Math.round((r.words / totalWords) * 100) : 0,
       bucket,
       bucketLabel: BUCKET_LABELS[bucket],
+      tag: leaderboardTag(bucket, r.exe),
       trend,
     };
   });
@@ -799,6 +1007,11 @@ const insightsApi = {
   isAiContext,
   displayBucket,
   friendlyExe,
+  friendlyAppName,
+  isBrowserTarget,
+  isCodeEditorTarget,
+  leaderboardTag,
+  webAppTarget,
   appIdentity,
   toAnalyticsEntry,
   isAnalyticsEntry,

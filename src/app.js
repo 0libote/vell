@@ -3463,11 +3463,71 @@ const KNOWN_APPS = [
   { name: 'Chrome', icon: 'chrome', exe: ['chrome', 'googlechrome'] },
 ];
 const APP_NAMES = {
-  code: 'VS Code', msedge: 'Edge', microsoftedge: 'Edge', googlechrome: 'Chrome', winword: 'Word',
-  powerpnt: 'PowerPoint', windowsterminal: 'Terminal', powershell: 'PowerShell', cmd: 'Command Prompt',
-  explorer: 'File Explorer', chatgpt: 'ChatGPT', bravebrowser: 'Brave',
+  code: 'VS Code', vscode: 'VS Code', msedge: 'Edge', microsoftedge: 'Edge', googlechrome: 'Chrome',
+  chrome: 'Chrome', winword: 'Word', powerpnt: 'PowerPoint', windowsterminal: 'Terminal',
+  powershell: 'PowerShell', cmd: 'Command Prompt', explorer: 'File Explorer', chatgpt: 'ChatGPT',
+  brave: 'Brave', bravebrowser: 'Brave', t3code: 'T3 Code', cursor: 'Cursor', notion: 'Notion',
+  linear: 'Linear', discord: 'Discord', slack: 'Slack', figma: 'Figma',
+};
+const BUNDLE_APP_NAMES = {
+  'com.brave.browser': 'Brave',
+  'com.google.chrome': 'Chrome',
+  'com.microsoft.edgemac': 'Edge',
+  'org.mozilla.firefox': 'Firefox',
+  'com.apple.safari': 'Safari',
+  'company.thebrowser.browser': 'Arc',
+  'com.operasoftware.opera': 'Opera',
+  'com.vivaldi.vivaldi': 'Vivaldi',
+  'com.microsoft.vscode': 'VS Code',
+  'com.t3tools.t3code': 'T3 Code',
+  'com.apple.textedit': 'TextEdit',
+  'com.apple.notes': 'Notes',
+  'com.apple.mail': 'Mail',
+  'com.microsoft.outlook': 'Outlook',
+  'com.tinyspeck.slackmacgap': 'Slack',
+  'com.notion.id': 'Notion',
+  'com.linear': 'Linear',
+  'com.figma.desktop': 'Figma',
+  'com.hnc.discord': 'Discord',
+  'net.whatsapp.whatsapp': 'WhatsApp',
+  'ru.keepcoder.telegram': 'Telegram',
+  'us.zoom.xos': 'Zoom',
+  'com.vell.app': 'Vell',
 };
 const BROWSER_TITLE_TAIL = /(?:\s+[-–—]\s+(?:Google Chrome|Chromium|Microsoft Edge|Mozilla Firefox|Brave|Opera|Vivaldi|Arc|Safari))+\s*$/i;
+
+// macOS reports a bundle id (com.brave.Browser) where Windows reports an exe
+// (brave.exe). True when the stored target is dotted and not an exe path.
+function isBundleTarget(raw) {
+  const s = String(raw || '');
+  return s.includes('.') && !/\.exe$/i.test(s);
+}
+
+function bundleDisplayName(raw) {
+  const lower = String(raw || '').trim().toLowerCase();
+  for (const key of Object.keys(BUNDLE_APP_NAMES)) {
+    if (lower === key || lower.startsWith(key + '.')) return BUNDLE_APP_NAMES[key];
+  }
+  return '';
+}
+
+// Fallback when no explicit mapping exists: last bundle segment (T3Code) or
+// exe stem (my-editor) humanized to "T3 Code" / "My Editor" instead of the
+// raw "Com.T3tools.T3code".
+function polishAppName(raw) {
+  const s = String(raw || '');
+  if (!s) return '';
+  let seg = s;
+  if (isBundleTarget(s)) seg = s.split('.').pop() || s;
+  else seg = seg.split(/[/\\]/).pop() || s;
+  seg = seg.replace(/\.(exe|app)$/i, '').replace(/[-_]+/g, ' ').trim();
+  if (!seg) return '';
+  seg = seg.replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return seg.replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 const targetCache = new Map();
 function dictationTarget(entry) {
@@ -3489,12 +3549,31 @@ function capTitle(title) {
 }
 
 function resolveDictationTarget(entry) {
-  const exeKey = String(entry.exe || '').replace(/\.(exe|app)$/i, '').replace(/[\s._-]+/g, '').toLowerCase();
+  const rawExe = String(entry.exe || '');
+  const isBundle = isBundleTarget(rawExe);
+  const lowerRaw = rawExe.trim().toLowerCase();
+  const exeKey = isBundle
+    ? lowerRaw.split('.').pop().replace(/[\s._-]+/g, '')
+    : rawExe.replace(/\.(exe|app)$/i, '').replace(/[\s._-]+/g, '').toLowerCase();
+  const isBrowser = isBundle
+    ? ['com.apple.safari', 'com.google.chrome', 'org.mozilla.firefox', 'com.brave.browser',
+      'com.microsoft.edgemac', 'company.thebrowser.browser', 'com.operasoftware.opera',
+      'com.vivaldi.vivaldi'].some((p) => lowerRaw === p || lowerRaw.startsWith(p + '.'))
+    : WEB_BROWSERS.has(exeKey);
   // Titles are saved at most 300 long, but older history kept them whole, and
   // BROWSER_TITLE_TAIL is quadratic on a long run of spaces or repeated tails.
   let title = capTitle(entry.title).trim();
+  // A bundle id shares its product name with the exe key (com.notion.id ->
+  // notion), so native apps keep matching KNOWN_APPS on either platform.
   let app = KNOWN_APPS.find(candidate => candidate.exe && candidate.exe.includes(exeKey));
-  if (WEB_BROWSERS.has(exeKey)) {
+  if (!app && isBundle) {
+    const friendly = bundleDisplayName(rawExe);
+    if (friendly) {
+      const byName = KNOWN_APPS.find(candidate => candidate.name.toLowerCase() === friendly.toLowerCase());
+      if (byName && (!byName.exe || byName.title)) app = byName;
+    }
+  }
+  if (isBrowser) {
     title = title.replace(BROWSER_TITLE_TAIL, '').trim();
     const web = KNOWN_APPS.find(candidate => candidate.title && candidate.title.test(title));
     if (web) {
@@ -3503,7 +3582,7 @@ function resolveDictationTarget(entry) {
       title = title.replace(new RegExp('\\s+[-\\u2013\\u2014]\\s+' + web.name + '\\s*$', 'i'), '').trim();
     }
   }
-  const named = app ? app.name : (APP_NAMES[exeKey] || polishAppName(entry.exe));
+  const named = app ? app.name : (APP_NAMES[exeKey] || bundleDisplayName(rawExe) || polishAppName(rawExe));
   return {
     name: named || 'Dictation',
     // The placeholder name is not something the user dictated into, so a
@@ -4777,7 +4856,7 @@ function renderInsWhere(where, tips, reveal) {
     label.textContent = row.label;
     const tag = document.createElement('span');
     tag.className = 'ins-lb-tag';
-    tag.textContent = INS_BUCKET_TAGS[row.bucket] || INS_BUCKET_TAGS.other;
+    tag.textContent = row.tag || INS_BUCKET_TAGS[row.bucket] || INS_BUCKET_TAGS.other;
     name.append(label, tag);
     const track = document.createElement('div');
     track.className = 'ins-lb-track';
@@ -4791,7 +4870,18 @@ function renderInsWhere(where, tips, reveal) {
     words.className = 'ins-lb-words';
     const count = document.createElement('b');
     count.textContent = row.words.toLocaleString();
-    words.append(count, document.createTextNode(row.share + '% of words'));
+    // Rank is by words, but frequency is what the header ("Where you dictate")
+    // suggests -- and what makes a 3-long-message app beating a 15-short-note
+    // app feel wrong. Show both so the ranking is checkable: words decide the
+    // order, dictations explain it.
+    const dictations = Number(row.count) || 0;
+    words.append(count, document.createTextNode(
+      (dictations === 1 ? '1 dictation · ' : dictations.toLocaleString() + ' dictations · ')
+      + row.share + '% of words'
+    ));
+    li.title = row.label + ': ' + row.words.toLocaleString() + ' words in '
+      + (dictations === 1 ? '1 dictation' : dictations.toLocaleString() + ' dictations')
+      + ' (' + row.share + '% of words)';
 
     const trend = document.createElement('span');
     trend.className = 'ins-lb-trend is-' + row.trend;
