@@ -19,11 +19,23 @@ const saves = [];
 let rejectSave = false;
 let notificationReads = 0;
 let snapshot = {
-  displayName: 'Alex', shortcutLabel: 'Ctrl+Shift+Space', entries: [], phrases: [],
+  displayName: 'Alex', shortcutLabel: 'Ctrl+Shift+Space', shortcut: 'CommandOrControl+Shift+Space',
+  dictateMode: 'toggle',
+  shortcuts: [{ id: 's1', accelerator: 'CommandOrControl+Shift+Space', label: 'Ctrl+Shift+Space', mode: 'toggle' }],
+  entries: [], phrases: [],
   notifications: [], pendingPhrases: [], writingStyles: {},
   launchAtLogin: false, alwaysShowFlowBar: false, showInTaskbar: false,
   flowBarStyle: 'island', flowBarMotion: 'full', soundsEnabled: false,
   updateStatus: 'idle', appVersion: '2.1.1', flowBarMoved: true,
+};
+const shortcutLabelFor = accel => String(accel || '').replace(/CommandOrControl/g, 'Ctrl').replace(/Super/g, 'Win');
+const syncPrimaryShortcutScalars = () => {
+  const primary = (snapshot.shortcuts && snapshot.shortcuts[0]) || null;
+  if (primary) {
+    snapshot.shortcut = primary.accelerator;
+    snapshot.shortcutLabel = primary.label || shortcutLabelFor(primary.accelerator);
+    snapshot.dictateMode = primary.mode;
+  }
 };
 
 app.whenReady().then(async () => {
@@ -33,6 +45,38 @@ app.whenReady().then(async () => {
   ipcMain.handle('settings-set', (_event, patch) => {
     saves.push(patch);
     if (rejectSave) { rejectSave = false; throw new Error('Expected System preference test failure'); }
+    if (patch && typeof patch === 'object' && patch.shortcutUpdate && typeof patch.shortcutUpdate === 'object') {
+      const update = patch.shortcutUpdate;
+      const list = Array.isArray(snapshot.shortcuts) ? snapshot.shortcuts.map(s => ({ ...s })) : [];
+      const at = list.findIndex(s => s.id === update.id);
+      if (at >= 0) {
+        if (typeof update.accelerator === 'string' && update.accelerator.trim()) {
+          list[at].accelerator = update.accelerator.trim();
+          list[at].label = shortcutLabelFor(list[at].accelerator);
+        }
+        if (typeof update.mode === 'string' && ['toggle', 'ptt', 'both'].includes(update.mode)) list[at].mode = update.mode;
+        snapshot = { ...snapshot, shortcuts: list };
+        syncPrimaryShortcutScalars();
+        return snapshot;
+      }
+    }
+    if (patch && typeof patch === 'object' && typeof patch.shortcutAdd === 'string' && patch.shortcutAdd.trim()) {
+      const accel = patch.shortcutAdd.trim();
+      const list = Array.isArray(snapshot.shortcuts) ? snapshot.shortcuts.map(s => ({ ...s })) : [];
+      const id = 's' + (list.length + 1) + '-' + saves.length;
+      list.push({ id, accelerator: accel, label: shortcutLabelFor(accel), mode: 'toggle' });
+      snapshot = { ...snapshot, shortcuts: list };
+      syncPrimaryShortcutScalars();
+      return snapshot;
+    }
+    if (patch && typeof patch === 'object' && typeof patch.shortcutRemove === 'string' && patch.shortcutRemove) {
+      const list = (Array.isArray(snapshot.shortcuts) ? snapshot.shortcuts : []).filter(s => s.id !== patch.shortcutRemove);
+      if (list.length !== (snapshot.shortcuts || []).length) {
+        snapshot = { ...snapshot, shortcuts: list };
+        syncPrimaryShortcutScalars();
+        return snapshot;
+      }
+    }
     snapshot = { ...snapshot, ...patch };
     return snapshot;
   });
@@ -110,7 +154,7 @@ app.whenReady().then(async () => {
     assert.strictEqual(await run(`document.getElementById('${id}').closest('.settings-panel').dataset.cat`), 'display', id + ' lives in Display');
   }
   assert.deepStrictEqual(await run(`Array.from(document.querySelectorAll('[data-cat="system"].settings-panel .setting-label'), el => el.textContent)`),
-    ['Launch at login', 'Show app in taskbar', 'Run as administrator', 'App version'], 'System contains only startup, window and updates');
+    ['Launch at login', 'Show app in taskbar', 'Run as administrator'], 'System contains only startup, window and updates');
   assert.strictEqual(await run(`document.querySelectorAll('.app-theme-card[role="radio"]').length`), 2, 'Display offers Voxden and White themes');
   for (const launchAtLogin of [false, true]) {
     for (const alwaysShowFlowBar of [false, true]) {
@@ -204,11 +248,40 @@ app.whenReady().then(async () => {
     document.getElementById('help-step-finish').textContent]`);
   assert.deepStrictEqual(await helpStep(), ['Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd> and talk',
     'Press the same keys again when you are done.'], 'help follows a toggle shortcut');
-  snapshot = { ...snapshot, shortcutLabel: 'Ctrl+Win', dictateMode: 'ptt' };
+  // Each shortcut row carries its own mode radios. Clicking Both on the
+  // primary row persists via shortcutUpdate and updates the radios and help.
+  await run(`document.getElementById('shortcuts-change').click(); true`);
+  await waitFor(`document.getElementById('shortcuts-dialog').open === true`, 'shortcuts dialog opens');
+  assert.strictEqual(await run(`document.querySelectorAll('#shortcut-list .shortcut-row').length`), 1);
+  assert.strictEqual(await run(`document.querySelector('#shortcut-list .shortcut-remove').disabled`), true,
+    'remove stays disabled with a single shortcut');
+  const primaryId = snapshot.shortcuts[0].id;
+  await run(`document.querySelector('#shortcut-list .shortcut-row[data-id="${primaryId}"] .segmented-btn[data-mode="both"]').click(); true`);
+  await waitFor(`document.querySelector('#shortcut-list .shortcut-row[data-id="${primaryId}"] .segmented-btn[data-mode="both"]').getAttribute('aria-checked') === 'true'`,
+    'Both radio becomes checked');
+  assert.strictEqual(snapshot.shortcuts[0].mode, 'both', 'Both persists via shortcutUpdate');
+  assert.deepStrictEqual(saves.at(-1), { shortcutUpdate: { id: primaryId, mode: 'both' } });
+  assert.deepStrictEqual(await helpStep(), ['Press or hold <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd> and talk',
+    'Press the same keys again, or let go of a hold, when you are done.'], 'help follows a both-mode shortcut');
+  // A broadcast with a push-to-talk primary still drives the hold wording.
+  snapshot = { ...snapshot, shortcutLabel: 'Ctrl+Win', dictateMode: 'ptt',
+    shortcuts: [{ id: primaryId, accelerator: 'CommandOrControl+Super', label: 'Ctrl+Win', mode: 'ptt' }] };
   win.webContents.send('history-updated', snapshot);
   await waitFor(`document.getElementById('help-step-dictate').textContent === 'Hold Ctrl + Win and talk'`,
     'help follows a push-to-talk shortcut');
   assert.strictEqual((await helpStep())[1], 'Let go when you are done.', 'push to talk finishes on release');
+  await waitFor(`document.querySelector('#shortcut-list .shortcut-row[data-id="${primaryId}"] .segmented-btn[data-mode="ptt"]').getAttribute('aria-checked') === 'true'`,
+    'broadcast ptt mode reaches the row radios');
+  // Adding a second shortcut enables removal again.
+  await run(`document.getElementById('shortcut-add').click(); true`);
+  await run(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Q', ctrlKey: true, shiftKey: true, bubbles: true })); true`);
+  await waitFor(`document.querySelectorAll('#shortcut-list .shortcut-row').length === 2`, 'added shortcut renders a second row');
+  assert.strictEqual(snapshot.shortcuts.length, 2, 'shortcutAdd persists a second shortcut');
+  assert.deepStrictEqual(saves.at(-1), { shortcutAdd: 'CommandOrControl+Shift+Q' });
+  assert.strictEqual(await run(`document.querySelector('#shortcut-list .shortcut-remove').disabled`), false,
+    'remove enables with two shortcuts');
+  await run(`document.getElementById('shortcuts-close').click(); true`);
+  await waitFor(`document.getElementById('shortcuts-dialog').open === false`, 'shortcuts dialog closes');
 
   assert.strictEqual(await run('systemMicRequests'), 0, 'no System control accesses the microphone');
   assert.deepStrictEqual(errors, [], 'renderer remains error-free');

@@ -74,12 +74,10 @@ const wordsTodayUnitEl = document.getElementById('words-today-unit');
 const wordsTodaySubEl = document.getElementById('words-today-sub');
 const wordsSavedEl = document.getElementById('words-saved');
 const weekBarsEl = document.getElementById('week-bars');
-const modeToggleEl = document.getElementById('mode-toggle');
-const modePttEl = document.getElementById('mode-ptt');
 const settingsCatButtons = document.querySelectorAll('.settings-cat');
 const settingsPanels = document.querySelectorAll('.settings-panel');
-const shortcutDisplayEl = document.getElementById('shortcut-display');
-const shortcutChangeBtn = document.getElementById('shortcut-change');
+const shortcutListEl = document.getElementById('shortcut-list');
+const shortcutAddBtn = document.getElementById('shortcut-add');
 const pasteLastShortcutDisplayEl = document.getElementById('paste-last-shortcut-display');
 const pasteLastShortcutChangeBtn = document.getElementById('paste-last-shortcut-change');
 const gameShortcutDisplayEl = document.getElementById('game-shortcut-display');
@@ -932,7 +930,7 @@ function openShortcutsDialog() {
   if (shortcutsDialog.open) return;
   closeAllCustomSelects();
   shortcutsDialog.showModal();
-  shortcutChangeBtn.focus();
+  if (shortcutAddBtn) shortcutAddBtn.focus();
 }
 
 function closeShortcutsDialog(restoreFocus = true) {
@@ -1152,6 +1150,11 @@ function shortcutKbdHtml(label, joiner = '+') {
 function renderHelpDictateStep(mode, label) {
   const step = document.getElementById('help-step-dictate');
   const finish = document.getElementById('help-step-finish');
+  if (mode === 'both') {
+    if (step) step.innerHTML = 'Press or hold ' + shortcutKbdHtml(label, ' + ') + ' and talk';
+    if (finish) finish.textContent = 'Press the same keys again, or let go of a hold, when you are done.';
+    return;
+  }
   if (step) step.innerHTML = (mode === 'ptt' ? 'Hold ' : 'Press ') + shortcutKbdHtml(label, ' + ') + ' and talk';
   if (finish) finish.textContent = mode === 'ptt' ? 'Let go when you are done.' : 'Press the same keys again when you are done.';
 }
@@ -1226,7 +1229,13 @@ function shortcutCaptureProblem(e) {
 
 function shortcutCaptureButton(kind) {
   if (kind === 'gameShortcut') return gameShortcutChangeBtn;
-  return kind === 'pasteLastShortcut' ? pasteLastShortcutChangeBtn : shortcutChangeBtn;
+  if (kind === 'pasteLastShortcut') return pasteLastShortcutChangeBtn;
+  if (kind === 'shortcut-add') return shortcutAddBtn;
+  if (typeof kind === 'string' && kind.startsWith('shortcut-change:')) {
+    const row = shortcutListEl && shortcutListEl.querySelector(`[data-id="${CSS.escape(kind.slice('shortcut-change:'.length))}"] .shortcut-keys`);
+    return row || null;
+  }
+  return null;
 }
 
 function setShortcutHint(rawText, kind) {
@@ -1262,7 +1271,8 @@ function startShortcutCapture(kind) {
   const btn = shortcutCaptureButton(kind);
   if (btn) {
     btn.classList.add('is-capturing');
-    btn.textContent = 'Listening…';
+    // Row key buttons keep their keycaps; plain Change/Add buttons read out.
+    if (!btn.classList.contains('shortcut-keys')) btn.textContent = 'Listening…';
   }
   setShortcutHint('Press a new shortcut. Escape to cancel.', '');
 }
@@ -1271,10 +1281,15 @@ function stopShortcutCapture() {
   capturingShortcutKind = null;
   captureMods = [];
   captureSawKey = false;
-  for (const btn of [shortcutChangeBtn, pasteLastShortcutChangeBtn, gameShortcutChangeBtn]) {
+  for (const btn of [pasteLastShortcutChangeBtn, gameShortcutChangeBtn, shortcutAddBtn]) {
     if (!btn) continue;
     btn.classList.remove('is-capturing');
-    btn.textContent = 'Change';
+    btn.textContent = btn === shortcutAddBtn ? 'Add' : 'Change';
+  }
+  if (shortcutListEl) {
+    for (const btn of shortcutListEl.querySelectorAll('.shortcut-keys.is-capturing')) {
+      btn.classList.remove('is-capturing');
+    }
   }
   restoreShortcutHint();
 }
@@ -2417,22 +2432,99 @@ if (window.matchMedia) {
   window.matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', () => syncVocabFix());
 }
 
+function primaryShortcutOf(data) {
+  const list = data && Array.isArray(data.shortcuts) && data.shortcuts.length ? data.shortcuts : null;
+  if (list) return list[0];
+  return { id: null, accelerator: '', label: data.shortcutLabel || defaultShortcutLabel(), mode: data.dictateMode || 'toggle' };
+}
+
+// One row per dictation shortcut: its keys (click to change), its three mode
+// radios, and remove. A `purpose` field on the entry will grow a second
+// control here when per-shortcut dictation profiles land.
+function renderShortcutList(data) {
+  if (!shortcutListEl) return;
+  const list = (data && Array.isArray(data.shortcuts) ? data.shortcuts : []).filter((s) => s && s.id);
+  const signature = list.map((s) => s.id + '=' + s.accelerator + ':' + s.mode).join('|');
+  if (renderShortcutList.signature === signature && renderShortcutList.count === list.length) {
+    syncShortcutListModes(list);
+    return;
+  }
+  renderShortcutList.signature = signature;
+  renderShortcutList.count = list.length;
+  shortcutListEl.innerHTML = '';
+  for (const entry of list) {
+    const row = document.createElement('div');
+    row.className = 'shortcut-row';
+    row.dataset.id = entry.id;
+    row.setAttribute('role', 'listitem');
+    const keys = document.createElement('button');
+    keys.type = 'button';
+    keys.className = 'shortcut-keys';
+    keys.setAttribute('aria-label', 'Change shortcut ' + (entry.label || entry.accelerator));
+    const display = document.createElement('span');
+    display.className = 'shortcut-display';
+    display.innerHTML = shortcutKbdHtml(entry.label || entry.accelerator);
+    const edit = document.createElement('span');
+    edit.className = 'general-shortcut-edit';
+    edit.textContent = 'Edit';
+    keys.append(display, edit);
+    const modes = document.createElement('div');
+    modes.className = 'segmented';
+    modes.setAttribute('role', 'radiogroup');
+    modes.setAttribute('aria-label', 'Mode for ' + (entry.label || entry.accelerator));
+    for (const m of ['toggle', 'ptt', 'both']) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'segmented-btn';
+      btn.dataset.mode = m;
+      btn.setAttribute('role', 'radio');
+      btn.textContent = m === 'toggle' ? 'Toggle' : m === 'ptt' ? 'Push to talk' : 'Both';
+      modes.append(btn);
+    }
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'shortcut-remove';
+    remove.setAttribute('aria-label', 'Remove shortcut ' + (entry.label || entry.accelerator));
+    remove.textContent = '×';
+    remove.disabled = list.length <= 1;
+    row.append(keys, modes, remove);
+    shortcutListEl.append(row);
+  }
+  syncShortcutListModes(list);
+  if (capturingShortcutKind && typeof capturingShortcutKind === 'string'
+      && capturingShortcutKind.startsWith('shortcut-change:')) {
+    const btn = shortcutCaptureButton(capturingShortcutKind);
+    if (btn) btn.classList.add('is-capturing');
+  }
+}
+renderShortcutList.signature = null;
+renderShortcutList.count = -1;
+
+function syncShortcutListModes(list) {
+  if (!shortcutListEl) return;
+  for (const row of shortcutListEl.querySelectorAll('.shortcut-row')) {
+    const entry = list.find((s) => s.id === row.dataset.id);
+    const mode = entry ? entry.mode : 'toggle';
+    for (const btn of row.querySelectorAll('.segmented-btn')) {
+      const on = btn.dataset.mode === mode;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-checked', on ? 'true' : 'false');
+    }
+    const remove = row.querySelector('.shortcut-remove');
+    if (remove) remove.disabled = list.length <= 1;
+  }
+}
+
 function renderSettings(payload) {
   const data = payload || lastPayload || {};
-  const mode = data.dictateMode === 'ptt' ? 'ptt' : 'toggle';
-  const label = data.shortcutLabel || defaultShortcutLabel();
+  const primary = primaryShortcutOf(data);
+  const mode = primary.mode === 'ptt' ? 'ptt' : primary.mode === 'both' ? 'both' : 'toggle';
+  const label = primary.label || data.shortcutLabel || defaultShortcutLabel();
 
-  modeToggleEl.classList.toggle('active', mode === 'toggle');
-  modePttEl.classList.toggle('active', mode === 'ptt');
-  modeToggleEl.setAttribute('aria-checked', mode === 'toggle' ? 'true' : 'false');
-  modePttEl.setAttribute('aria-checked', mode === 'ptt' ? 'true' : 'false');
-  document.getElementById('dictation-mode-hint').textContent = mode === 'ptt'
-    ? 'Hold the shortcut to speak. Release to finish.'
-    : 'Press once to start, again to stop.';
   document.getElementById('general-shortcut-keys').innerHTML = shortcutKbdHtml(label);
   renderHelpDictateStep(mode, label);
+  renderShortcutList(data);
 
-  shortcutDisplayEl.innerHTML = shortcutKbdHtml(label);
   document.getElementById('home-shortcut-keys').innerHTML = shortcutKbdHtml(label);
   if (pasteLastShortcutDisplayEl) {
     pasteLastShortcutDisplayEl.innerHTML = shortcutKbdHtml(
@@ -2539,15 +2631,19 @@ function renderUnderstanding(data) {
 
 function emptyCopy(mode, label) {
   const keys = shortcutKbdHtml(label || defaultShortcutLabel());
+  if (mode === 'both') {
+    return 'Tap ' + keys + ' anywhere to toggle dictation, or hold it to talk. Let go of a hold to finish.<br/>Your transcripts will appear here.';
+  }
   if (mode === 'ptt') {
-    return 'Hold ' + keys + ' anywhere to dictate. Release to finish, or tap to keep listening until the next press.<br/>Your transcripts will appear here.';
+    return 'Hold ' + keys + ' anywhere to dictate. Release to finish.<br/>Your transcripts will appear here.';
   }
   return 'Press ' + keys + ' anywhere to start dictation. Press it again to finish.<br/>Your transcripts will appear here.';
 }
 
 function renderFeedEmpty(data, all, entries, q) {
   if (!emptyEl) return;
-  const mode = data.dictateMode === 'ptt' ? 'ptt' : 'toggle';
+  const rawMode = data.dictateMode;
+  const mode = rawMode === 'ptt' || rawMode === 'both' ? rawMode : 'toggle';
   const label = data.shortcutLabel || defaultShortcutLabel();
   const searchNoMatch = !!q && entries.length === 0;
   emptyEl.classList.remove('is-search');
@@ -5693,12 +5789,36 @@ if (flowStyleOptions) {
   });
 }
 
-function pickMode(mode) {
-  patchSettings({ dictateMode: mode });
+if (shortcutListEl) {
+  shortcutListEl.addEventListener('click', (event) => {
+    const row = event.target.closest('.shortcut-row');
+    if (!row || !row.dataset.id) return;
+    const id = row.dataset.id;
+    const modeBtn = event.target.closest('.segmented-btn');
+    if (modeBtn && modeBtn.dataset.mode) {
+      patchSettings({ shortcutUpdate: { id, mode: modeBtn.dataset.mode } });
+      return;
+    }
+    if (event.target.closest('.shortcut-remove')) {
+      patchSettings({ shortcutRemove: id });
+      return;
+    }
+    if (event.target.closest('.shortcut-keys')) {
+      if (capturingShortcutKind === 'shortcut-change:' + id) stopShortcutCapture();
+      else startShortcutCapture('shortcut-change:' + id);
+    }
+  });
 }
 
-modeToggleEl.addEventListener('click', () => pickMode('toggle'));
-modePttEl.addEventListener('click', () => pickMode('ptt'));
+if (shortcutAddBtn) {
+  shortcutAddBtn.addEventListener('click', () => {
+    if (capturingShortcutKind === 'shortcut-add') {
+      stopShortcutCapture();
+      return;
+    }
+    startShortcutCapture('shortcut-add');
+  });
+}
 
 if (settingInputs.verbatimMode) {
   settingInputs.verbatimMode.addEventListener('change', () => {
@@ -5728,14 +5848,6 @@ if (settingInputs.autoCleanup) {
     patchSettings({ autoCleanup: settingInputs.autoCleanup.checked });
   });
 }
-
-shortcutChangeBtn.addEventListener('click', () => {
-  if (capturingShortcutKind === 'shortcut') {
-    stopShortcutCapture();
-    return;
-  }
-  startShortcutCapture('shortcut');
-});
 
 if (pasteLastShortcutChangeBtn) {
   pasteLastShortcutChangeBtn.addEventListener('click', () => {
@@ -5806,7 +5918,10 @@ document.addEventListener('keydown', (e) => {
     }
     const kind = capturingShortcutKind;
     stopShortcutCapture();
-    patchSettings({ [kind]: accel });
+    if (kind === 'shortcut-add') patchSettings({ shortcutAdd: accel });
+    else if (typeof kind === 'string' && kind.startsWith('shortcut-change:')) {
+      patchSettings({ shortcutUpdate: { id: kind.slice('shortcut-change:'.length), accelerator: accel } });
+    } else patchSettings({ [kind]: accel });
     return;
   }
   if (e.key === 'Escape' && dictationLangDialog && dictationLangDialog.open) {
@@ -5843,7 +5958,10 @@ document.addEventListener('keyup', (e) => {
   const kind = capturingShortcutKind;
   const accel = captureMods.join('+');
   stopShortcutCapture();
-  patchSettings({ [kind]: accel });
+  if (kind === 'shortcut-add') patchSettings({ shortcutAdd: accel });
+  else if (typeof kind === 'string' && kind.startsWith('shortcut-change:')) {
+    patchSettings({ shortcutUpdate: { id: kind.slice('shortcut-change:'.length), accelerator: accel } });
+  } else patchSettings({ [kind]: accel });
 }, true);
 
 if (settingInputs.launchAtLogin) {

@@ -714,23 +714,11 @@
                 <div class="setting-row">
                   <div class="setting-copy">
                     <span class="setting-label">Shortcuts</span>
-                    <span class="setting-hint">Dictation and paste.</span>
+                    <span class="setting-hint">Dictation shortcuts, modes and paste.</span>
                     <span class="setting-hint" id="shortcuts-status" role="status" hidden></span>
                   </div>
                   <div class="setting-control">
                     <button type="button" class="btn-secondary" id="shortcuts-change" aria-label="Change shortcuts" aria-haspopup="dialog" aria-controls="shortcuts-dialog"><span id="general-shortcut-keys">Ctrl + Win</span><span class="general-shortcut-edit">Edit</span></button>
-                  </div>
-                </div>
-                <div class="setting-row">
-                  <div class="setting-copy">
-                    <span class="setting-label">Dictation mode</span>
-                    <span class="setting-hint" id="dictation-mode-hint">Press once to start, again to stop.</span>
-                  </div>
-                  <div class="setting-control">
-                    <div class="segmented" role="radiogroup" aria-label="Dictation mode" aria-describedby="dictation-mode-hint">
-                      <button type="button" class="segmented-btn" id="mode-toggle" data-mode="toggle" role="radio" aria-checked="true">Toggle</button>
-                      <button type="button" class="segmented-btn" id="mode-ptt" data-mode="ptt" role="radio" aria-checked="false">Push to talk</button>
-                    </div>
                   </div>
                 </div>
               </section>
@@ -1169,14 +1157,20 @@
   </dialog>
   <dialog id="shortcuts-dialog" class="shortcuts-dialog" aria-labelledby="shortcuts-title">
     <h2 class="settings-panel-title" id="shortcuts-title">Shortcuts</h2>
+    <div class="setting-row shortcut-list-head">
+      <div class="setting-copy">
+        <span class="setting-label">Dictation shortcuts</span>
+        <span class="setting-hint">Each shortcut has its own mode. Toggle starts and stops on press. Push to talk records only while held. Both holds to talk and locks on when tapped.</span>
+      </div>
+    </div>
+    <div id="shortcut-list" class="shortcut-list" role="list" aria-label="Dictation shortcuts"></div>
     <div class="setting-row">
       <div class="setting-copy">
-        <span class="setting-label">Dictation shortcut</span>
-        <span class="setting-hint">Global shortcut to start and finish dictation.</span>
+        <span class="setting-label">Add shortcut</span>
+        <span class="setting-hint">Another key combination that dictates, with its own mode.</span>
       </div>
       <div class="setting-control setting-control-shortcut">
-        <span id="shortcut-display" class="shortcut-display"><kbd>Ctrl</kbd>+<kbd>Win</kbd></span>
-        <button type="button" class="btn-secondary" id="shortcut-change" aria-label="Change dictation shortcut" autofocus>Change</button>
+        <button type="button" class="btn-secondary" id="shortcut-add" aria-label="Add dictation shortcut" autofocus>Add</button>
       </div>
     </div>
     <div class="setting-row">

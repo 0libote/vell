@@ -303,7 +303,29 @@ function encodeVkGroups(groups) {
   return (groups || []).map((g) => g.join('|')).join(',');
 }
 
+// Dictation modes. Toggle alternates start/stop on every press. Push to
+// talk records only while held: a quick tap does nothing. Both records while
+// held and locks on when tapped, so one shortcut serves quick remarks and
+// long passages without switching modes.
+const DICTATION_MODES = ['toggle', 'ptt', 'both'];
+
+function normalizeDictationMode(value) {
+  const id = String(value || '').trim().toLowerCase();
+  return DICTATION_MODES.includes(id) ? id : 'toggle';
+}
+
+// True when the mode is driven by physical press/release edges instead of
+// discrete presses: push to talk and both need the native chord watcher,
+// toggle does not (except lone-key and modifier-only chords, whose release
+// is the press -- see tryRegisterDictationShortcut).
+function modeUsesEdges(mode) {
+  return normalizeDictationMode(mode) !== 'toggle';
+}
+
 module.exports = {
+  DICTATION_MODES,
+  normalizeDictationMode,
+  modeUsesEdges,
   defaultShortcut,
   formatShortcutLabel,
   trayMenuLabel,

@@ -9,7 +9,7 @@ async function main() {
   const h = harness();
   const fixture = {
     focused: '200', editable: true, visible: true, minimized: false, destroyed: false,
-    inserted: [], clipboardTexts: [], helperCalls: [], captureTargets: [], states: [],
+    inserted: [], clipboardTexts: [], helperCalls: [], states: [],
   };
   h.context.fixture = fixture;
   try {
@@ -20,8 +20,6 @@ async function main() {
         isMinimized: () => fixture.minimized,
         webContents: { send() {}, executeJavaScript: async () => fixture.editable,
           insertText: async text => fixture.inserted.push(text) } };
-      screenCapture = { owns: hwnd => hwnd === '400',
-        observeTarget: hwnd => fixture.captureTargets.push(hwnd) };
       raiseOverlay = () => {};
       showOverlay = () => {};
       sendOverlay = state => fixture.states.push(state);
@@ -35,24 +33,19 @@ async function main() {
 
     assert.strictEqual(h.run("isOurHwnd('200')"), true, 'dashboard remains excluded from non-dictation targets');
     h.run("adoptForegroundHwnd('100')");
-    fixture.captureTargets.length = 0;
     h.run("adoptForegroundHwnd('200')");
     assert.strictEqual(h.run('lastHwnd'), '200', 'foreground watcher selects the dashboard');
-    assert.deepStrictEqual(fixture.captureTargets, [], 'screenshot target selection still excludes the dashboard');
     h.run("lastHwnd = '100';");
     await h.run('rememberFocus()');
     assert.strictEqual(h.run('lastHwnd'), '200', 'start-time focus refresh selects the dashboard');
     assert.strictEqual(h.run('lastTarget.exe'), 'vell.exe', 'destination metadata refreshes too');
-    assert.strictEqual((await h.run('captureTargetInfo()')).hwnd, '100', 'Capture retains its previous external destination');
-    assert.strictEqual(h.run('lastHwnd'), '200', 'reading the Capture destination preserves the dashboard dictation target');
     assert.strictEqual(h.run('correctionLearningWanted()'), false, 'no OS correction watcher for an internal field');
-    for (const hwnd of ['0', '300', '400']) h.run(`adoptForegroundHwnd('${hwnd}')`);
-    assert.strictEqual(h.run('lastHwnd'), '200', 'overlay and capture windows cannot replace the destination');
+    for (const hwnd of ['0', '300']) h.run(`adoptForegroundHwnd('${hwnd}')`);
+    assert.strictEqual(h.run('lastHwnd'), '200', 'the overlay window cannot replace the destination');
 
     h.run("mode = 'recording'; adoptForegroundHwnd('100');");
     assert.strictEqual(h.run('lastHwnd'), '200', 'switching apps while recording preserves the initial destination');
-    assert.deepStrictEqual(fixture.captureTargets, ['100'], 'external screenshot targets are still observed');
-    h.run("screenCapture = null; mode = 'transcribing';");
+    h.run("mode = 'transcribing';");
     fixture.helperCalls.length = 0;
     for (const platform of ['win32', 'darwin']) {
       h.context.process.platform = platform;

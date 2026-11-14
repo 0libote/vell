@@ -19,8 +19,39 @@ const plain = value => JSON.parse(JSON.stringify(value));
       overlayWin = { isDestroyed: () => false, webContents: { send: testGeneralState } };
     `);
     const set = h.handlers.get('settings-set');
+    const primaryId = h.run('primaryShortcut().id');
+
+    // The mode belongs to one shortcuts entry, set through shortcutUpdate. The
+    // snapshot mirrors the primary entry as dictateMode/shortcut for readers
+    // from before there was a list.
+    for (const mode of ['ptt', 'both', 'toggle']) {
+      const snapshot = plain(await set(null, { shortcutUpdate: { id: primaryId, mode } }));
+      const entry = snapshot.shortcuts.find(s => s.id === primaryId);
+      assert.strictEqual(entry.mode, mode, 'snapshot shortcut mode ' + mode);
+      assert.strictEqual(snapshot.dictateMode, mode, 'legacy dictateMode mirrors primary ' + mode);
+      const saved = JSON.parse(fs.readFileSync(h.run('SETTINGS_FILE'), 'utf8'));
+      assert.strictEqual(saved.shortcuts.find(s => s.id === primaryId).mode, mode, 'mode is written to the settings file');
+      assert.strictEqual(saved.dictateMode, mode, 'legacy scalar is written to the settings file');
+      h.run('loadSettings()');
+      assert.strictEqual(plain(h.run('primaryShortcut().mode')), mode, 'mode survives reloading settings');
+      assert.strictEqual(plain(h.run('settings.shortcuts')).find(s => s.id === primaryId).mode, mode, 'list survives reloading settings');
+      assert.deepStrictEqual(plain(states.at(-1)).dictateMode, mode, 'mode reaches the recording overlay');
+      assert.strictEqual(h.run('isPtt()'), mode !== 'toggle', 'isPtt ' + mode);
+    }
+
+    // A legacy dictateMode patch maps onto the primary shortcut.
+    for (const mode of ['ptt', 'toggle']) {
+      const snapshot = plain(await set(null, { dictateMode: mode }));
+      assert.strictEqual(snapshot.shortcuts.find(s => s.id === primaryId).mode, mode, 'legacy patch sets primary mode ' + mode);
+      assert.strictEqual(snapshot.dictateMode, mode, 'legacy patch returns the confirmed mode ' + mode);
+      const saved = JSON.parse(fs.readFileSync(h.run('SETTINGS_FILE'), 'utf8'));
+      assert.strictEqual(saved.shortcuts.find(s => s.id === primaryId).mode, mode, 'legacy patch is written to the settings file');
+      h.run('loadSettings()');
+      assert.strictEqual(plain(h.run('primaryShortcut().mode')), mode, 'legacy patch survives reloading settings');
+      assert.strictEqual(h.run('isPtt()'), mode !== 'toggle', 'isPtt after legacy patch ' + mode);
+    }
+
     const patches = [
-      { dictateMode: 'ptt' }, { dictateMode: 'toggle' },
       { microphone: 'test-usb-microphone' }, { microphone: 'default' },
       { dictationLanguages: ['hi'] }, { dictationLanguages: ['en', 'hg'] }, { dictationLanguages: ['en'] },
       { autoAddToDictionary: false }, { autoAddToDictionary: true },
@@ -34,15 +65,13 @@ const plain = value => JSON.parse(JSON.stringify(value));
       assert.deepStrictEqual(saved[key], value, key + ' is written to the settings file');
       h.run('loadSettings()');
       assert.deepStrictEqual(plain(h.run('settings.' + key)), value, key + ' survives reloading settings');
-      if (['dictateMode', 'microphone'].includes(key)) {
+      if (['microphone'].includes(key)) {
         assert.deepStrictEqual(states.at(-1)[key], value, key + ' reaches the recording overlay');
       }
-      if (key === 'dictateMode') assert.strictEqual(h.run('isPtt()'), value === 'ptt');
       if (key === 'dictationLanguages') {
         assert.strictEqual(h.run('engineLanguage()'), 'en');
-        assert.strictEqual(h.run('wantsHinglish()'), false);
       }
     }
-    console.log('General settings: 9 preference changes persisted, reloaded, and reached recording mode, microphone and language routing.');
+    console.log('General settings: per-shortcut mode plus legacy dictateMode mapping persisted, reloaded, and reached recording mode, microphone and language routing.');
   } finally { await h.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

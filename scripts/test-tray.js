@@ -48,8 +48,8 @@ function lift(name) {
 }
 
 const SANDBOX_KEYS = [
-  'style', 'mode', 'settings', 'isPtt', 'lastDictationText', 'openHistory',
-  'dictationHotkeyHandler', 'pasteLastDictation', 'setDictateMode',
+  'style', 'hotkeys', 'mode', 'settings', 'isPtt', 'lastDictationText', 'openHistory',
+  'dictationHotkeyHandler', 'pasteLastDictation', 'setShortcutMode',
   'setDictationQuality', 'setTrayFlag', 'updater', 'broadcast', 'app',
   'micDevices', 'micDefaultId', 'setMicrophone', 'trayMenuLabel',
   'macShell', 'process',
@@ -57,32 +57,45 @@ const SANDBOX_KEYS = [
 
 // activeMicId and microphoneSubmenu are lifted rather than stubbed: the
 // unplugged-device fallback is the part worth testing, so it has to be the real
-// implementation running.
-const LIFTED = ['activeMicId', 'microphoneSubmenu', 'mediaControlSupported', 'buildTrayTemplate'];
+// implementation running. dictationShortcuts, primaryShortcut and
+// dictationModeSubmenus are lifted too: the per-shortcut Dictation submenus are
+// what this file checks, so they have to be the real ones.
+const LIFTED = ['dictationShortcuts', 'primaryShortcut', 'activeMicId', 'microphoneSubmenu',
+  'mediaControlSupported', 'dictationModeSubmenus', 'buildTrayTemplate'];
 
 function build(state) {
   const settings = Object.assign({
-    shortcut: 'CommandOrControl+Shift+Space',
     pasteLastShortcut: 'CommandOrControl+Alt+V',
-    dictateMode: 'toggle',
     verbatimMode: false,
     muteMusicWhileDictating: true,
     launchAtLogin: false,
   }, state.settings || {});
+  // The list is the setting: one entry per dictation shortcut. A missing list
+  // would take the lifted code down its require('crypto') fallback path, which
+  // has no require in the sandbox, so default it here like loadSettings does.
+  if (!Array.isArray(settings.shortcuts) || !settings.shortcuts.length) {
+    settings.shortcuts = [{ id: 'primary', accelerator: 'CommandOrControl+Shift+Space', mode: 'toggle' }];
+  }
   const noop = () => {};
   // The menu is built for the platform named here, not the one running the
   // test, so these expectations hold on a Mac CI runner too.
   const platform = state.platform || 'win32';
+  const modeCalls = [];
   const sandbox = {
     style,
+    hotkeys,
     mode: state.mode || 'idle',
     settings,
-    isPtt: () => settings.dictateMode === 'ptt',
+    isPtt: () => hotkeys.modeUsesEdges(settings.shortcuts[0].mode),
     lastDictationText: () => (state.lastText || ''),
     openHistory: state.openHistory || noop,
     dictationHotkeyHandler: noop,
     pasteLastDictation: () => Promise.resolve(),
-    setDictateMode: noop,
+    setShortcutMode: (id, m) => {
+      modeCalls.push([id, m]);
+      const entry = settings.shortcuts.find((s) => s.id === id);
+      if (entry) entry.mode = m;
+    },
     setTrayFlag: noop,
     updater: { checkNow: () => Promise.resolve() },
     broadcast: noop,
@@ -96,7 +109,12 @@ function build(state) {
   };
   const body = LIFTED.map(lift).join('\n') + '\nreturn buildTrayTemplate;';
   const make = new Function(...SANDBOX_KEYS, body);
-  return make(...SANDBOX_KEYS.map((k) => sandbox[k]))();
+  const template = make(...SANDBOX_KEYS.map((k) => sandbox[k]))();
+  // Reachable for the radio-click checks below: which shortcut a click targeted
+  // and what the list looks like after it.
+  template.settings = settings;
+  template.modeCalls = modeCalls;
+  return template;
 }
 
 function labels(tpl) {
@@ -122,9 +140,9 @@ check('arming reads finish', find(build({ mode: 'arming' }), 'Finish dictation')
 const dictate = find(base, 'Start dictation');
 check('dictate shows the bound chord', dictate.label, 'Start dictation\tCtrl+Shift+Space');
 check('dictate does not re-register', dictate.accelerator, undefined);
-const custom = build({ settings: { shortcut: 'CommandOrControl+Super+J' } });
+const custom = build({ settings: { shortcuts: [{ id: 'a', accelerator: 'CommandOrControl+Super+J', mode: 'toggle' }] } });
 check('accelerator follows a changed shortcut', find(custom, 'Start dictation').label, 'Start dictation\tCtrl+Win+J');
-check('ctrl+win is visible', find(build({ settings: { shortcut: 'CommandOrControl+Super' } }), 'Start dictation').label, 'Start dictation\tCtrl+Win');
+check('ctrl+win is visible', find(build({ settings: { shortcuts: [{ id: 'a', accelerator: 'CommandOrControl+Super', mode: 'toggle' }] } }), 'Start dictation').label, 'Start dictation\tCtrl+Win');
 check('paste shows the bound chord', find(base, 'Paste last dictation').label, 'Paste last dictation\tCtrl+Alt+V');
 check('paste follows a changed shortcut', find(build({
   settings: { pasteLastShortcut: 'CommandOrControl+Shift+Q' },
@@ -155,9 +173,39 @@ check('mac has no mute switch', labels(mac).includes('Mute other audio while dic
 check('Windows keeps the mute switch', labels(base).includes('Mute other audio while dictating'), true);
 check('otherwise mac and Windows menus have the same shape', labels(mac).length, labels(base).length - 1);
 
-const radios = (tpl, label) => find(tpl, label).submenu.map((s) => s.label + (s.checked ? '*' : ''));
-check('mode radios follow toggle', radios(base, 'Dictation mode'), ['Toggle*', 'Push to talk']);
-check('mode radios follow ptt', radios(build({ settings: { dictateMode: 'ptt' } }), 'Dictation mode'), ['Toggle', 'Push to talk*']);
+// One Dictation submenu per shortcut, each labelled with its own keys, each
+// offering the three modes as radios that set that shortcut's mode. The old
+// single 'Dictation mode' submenu is gone.
+const dictSubLabels = (tpl) => tpl
+  .filter((it) => it.submenu && String(it.label || '').startsWith('Dictation\t'))
+  .map((it) => it.label);
+check('one Dictation submenu, named with its keys', dictSubLabels(base), ['Dictation\tCtrl+Shift+Space']);
+check('no single Dictation mode submenu remains', find(base, 'Dictation mode'), undefined);
+const subRadios = (tpl, fullLabel) => tpl.find((it) => it.label === fullLabel)
+  .submenu.map((s) => s.label + (s.checked ? '*' : ''));
+check('mode radios follow toggle', subRadios(base, 'Dictation\tCtrl+Shift+Space'), ['Toggle*', 'Push to talk', 'Both']);
+const pttTpl = build({ settings: { shortcuts: [{ id: 'a', accelerator: 'CommandOrControl+Shift+Space', mode: 'ptt' }] } });
+check('mode radios follow ptt', subRadios(pttTpl, 'Dictation\tCtrl+Shift+Space'), ['Toggle', 'Push to talk*', 'Both']);
+check('mode radios follow both', subRadios(
+  build({ settings: { shortcuts: [{ id: 'a', accelerator: 'CommandOrControl+Shift+Space', mode: 'both' }] } }),
+  'Dictation\tCtrl+Shift+Space'), ['Toggle', 'Push to talk', 'Both*']);
+// A second shortcut gets its own submenu, labelled with its own keys, following
+// its own mode rather than the first shortcut's.
+const two = build({ settings: { shortcuts: [
+  { id: 'a', accelerator: 'CommandOrControl+Shift+Space', mode: 'toggle' },
+  { id: 'b', accelerator: 'F9', mode: 'ptt' },
+] } });
+check('each shortcut gets its own labelled submenu', dictSubLabels(two),
+  ['Dictation\tCtrl+Shift+Space', 'Dictation\tF9']);
+check('each submenu follows its own shortcut', [
+  subRadios(two, 'Dictation\tCtrl+Shift+Space').join(','),
+  subRadios(two, 'Dictation\tF9').join(','),
+], ['Toggle*,Push to talk,Both', 'Toggle,Push to talk*,Both']);
+// Clicking a radio sets that shortcut's mode and leaves the other alone.
+two.find((it) => it.label === 'Dictation\tF9').submenu.find((s) => s.label === 'Both').click();
+check('radio click targets that shortcut id', two.modeCalls, [['b', 'both']]);
+check('radio click sets that shortcut to both', two.settings.shortcuts.find((s) => s.id === 'b').mode, 'both');
+check('radio click leaves the other shortcut alone', two.settings.shortcuts.find((s) => s.id === 'a').mode, 'toggle');
 
 // The microphone picker. Only a renderer can enumerate devices, so main holds a
 // reported copy; these cover what that copy can do to the menu.
@@ -230,7 +278,7 @@ for (const item of find(base, 'Settings').submenu) {
 // signature ignores is a checkbox that silently stops matching reality.
 const sig = lift('trayMenuSignature');
 for (const field of [
-  'settings.shortcut', 'settings.pasteLastShortcut', 'settings.dictateMode',
+  'dictationShortcuts()', 'settings.pasteLastShortcut',
   'settings.verbatimMode',
   'settings.muteMusicWhileDictating', 'settings.launchAtLogin', 'lastDictationText()',
   'activeMicId()', 'micDefaultId', 'micDevices',

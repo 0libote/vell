@@ -141,7 +141,9 @@ app.whenReady().then(async () => {
         }
       }
       if (mode === 'recording') {
-        await patch({ dictateMode: 'ptt' });
+        const primaryId = h.run('primaryShortcut().id');
+        await patch({ shortcutUpdate: { id: primaryId, mode: 'both' } });
+        assert.strictEqual(h.run('primaryShortcut().mode'), 'both', 'per-row Both persists on the primary shortcut');
         assert.strictEqual(await run('pill.title'),
           'Release ' + h.run('formatShortcutLabel(settings.shortcut)') + ' to finish');
         h.run('pttLocked = true');
@@ -150,7 +152,8 @@ app.whenReady().then(async () => {
           'Press ' + h.run('formatShortcutLabel(settings.shortcut)') + ' again to finish',
           'a locked push-to-talk tooltip must survive the engine status in preference snapshots');
         h.run('pttLocked = false');
-        await patch({ dictateMode: 'toggle' });
+        await patch({ shortcutUpdate: { id: primaryId, mode: 'toggle' } });
+        assert.strictEqual(h.run('primaryShortcut().mode'), 'toggle');
       }
       assert.deepStrictEqual(await run(`({ style: flowBarStyle, pending: pendingFlowBarStyle,
         motion: window.VoxdenFlowMotion.preference, css: document.documentElement.dataset.flowMotion })`),

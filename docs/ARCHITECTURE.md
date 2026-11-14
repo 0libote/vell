@@ -28,7 +28,8 @@ No account, no word limits, no cloud fallback.
 | Area | Files |
 |---|---|
 | Island bar | `flow-bar.js` (anchor math), `overlay.js` (state machine), `dictation-island.css`, `flow-styles.css`, `overlay.css`, `island-shell.css`, `flow-motion.js`, `energy-orb.js`, `sound-cues.js`, `speech-gate.js`, `overlay-health.js` |
-| Shortcuts | `hotkeys.js` + `main.js` `tryRegisterDictationShortcut` (globalShortcut + chord-watch helper) |
+| Shortcuts | `hotkeys.js` (modes, chord encoding) + `main.js` per-shortcut registry (globalShortcut + one chord-watch helper each) |
+| Dictation modes | `toggle` (press alternates), `ptt` (hold-only, tap cancels), `both` (hold records, tap locks on); per-shortcut `mode`, routed live at press/release |
 | Audio | `overlay.js` (getUserMedia → AudioContext → chunker), `chunking.js`, `media-controller.js` (duck music) |
 | Speech | `asr.js` (Voz-only catalog), `asr-capabilities.js` (Voz-only capabilities), `voz-model.js` (install/remove/snapshot), `model-plan.js` (single-component plan), `transcription-provider.js` (Voz + mock providers) |
 | Text | `cleanup.js`, `numbers.js`, `spoken-corrections.js`, `style.js` (per-app), `dictionary.js`, `auto-dictionary.js`, `correction-learning.js`, `correction-observer.js`, `corpus.js`, `repair.js`, `hinglish.js`, `phonetics.js`, `vocabulary.js` |

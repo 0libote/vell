@@ -255,6 +255,7 @@ const base = {
   shortcutLabel: 'Ctrl+Win',
   pasteLastShortcutLabel: 'Ctrl+Alt+V',
   dictateMode: 'toggle',
+  shortcuts: [{ id: 'shot-primary', accelerator: 'CommandOrControl+Super', label: 'Ctrl+Win', mode: 'toggle' }],
   dictationLanguages: ['en'],
   suggestionsEnabled: true,
   autoAddToDictionary: true,
@@ -303,7 +304,38 @@ let snapshot = { ...base };
 const handled = new Set();
 const handle = (channel, reply) => { handled.add(channel); ipcMain.handle(channel, reply); };
 handle('app-load', () => snapshot);
-handle('settings-set', (_e, patch) => (snapshot = { ...snapshot, ...patch }));
+handle('settings-set', (_e, patch) => {
+  if (patch && typeof patch === 'object') {
+    if (patch.shortcutUpdate && typeof patch.shortcutUpdate === 'object') {
+      const update = patch.shortcutUpdate;
+      snapshot = { ...snapshot,
+        shortcuts: (snapshot.shortcuts || []).map(s => (s.id === update.id
+          ? { ...s,
+              ...(typeof update.accelerator === 'string' && update.accelerator.trim()
+                ? { accelerator: update.accelerator.trim(),
+                    label: update.accelerator.trim().replace(/CommandOrControl/g, 'Ctrl').replace(/Super/g, 'Win') }
+                : {}),
+              ...(typeof update.mode === 'string' ? { mode: update.mode } : {}) }
+          : s)) };
+      const primary = snapshot.shortcuts[0];
+      if (primary) snapshot = { ...snapshot, shortcut: primary.accelerator, shortcutLabel: primary.label, dictateMode: primary.mode };
+      return snapshot;
+    }
+    if (typeof patch.shortcutAdd === 'string' && patch.shortcutAdd.trim()) {
+      const accel = patch.shortcutAdd.trim();
+      snapshot = { ...snapshot, shortcuts: [...(snapshot.shortcuts || []),
+        { id: 'shot-' + snapshot.shortcuts.length, accelerator: accel,
+          label: accel.replace(/CommandOrControl/g, 'Ctrl').replace(/Super/g, 'Win'), mode: 'toggle' }] };
+      return snapshot;
+    }
+    if (typeof patch.shortcutRemove === 'string' && patch.shortcutRemove && (snapshot.shortcuts || []).length > 1) {
+      snapshot = { ...snapshot, shortcuts: snapshot.shortcuts.filter(s => s.id !== patch.shortcutRemove) };
+      return snapshot;
+    }
+  }
+  snapshot = { ...snapshot, ...patch };
+  return snapshot;
+});
 handle('history-stats', () => null);
 handle('history-insights', () => ({ ok: false }));
 handle('history-audio', () => ({ ok: false }));

@@ -31,7 +31,8 @@ async function test(name, fn, options) {
 function prepare(h, dictateMode) {
   h.run(`
     accountManager = { signedIn: () => true, token: () => '', snapshot: () => ({ signedIn: true, plan: 'free' }) };
-    settings.dictateMode = ${JSON.stringify(dictateMode || 'toggle')};
+    settings.shortcuts = [{ id: 'primary', accelerator: 'CommandOrControl+Super', mode: ${JSON.stringify(dictateMode || 'toggle')} }];
+    syncPrimaryShortcutScalars();
     settings.gameShortcutEnabled = true;
     sidecarState = 'ready'; mode = 'idle';
     showOverlay = () => {}; registerEscape = () => {};
@@ -99,7 +100,7 @@ async function main() {
   });
 
   await test('a key already used elsewhere cannot be turned on as the game key', async (h) => {
-    h.run("saveSettings = () => {}; snapshot = () => ({}); settings.shortcut = 'F8';");
+    h.run("saveSettings = () => {}; snapshot = () => ({}); settings.shortcuts = [{ id: 'primary', accelerator: 'F8', mode: 'toggle' }]; syncPrimaryShortcutScalars();");
     const res = await h.handlers.get('settings-set')({}, { gameShortcutEnabled: true });
     assert.match(res.shortcutError, /already used for dictation/);
     assert.strictEqual(h.run('settings.gameShortcutEnabled'), false, 'it stays off');
@@ -144,9 +145,11 @@ async function main() {
 
   for (const game of [true, false]) {
     const name = game ? 'game' : 'ordinary';
-    const watchers = (h) => {
-      prepare(h, 'ptt');
-      h.run("tryRegisterGameShortcut('F8'); tryRegisterDictationShortcut('CommandOrControl+Super');");
+    const watchers = (h, dictateMode) => {
+      prepare(h, dictateMode || 'ptt');
+      h.run("tryRegisterGameShortcut('F8')");
+      const pid = h.run('primaryShortcut().id');
+      h.run(`tryRegisterDictationShortcut(${JSON.stringify(pid)}, 'CommandOrControl+Super')`);
       const gameWatch = gameWatcher(h, 0x77);
       const ordinaryWatch = gameWatcher(h, '17,91|92');
       return game ? [gameWatch, ordinaryWatch] : [ordinaryWatch, gameWatch];
@@ -177,7 +180,8 @@ async function main() {
     });
 
     await test(name + ' tap-locked dictation can still be stopped by the other shortcut', async (h) => {
-      const [owner, other] = watchers(h);
+      // Tap-lock is both-mode behavior: a tap in ptt mode cancels instead.
+      const [owner, other] = watchers(h, 'both');
       say(owner, 'FREE', 'DOWN', 'UP clean');
       assert.strictEqual(h.run('pttLocked'), true);
       say(other, 'FREE', 'DOWN', 'UP dirty');
@@ -218,7 +222,7 @@ async function main() {
   await test('the three shortcuts cannot share a key', async (h) => {
     h.run('saveSettings = () => {}; snapshot = () => ({}); settings.gameShortcutEnabled = true;');
     const set = h.handlers.get('settings-set');
-    h.run("settings.shortcut = 'CommandOrControl+Super'; settings.pasteLastShortcut = 'CommandOrControl+Alt+V'");
+    h.run("tryRegisterGameShortcut('F8'); settings.shortcuts = [{ id: 'primary', accelerator: 'CommandOrControl+Super', mode: 'toggle' }]; syncPrimaryShortcutScalars(); settings.pasteLastShortcut = 'CommandOrControl+Alt+V'");
     let res = await set({}, { gameShortcut: 'CommandOrControl+Super' });
     assert.match(res.shortcutError, /already used for dictation/);
     res = await set({}, { gameShortcut: 'CommandOrControl+Alt+V' });
@@ -238,7 +242,11 @@ async function main() {
   // game is a key held with it normal (sprint, crouch).
   await test('a lone key pressed with a modifier held is left to the app, unless a game fills the screen', async (h) => {
     prepare(h, 'toggle');
-    h.run("tryRegisterGameShortcut('F8'); settings.shortcut = 'F9'; tryRegisterDictationShortcut('F9');");
+    h.run(`tryRegisterGameShortcut('F8');
+      var pid = primaryShortcut().id;
+      var applied = applyShortcutAccelerator(pid, 'F9');
+      if (!applied.ok) throw new Error('F9 did not apply: ' + applied.reason);
+      tryRegisterDictationShortcut(pid);`);
     const game = gameWatcher(h, 0x77);
     const dictation = gameWatcher(h, 0x78);
     say(game, 'FREE', 'DOWN modified', 'UP dirty');
@@ -274,10 +282,16 @@ async function main() {
       assert.deepStrictEqual(JSON.parse(h.run('JSON.stringify(opened)')), [pane], why + ': the dictation key still opens it');
       h.run(unblock + "; mode = 'idle';");
     }
-    h.run('screenCapture = { hasRetry: true }; flashed = [];');
+    // The retry helper is gone: startRecording clears the retry slot outright
+    // (corpus.clearRetry), so there is nothing left that could pull an app
+    // over the game. A clean tap just toggles: start, then stop.
+    h.run('opened = []; flashed = [];');
     say(game, 'DOWN', 'UP clean');
-    assert.strictEqual(h.run('retried'), 0, 'a screenshot retry would pull its app over the game');
-    assert.strictEqual(h.run('flashed.length'), 1);
+    assert.strictEqual(h.run('retried'), 0, 'no retry pulls its app over the game');
+    assert.deepStrictEqual(JSON.parse(h.run('JSON.stringify(opened)')), [], 'no dashboard over the game');
+    assert.strictEqual(h.run('mode'), 'arming', 'the tap toggles the game dictation on');
+    assert.strictEqual(h.run('gameDictation'), true);
+    assert.strictEqual(h.run('flashed.length'), 0, 'starting is not an error');
   });
 
   await test('a game dictation leaves Escape and the correction watcher alone', async (h) => {
@@ -312,12 +326,13 @@ async function main() {
 
   await test('push to talk: a recording started from the bar ends with the shortcut', async (h) => {
     prepare(h, 'ptt');
-    h.run("tryRegisterDictationShortcut('CommandOrControl+Super'); startRecording(false);");
+    const pid = h.run('primaryShortcut().id');
+    h.run(`tryRegisterDictationShortcut(${JSON.stringify(pid)}, 'CommandOrControl+Super'); startRecording(false);`);
     assert.strictEqual(h.run('mode'), 'arming');
     assert.strictEqual(h.run('pttOwner'), null);
     const watcher = gameWatcher(h, '17,91|92');
     say(watcher, 'FREE', 'DOWN');
-    assert.strictEqual(h.run('pttOwner'), 'dictation', 'the key takes the recording over');
+    assert.strictEqual(h.run('pttOwner'), 'dictation:' + pid, 'the key takes the recording over');
     h.run('pttPressedAt = Date.now() - 5000');
     say(watcher, 'UP clean');
     assert.strictEqual(h.run('pttReleasePending'), true, 'and its release ends it');

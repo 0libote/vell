@@ -769,6 +769,71 @@ main {
   white-space: nowrap;
 }
 
+/* Dictation shortcuts: one row per keybind, keys on the left, its mode in
+   the middle, remove on the right. Rows inherit the dialog's setting-row
+   rhythm; the key button reads as the old Change control did. */
+.shortcut-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+}
+
+.shortcut-keys {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.shortcut-keys .general-shortcut-edit {
+  flex: none;
+}
+
+.shortcut-row .segmented {
+  margin-left: auto;
+}
+
+.shortcut-row .segmented-btn {
+  padding: 4px 10px;
+}
+
+.shortcut-remove {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--muted);
+  padding: 4px 6px;
+  cursor: pointer;
+}
+
+.shortcut-remove:hover:not(:disabled) {
+  color: var(--red);
+}
+
+.shortcut-remove:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .shortcut-capture-hint {
   font-size: 12px;
   color: var(--mint);

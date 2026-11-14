@@ -193,24 +193,65 @@ let asrRuntimeState = {
   step: '',
 };
 
-let registeredShortcut = null;
+// Dictation shortcuts: [{ id, accelerator, mode }]. One entry per keybind;
+// each gets its own globalShortcut registration and, when its mode needs
+// press/release edges (push to talk, both) or the OS cannot express the
+// chord at all (lone keys, modifier-only chords in toggle mode), its own
+// native chord watcher. `purpose` is reserved on each entry for per-shortcut
+// dictation profiles (e.g. an email shortcut that forces the email tone);
+// nothing reads it yet -- see docs.
+function normalizeShortcuts(list, fallback) {
+  const out = [];
+  const seen = new Set();
+  const push = (entry) => {
+    const accelerator = String((entry && entry.accelerator) || '').trim();
+    if (!accelerator) return null;
+    const key = accelerator.toLowerCase();
+    if (seen.has(key)) return null;
+    seen.add(key);
+    const id = String((entry && entry.id) || '').trim() || require('crypto').randomUUID();
+    out.push({ id, accelerator, mode: hotkeys.normalizeDictationMode(entry && entry.mode) });
+    return id;
+  };
+  for (const entry of Array.isArray(list) ? list : []) push(entry);
+  if (!out.length && fallback && String(fallback.accelerator || '').trim()) push(fallback);
+  if (!out.length) push({ accelerator: hotkeys.defaultShortcut(), mode: 'toggle' });
+  return out;
+}
+function dictationShortcuts() {
+  if (!Array.isArray(settings.shortcuts) || !settings.shortcuts.length) {
+    settings.shortcuts = normalizeShortcuts(null, {
+      accelerator: settings.shortcut || hotkeys.defaultShortcut(),
+      mode: settings.dictateMode,
+    });
+  }
+  return settings.shortcuts;
+}
+function primaryShortcut() {
+  return dictationShortcuts()[0];
+}
+function shortcutById(id) {
+  return dictationShortcuts().find((s) => s.id === id) || null;
+}
+function shortcutOwnerId(id) {
+  return 'dictation:' + id;
+}
+// Global registrations and native watchers, keyed by shortcut id.
+let registeredGlobals = new Map();
+let chordWatchers = new Map();
 // The helper process watches physical press/release edges for push to talk.
 // Modifier-only shortcuts also use it for toggle mode because RegisterHotKey
 // cannot express those chords.
-let chordWatch = null;
-let chordWatchAccel = '';
-let chordWatchRestartTimer = null;
-let chordWatchRestartDelay = 250;
-// True while the dictation chord is physically down from before the current
-// watcher (or hotkey registration) existed. Changing the shortcut in settings
+// True while a dictation chord is physically down from before the current
+// watcher (or hotkey registration) existed. Changing a shortcut in settings
 // registers the new chord on key-down, while the user's fingers are still on
 // it; without this, keyboard auto-repeat or the watcher's first poll turned
 // that lingering hold into a dictation of nothing, reported as "No speech".
-let chordStaleHeld = false;
 // Push to talk, tapped. A chord let go within this many milliseconds of going
 // down was a tap, not a hold: keep recording and let the next press end it.
 // The mic itself takes a couple of hundred milliseconds to open, so a hold
-// this short could never have carried a word anyway.
+// this short could never have carried a word anyway. Push to talk treats the
+// tap as a mistake and cancels; both mode treats it as a toggle.
 const PTT_TAP_MS = 300;
 // A hold the watcher and main.js time this far apart means the main thread was
 // busy at one of its edges: logged, since a large enough gap once turned a
@@ -496,7 +537,7 @@ function loadSettings() {
       // Existing users keep their selection; new installs explicitly persist false.
       settings.localModelChosen = typeof raw.localModelChosen === 'boolean'
         ? raw.localModelChosen : !!raw.asrEngine;
-      if (settings.dictateMode !== 'ptt' && settings.dictateMode !== 'toggle') {
+      if (settings.dictateMode !== 'ptt' && settings.dictateMode !== 'toggle' && settings.dictateMode !== 'both') {
         settings.dictateMode = 'toggle';
       }
       if (typeof settings.gameShortcut !== 'string') settings.gameShortcut = defaults.gameShortcut;
@@ -504,6 +545,13 @@ function loadSettings() {
       // working in every other app. It is off until the user turns it on,
       // including for the files 2.1.7 wrote, which have no such switch.
       if (typeof settings.gameShortcutEnabled !== 'boolean') settings.gameShortcutEnabled = false;
+      // The list is the setting; the scalars mirror its first entry for files
+      // and readers from before there was a list.
+      settings.shortcuts = normalizeShortcuts(settings.shortcuts, {
+        accelerator: settings.shortcut,
+        mode: settings.dictateMode,
+      });
+      syncPrimaryShortcutScalars();
       if (!settings.shortcut || typeof settings.shortcut !== 'string') {
         settings.shortcut = defaults.shortcut;
       }
@@ -606,7 +654,9 @@ function saveSettings() {
 }
 
 function isPtt() {
-  return settings.dictateMode === 'ptt' && chordWatchSupported();
+  // The game shortcut has no mode of its own; it follows the primary
+  // dictation shortcut. True while hold-to-talk edges drive recordings.
+  return hotkeys.modeUsesEdges(primaryShortcut().mode) && chordWatchSupported();
 }
 
 function loadStores() {
@@ -899,14 +949,20 @@ function snapshot() {
     vocabularyBudget: capabilities.vocabularyBudget('voz'),
     vocabularyTerms: currentVocabulary().length,
     lastDictationVocabulary: lastVocabularyReport,
-    dictateMode: settings.dictateMode,
+    dictateMode: primaryShortcut().mode,
+    shortcuts: dictationShortcuts().map((s) => ({
+      id: s.id,
+      accelerator: s.accelerator,
+      label: formatShortcutLabel(s.accelerator),
+      mode: s.mode,
+    })),
     gameShortcut: settings.gameShortcut,
     gameShortcutLabel: formatShortcutLabel(settings.gameShortcut),
     gameShortcutEnabled: settings.gameShortcutEnabled === true,
     // Settings > System offers Restart as administrator only while this is false.
     runningAsAdmin: runningAsAdmin === true,
-    shortcut: settings.shortcut,
-    shortcutLabel: formatShortcutLabel(settings.shortcut),
+    shortcut: primaryShortcut().accelerator,
+    shortcutLabel: formatShortcutLabel(primaryShortcut().accelerator),
     pasteLastShortcut: settings.pasteLastShortcut,
     pasteLastShortcutLabel: formatShortcutLabel(settings.pasteLastShortcut),
     hotkeyNotice,
@@ -1416,10 +1472,10 @@ function sendOverlay(extra) {
     device: 'cpu',
     asrEngineActive: 'voz',
     fastEngine: null,
-    dictateMode: settings.dictateMode,
+    dictateMode: activeDictateMode(),
     pttLocked,
-    shortcut: settings.shortcut,
-    shortcutLabel: formatShortcutLabel(settings.shortcut),
+    shortcut: primaryShortcut().accelerator,
+    shortcutLabel: formatShortcutLabel(primaryShortcut().accelerator),
     // The page keeps the bar out at rest only when this is true.
     alwaysShowFlowBar: restingBarWanted(),
     flowBarStyle: settings.flowBarStyle,
@@ -2441,12 +2497,135 @@ function openHistory(settingsCat) {
   else historyWin.webContents.send('open-settings', cat);
 }
 
+// The scalar settings.shortcut/settings.dictateMode mirror the primary
+// (first) shortcuts entry for files and readers from before there was a list.
+function syncPrimaryShortcutScalars() {
+  const primary = dictationShortcuts()[0];
+  settings.shortcut = primary.accelerator;
+  settings.dictateMode = primary.mode;
+}
+
+// The mode the flow bar should describe: the owner of an in-flight
+// recording, if it has one, otherwise the primary shortcut's mode.
+function activeDictateMode() {
+  if (typeof pttOwner === 'string' && pttOwner.startsWith('dictation:')) {
+    const entry = shortcutById(pttOwner.slice('dictation:'.length));
+    if (entry) return entry.mode;
+  }
+  return primaryShortcut().mode;
+}
+
+// Apply a new chord to one shortcut: conflict checks, registration with
+// rollback, and the stale-hold guard for fingers still on the keys.
+function applyShortcutAccelerator(id, accel) {
+  const entry = shortcutById(id);
+  if (!entry) return { ok: false, reason: 'That shortcut no longer exists.' };
+  const next = String(accel || '').trim();
+  if (!next) return { ok: false, reason: 'Pick a key combination first.' };
+  const label = formatShortcutLabel(next);
+  if (sameShortcut(next, settings.pasteLastShortcut)) {
+    return { ok: false, reason: label + ' is already used to paste your last dictation.' };
+  }
+  if (process.platform === 'win32' && settings.gameShortcutEnabled && sameShortcut(next, settings.gameShortcut)) {
+    return { ok: false, reason: label + ' is already your game shortcut.' };
+  }
+  if (dictationShortcutInUse(next, id)) {
+    return { ok: false, reason: label + ' is already used for dictation.' };
+  }
+  const prev = entry.accelerator;
+  if (sameShortcut(prev, next)) return { ok: true, reason: '' };
+  entry.accelerator = next;
+  syncPrimaryShortcutScalars();
+  const res = tryRegisterDictationShortcut(id, next);
+  // The picker reports a chord on key-down, so the keys are still held as
+  // the new registration goes live. Treat them as held until the watcher
+  // says otherwise; a hotkey auto-repeat arriving before it has even
+  // started must not become a recording.
+  if (res.ok) markWatcherStale(id);
+  if (!res.ok) {
+    entry.accelerator = prev;
+    syncPrimaryShortcutScalars();
+    tryRegisterDictationShortcut(id, prev);
+    // Say which chord and why, not just "unavailable" -- a Windows-reserved
+    // combination is indistinguishable from a broken app otherwise.
+    return res;
+  }
+  // The chord the user just picked works, so any standing launch-time notice
+  // about the old one is stale.
+  hotkeyNotice = '';
+  saveSettings();
+  return { ok: true, reason: '' };
+}
+
+function addDictationShortcut(accel) {
+  const next = String(accel || '').trim();
+  if (!next) return { ok: false, reason: 'Pick a key combination first.' };
+  const label = formatShortcutLabel(next);
+  if (sameShortcut(next, settings.pasteLastShortcut)) {
+    return { ok: false, reason: label + ' is already used to paste your last dictation.' };
+  }
+  if (process.platform === 'win32' && settings.gameShortcutEnabled && sameShortcut(next, settings.gameShortcut)) {
+    return { ok: false, reason: label + ' is already your game shortcut.' };
+  }
+  if (dictationShortcutInUse(next)) {
+    return { ok: false, reason: label + ' is already used for dictation.' };
+  }
+  const id = require('crypto').randomUUID();
+  // New shortcuts start as Toggle -- the historical default -- and inherit
+  // no recording state. `purpose` is reserved for future per-shortcut
+  // dictation profiles; nothing reads it yet.
+  dictationShortcuts().push({ id, accelerator: next, mode: 'toggle' });
+  syncPrimaryShortcutScalars();
+  const res = tryRegisterDictationShortcut(id, next);
+  if (res.ok) markWatcherStale(id);
+  if (!res.ok) {
+    const at = dictationShortcuts().findIndex((s) => s.id === id);
+    if (at >= 0) dictationShortcuts().splice(at, 1);
+    syncPrimaryShortcutScalars();
+    return res;
+  }
+  hotkeyNotice = '';
+  saveSettings();
+  return { ok: true, reason: '', id };
+}
+
+function removeDictationShortcut(id) {
+  if (dictationShortcuts().length <= 1) {
+    return { ok: false, reason: 'Keep at least one dictation shortcut.' };
+  }
+  const at = dictationShortcuts().findIndex((s) => s.id === id);
+  if (at < 0) return { ok: false, reason: 'That shortcut no longer exists.' };
+  // A removed key cannot end what it started: stop a live recording it owns
+  // rather than leave the bar recording with no way to finish.
+  if (pttOwner === shortcutOwnerId(id) && (mode === 'arming' || mode === 'recording')) {
+    requestPttStop();
+  }
+  unregisterDictationShortcut(id);
+  dictationShortcuts().splice(at, 1);
+  syncPrimaryShortcutScalars();
+  hotkeyNotice = '';
+  saveSettings();
+  return { ok: true, reason: '' };
+}
+
 function setDictateMode(next) {
-  if (next !== 'ptt' && next !== 'toggle') return;
-  settings.dictateMode = next;
+  const mode = hotkeys.normalizeDictationMode(next);
+  if (!hotkeys.DICTATION_MODES.includes(mode)) return;
+  setShortcutMode(primaryShortcut().id, mode);
+}
+
+// The mode of one shortcut. Registrations are mode-independent -- the live
+// entry's mode drives event routing -- so no re-registration is needed.
+function setShortcutMode(id, mode) {
+  const entry = shortcutById(id);
+  const next = hotkeys.normalizeDictationMode(mode);
+  if (!entry || !hotkeys.DICTATION_MODES.includes(next) || entry.mode === next) return false;
+  entry.mode = next;
+  syncPrimaryShortcutScalars();
   if (next === 'toggle') pttReleasePending = false;
   saveSettings();
   broadcast();
+  return true;
 }
 
 function setMicrophone(id) {
@@ -2506,9 +2685,8 @@ function setTrayFlag(key, value) {
 function trayMenuSignature() {
   return [
     mode === 'arming' || mode === 'recording' ? 'busy' : 'idle',
-    settings.shortcut,
+    dictationShortcuts().map((s) => s.accelerator + ':' + s.mode).join(','),
     settings.pasteLastShortcut,
-    settings.dictateMode,
     settings.verbatimMode ? 'v1' : 'v0',
     settings.muteMusicWhileDictating !== false ? 'm1' : 'm0',
     settings.launchAtLogin ? 'l1' : 'l0',
@@ -2519,16 +2697,32 @@ function trayMenuSignature() {
   ].join('|');
 }
 
+// One Dictation submenu per shortcut: the keybind names it, and each offers
+// the three modes as radios. A `purpose` field on the entry will grow a
+// second section here when per-shortcut profiles land.
+function dictationModeSubmenus() {
+  return dictationShortcuts().map((entry) => ({
+    label: trayMenuLabel('Dictation', entry.accelerator),
+    submenu: hotkeys.DICTATION_MODES.map((m) => ({
+      label: m === 'toggle' ? 'Toggle' : m === 'ptt' ? 'Push to talk' : 'Both',
+      type: 'radio',
+      checked: entry.mode === m,
+      click: () => setShortcutMode(entry.id, m),
+    })),
+  }));
+}
+
 function buildTrayTemplate() {
   const busy = mode === 'arming' || mode === 'recording';
   const words = macShell.trayLabels(process.platform);
+  const primary = primaryShortcut();
   return [
     { label: 'Open Vell', click: () => openHistory() },
     { type: 'separator' },
     {
       // The one item whose label is worth changing: from the tray there is no
       // other sign of whether a dictation is already running.
-      label: trayMenuLabel(busy ? 'Finish dictation' : 'Start dictation', settings.shortcut),
+      label: trayMenuLabel(busy ? 'Finish dictation' : 'Start dictation', primary.accelerator),
       click: () => dictationHotkeyHandler(),
     },
     {
@@ -2537,13 +2731,7 @@ function buildTrayTemplate() {
       click: () => { pasteLastDictation().catch(() => {}); },
     },
     { type: 'separator' },
-    {
-      label: 'Dictation mode',
-      submenu: [
-        { label: 'Toggle', type: 'radio', checked: !isPtt(), click: () => setDictateMode('toggle') },
-        { label: 'Push to talk', type: 'radio', checked: isPtt(), click: () => setDictateMode('ptt') },
-      ],
-    },
+    ...dictationModeSubmenus(),
     { label: 'Microphone', submenu: microphoneSubmenu() },
     {
       label: 'Verbatim mode',
@@ -2683,7 +2871,8 @@ async function rememberFocus() {
   }
 }
 
-function startRecording(fromPtt, { game = false } = {}) {
+function startRecording(fromPtt, opts = {}) {
+  const { game = false } = opts;
   const pressedAt = Date.now();
   if (isQuitting) return;
   if (mode === 'arming' || mode === 'recording' || mode === 'transcribing') return;
@@ -2700,8 +2889,11 @@ function startRecording(fromPtt, { game = false } = {}) {
   autoLearnReceipt = null;
   requestSidecarStart();
   const sessionToken = advanceRecordingSession();
+  const edgeSession = !!fromPtt && (game
+    ? hotkeys.modeUsesEdges(primaryShortcut().mode)
+    : hotkeys.modeUsesEdges(opts.shortcutMode));
   gameDictation = game;
-  pttOwner = fromPtt && isPtt() ? (game ? 'game' : 'dictation') : null;
+  pttOwner = edgeSession ? (game ? 'game' : shortcutOwnerId(opts.shortcutId)) : null;
   corpus.clearRetry();
   // A live copy left over from the dictation before this one would otherwise
   // have this one appended to it.
@@ -2715,7 +2907,7 @@ function startRecording(fromPtt, { game = false } = {}) {
   pttReleasePending = false;
   pttLocked = false;
   pttIgnoreNextUp = false;
-  const pttSession = !!fromPtt && isPtt();
+  const pttSession = edgeSession;
   // Do not call this "recording" until the renderer has a live audio graph.
   // Short commands often begin immediately; showing the waveform while
   // getUserMedia is still starting silently clips their first word.
@@ -2789,7 +2981,8 @@ async function requestStop() {
 // press is the one that ends it. `opts` reaches startRecording: the game
 // shortcut passes { game: true }.
 function pttPress(opts) {
-  const owner = opts && opts.game ? 'game' : 'dictation';
+  const o = opts || {};
+  const owner = o.game ? 'game' : shortcutOwnerId(o.id);
   if (pttLocked && (mode === 'arming' || mode === 'recording')) {
     pttOwner = owner;
     pttLocked = false;
@@ -2809,7 +3002,7 @@ function pttPress(opts) {
   // is held. It must not reset the tap timer or take over the recording.
   if (mode === 'arming' || mode === 'recording' || mode === 'transcribing') return;
   pttPressedAt = Date.now();
-  startRecording(true, opts);
+  startRecording(true, { game: !!o.game, shortcutId: o.id, shortcutMode: o.mode });
 }
 
 // The physical UP edge. A release within PTT_TAP_MS of the press locks the
@@ -2822,7 +3015,8 @@ function pttPress(opts) {
 // tap and locked the dictation on (reported 2026-10-18). This clock is only
 // the fallback for a release that carries no time.
 function pttRelease(dirty, opts) {
-  const key = opts && opts.game ? 'game' : 'dictation';
+  const o = opts || {};
+  const key = o.game ? 'game' : shortcutOwnerId(o.id);
   if (pttOwner !== key) return;
   if (pttIgnoreNextUp) {
     pttIgnoreNextUp = false;
@@ -2834,14 +3028,21 @@ function pttRelease(dirty, opts) {
   }
   const active = mode === 'arming' || mode === 'recording';
   const readMs = pttPressedAt ? Date.now() - pttPressedAt : null;
-  const heldMs = opts && Number.isFinite(opts.heldMs) ? opts.heldMs : readMs;
+  const heldMs = o && Number.isFinite(o.heldMs) ? o.heldMs : readMs;
   if (active && readMs !== null && Math.abs(heldMs - readMs) > PTT_LATE_EDGE_MS) {
     diagLog('ptt-late-edge', { key, heldMs, readMs });
   }
+  const smode = hotkeys.normalizeDictationMode(o.mode);
   if (active && !pttLocked && heldMs !== null && heldMs < PTT_TAP_MS) {
-    pttLocked = true;
-    diagLog('ptt-tap-lock', { key, heldMs, readMs });
-    sendOverlay({ pttLocked: true });
+    if (smode === 'both') {
+      pttLocked = true;
+      diagLog('ptt-tap-lock', { key, heldMs, readMs });
+      sendOverlay({ pttLocked: true });
+      return;
+    }
+    // Push to talk is hold-only: a tap that short carried no speech, so the
+    // recording is discarded instead of locking on.
+    cancelListen();
     return;
   }
   requestPttStop();
@@ -2853,8 +3054,20 @@ function pttRelease(dirty, opts) {
 // compile the helper. Nothing else reports that release, so the recording ran
 // until the next press. A locked dictation is not waiting for a release, and
 // the FREE of a launch or a shortcut change has no recording to end.
+// Whether the owner of an in-flight edge-driven recording still wants edge
+// semantics. The game shortcut follows the primary dictation shortcut; a
+// removed dictation shortcut keeps its recording stoppable.
+function ownerUsesEdges(owner) {
+  if (owner === 'game') return isPtt();
+  if (typeof owner === 'string' && owner.startsWith('dictation:')) {
+    const entry = shortcutById(owner.slice('dictation:'.length));
+    return entry ? hotkeys.modeUsesEdges(entry.mode) : true;
+  }
+  return false;
+}
+
 function endPttMissedRelease(key) {
-  if (!isPtt() || pttLocked || !pttRecordingOf(key)) return;
+  if (!ownerUsesEdges(key) || pttLocked || !pttRecordingOf(key)) return;
   diagLog('ptt-release-missed', { key, mode });
   requestPttStop();
 }
@@ -4383,14 +4596,19 @@ async function ensureVozReady() {
   markModelUsed();
 }
 
-function dictationHotkeyHandler() {
+function dictationHotkeyHandler(id) {
   // globalShortcut reports key-down but has no matching key-up callback. The
-  // native watcher owns both edges in PTT mode; accepting this callback too
-  // would start or stop the same recording twice.
-  if (isPtt()) return;
-  if (chordStaleHeld) return;
-  if (mode === 'idle' || mode === 'success' || mode === 'error' || mode === 'learned' || mode === 'cancel') startRecording(true);
-  else if (mode === 'arming' || mode === 'recording') requestStop();
+  // native watcher owns both edges in push-to-talk and both modes; accepting
+  // this callback too would start or stop the same recording twice.
+  const entry = id ? shortcutById(id) : primaryShortcut();
+  if (entry && hotkeys.modeUsesEdges(entry.mode)) return;
+  if (id && watcherStaleHeld(id)) {
+    clearWatcherStale(id);
+    return;
+  }
+  if (mode === 'idle' || mode === 'success' || mode === 'error' || mode === 'learned' || mode === 'cancel') {
+    startRecording(true, entry ? { shortcutId: entry.id, shortcutMode: entry.mode } : {});
+  } else if (mode === 'arming' || mode === 'recording') requestStop();
 }
 
 function lastDictationText() {
@@ -4442,10 +4660,17 @@ function sameShortcut(a, b) {
   return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
 }
 
-function unregisterDictationShortcut() {
-  if (registeredShortcut) {
-    try { globalShortcut.unregister(registeredShortcut); } catch (_) {}
-    registeredShortcut = null;
+function unregisterDictationShortcut(id) {
+  // No id clears every dictation shortcut: used at launch before the first
+  // registration pass.
+  const ids = id ? [id] : [...new Set([...registeredGlobals.keys(), ...chordWatchers.keys()])];
+  for (const key of ids) {
+    const reg = registeredGlobals.get(key);
+    if (reg) {
+      try { globalShortcut.unregister(reg); } catch (_) {}
+      registeredGlobals.delete(key);
+    }
+    stopChordWatch(key);
   }
 }
 
@@ -4458,29 +4683,52 @@ function unregisterPasteLastShortcut() {
 
 const shortcutFailureReason = hotkeys.shortcutFailureReason;
 
-function stopChordWatch() {
-  if (chordWatchRestartTimer) {
-    clearTimeout(chordWatchRestartTimer);
-    chordWatchRestartTimer = null;
+function stopChordWatch(id) {
+  const w = chordWatchers.get(id);
+  if (!w) return;
+  chordWatchers.delete(id);
+  if (w.restartTimer) {
+    clearTimeout(w.restartTimer);
+    w.restartTimer = null;
   }
-  chordWatchAccel = '';
-  chordWatchRestartDelay = 250;
-  chordStaleHeld = false;
-  if (chordWatch) {
-    const proc = chordWatch;
-    chordWatch = null;
+  if (w.proc) {
+    const proc = w.proc;
+    w.proc = null;
     try { proc.kill(); } catch (_) {}
   }
 }
 
-function scheduleChordWatchRestart(accel) {
-  if (isQuitting || chordWatchRestartTimer || !sameShortcut(chordWatchAccel, accel)) return;
-  const delay = chordWatchRestartDelay;
-  chordWatchRestartDelay = Math.min(5000, chordWatchRestartDelay * 2);
-  chordWatchRestartTimer = setTimeout(() => {
-    chordWatchRestartTimer = null;
-    if (!isQuitting && !chordWatch && sameShortcut(chordWatchAccel, accel)
-        && !launchChordWatch(accel)) scheduleChordWatchRestart(accel);
+// A chord physically down from before its watcher (or hotkey registration)
+// existed. Changing a shortcut in settings registers the new chord on
+// key-down; the next press must be swallowed, not dictated.
+function watcherStaleHeld(id) {
+  const w = chordWatchers.get(id);
+  return !!(w && w.staleHeld);
+}
+
+function clearWatcherStale(id) {
+  const w = chordWatchers.get(id);
+  if (w) w.staleHeld = false;
+}
+
+function markWatcherStale(id) {
+  const w = chordWatchers.get(id);
+  if (w) w.staleHeld = true;
+}
+
+function scheduleChordWatchRestart(id) {
+  const w = chordWatchers.get(id);
+  if (isQuitting || !w || w.restartTimer) return;
+  const delay = w.restartDelay;
+  w.restartDelay = Math.min(5000, w.restartDelay * 2);
+  w.restartTimer = setTimeout(() => {
+    w.restartTimer = null;
+    if (isQuitting) return;
+    const current = chordWatchers.get(id);
+    if (!current || current !== w || current.proc) return;
+    const entry = shortcutById(id);
+    if (!entry || !sameShortcut(current.accel, entry.accelerator)) return;
+    if (!launchChordWatch(id, current.accel, entry.mode)) scheduleChordWatchRestart(id);
   }, delay);
 }
 
@@ -4502,10 +4750,18 @@ function modifiedPressIgnored(msg, accel) {
   return msg === 'DOWN modified' && hotkeys.isLoneKey(accel) && !foregroundFillsMonitor;
 }
 
-function launchChordWatch(accel) {
+function launchChordWatch(id, accel, watchMode) {
   if (!chordWatchSupported()) return false;
   const encoded = hotkeys.encodeChordFor(process.platform, accel);
   if (!encoded) return false;
+  let w = chordWatchers.get(id);
+  if (!w) {
+    w = { proc: null, accel, mode: watchMode, restartTimer: null, restartDelay: 250, staleHeld: false, skipPress: false };
+    chordWatchers.set(id, w);
+  }
+  w.accel = accel;
+  w.mode = watchMode;
+  w.skipPress = false;
   let proc;
   const cmd = helperCommand(['-Action', 'hotkey-watch', '-Vks', encoded]);
   try {
@@ -4513,57 +4769,61 @@ function launchChordWatch(accel) {
   } catch (_) {
     return false;
   }
-  chordWatch = proc;
+  w.proc = proc;
+  const owner = shortcutOwnerId(id);
   const bornAt = Date.now();
   let buf = '';
   let errTail = '';
-  let skipPress = false;
   proc.stdout.on('data', (chunk) => {
-    if (chordWatch !== proc) return;
-    chordWatchRestartDelay = 250;
+    const current = chordWatchers.get(id);
+    if (!current || current.proc !== proc) return;
+    current.restartDelay = 250;
     buf += String(chunk);
     const lines = buf.split(/\r?\n/);
     buf = lines.pop() || '';
     for (const line of lines) {
       const { msg, heldMs } = watcherLine(line.trim());
       if (!msg) continue;
+      // The mode is read live: changing it in Settings must not require a
+      // re-registration, and the entry may be gone (removed mid-hold).
+      const live = shortcutById(id);
+      const smode = live ? live.mode : current.mode;
       // The watcher's opening line says whether the chord was already down
       // when it started looking. That hold predates the watcher, so it is
       // never a press: "UP stale" only ends a recording a previous watcher
       // began before it died mid-hold, and FREE one whose release fell
       // between the two watchers.
-      if (msg === 'HELD') { chordStaleHeld = true; continue; }
+      if (msg === 'HELD') { current.staleHeld = true; continue; }
       if (msg === 'FREE') {
-        chordStaleHeld = false;
-        endPttMissedRelease('dictation');
+        current.staleHeld = false;
+        endPttMissedRelease(owner);
         continue;
       }
       if (msg === 'UP stale') {
-        chordStaleHeld = false;
-        if (isPtt() && pttOwner === 'dictation' && (mode === 'arming' || mode === 'recording')) requestPttStop();
+        current.staleHeld = false;
+        if (hotkeys.modeUsesEdges(smode) && pttOwner === owner && (mode === 'arming' || mode === 'recording')) requestPttStop();
         continue;
       }
-      if (msg === 'DOWN' || msg === 'DOWN modified') skipPress = modifiedPressIgnored(msg, chordWatchAccel);
-      if (skipPress) {
-        if (msg.startsWith('UP')) skipPress = false;
+      if (msg === 'DOWN' || msg === 'DOWN modified') current.skipPress = modifiedPressIgnored(msg, current.accel);
+      if (current.skipPress) {
+        if (msg.startsWith('UP')) current.skipPress = false;
         continue;
       }
-      // Push to talk wants the edges; toggle wants one event per press, and it
-      // has to be the release -- "dirty" is how a chord that was really
-      // Ctrl+Win+Left stays a virtual-desktop switch and nothing more. For a
-      // lone key that came down on its own (above), dirty is only W held to
-      // move or a click in a game, and the press counts.
-      const lone = hotkeys.isLoneKey(chordWatchAccel);
-      if (isPtt()) {
-        if (msg === 'DOWN' || msg === 'DOWN modified') pttPress();
-        // Push to talk cannot know a chord is dirty until it ends, so it starts
-        // recording either way and throws the result out rather than leaving a
-        // stray transcript behind every virtual-desktop switch.
-        else if (msg === 'UP dirty') pttRelease(!lone, { heldMs });
-        else if (msg === 'UP clean') pttRelease(false, { heldMs });
-      } else if ((msg === 'UP clean' && (lone || hotkeys.isModifierOnly(chordWatchAccel)))
+      // Push to talk and both want the edges; toggle wants one event per
+      // press, and it has to be the release -- "dirty" is how a chord that
+      // was really Ctrl+Win+Left stays a virtual-desktop switch and nothing
+      // more. For a lone key that came down on its own (above), dirty is only
+      // W held to move or a click in a game, and the press counts.
+      const lone = hotkeys.isLoneKey(current.accel);
+      if (hotkeys.modeUsesEdges(smode)) {
+        if (msg === 'DOWN' || msg === 'DOWN modified') pttPress({ id, mode: smode });
+        // A dirty end means the chord was something else; push to talk drops
+        // it, and both mode drops it too -- a tap that counts must be clean.
+        else if (msg === 'UP dirty') pttRelease(!lone, { id, mode: smode, heldMs });
+        else if (msg === 'UP clean') pttRelease(false, { id, mode: smode, heldMs });
+      } else if ((msg === 'UP clean' && (lone || hotkeys.isModifierOnly(current.accel)))
           || (msg === 'UP dirty' && lone)) {
-        dictationHotkeyHandler();
+        dictationHotkeyHandler(id);
       }
     }
   });
@@ -4571,41 +4831,48 @@ function launchChordWatch(accel) {
   // compile its helper says why there and nowhere else.
   if (proc.stderr) proc.stderr.on('data', (chunk) => { errTail = (errTail + String(chunk)).slice(-200); });
   const lost = (why) => {
-    if (chordWatch === proc) {
-      chordWatch = null;
-      diagLog('key-watch-lost', {
-        key: 'dictation', why, aliveMs: Date.now() - bornAt,
-        recording: pttRecordingOf('dictation'), stderr: errTail.trim().slice(-120),
-      });
-      scheduleChordWatchRestart(accel);
-    }
+    const current = chordWatchers.get(id);
+    if (!current || current.proc !== proc) return;
+    current.proc = null;
+    diagLog('key-watch-lost', {
+      key: 'dictation', id, why, aliveMs: Date.now() - bornAt,
+      recording: pttRecordingOf(owner), stderr: errTail.trim().slice(-120),
+    });
+    scheduleChordWatchRestart(id);
   };
   proc.on('error', (err) => lost('error ' + String((err && (err.code || err.message)) || '').slice(0, 40)));
   proc.on('exit', (code, signal) => lost(signal ? 'signal ' + signal : 'exit ' + code));
   return true;
 }
 
-function startChordWatch(accel) {
-  stopChordWatch();
-  chordWatchAccel = accel;
-  chordWatchRestartDelay = 250;
-  if (launchChordWatch(accel)) return true;
-  chordWatchAccel = '';
+function startChordWatch(id, accel, watchMode) {
+  stopChordWatch(id);
+  chordWatchers.set(id, { proc: null, accel, mode: watchMode, restartTimer: null, restartDelay: 250, staleHeld: false, skipPress: false });
+  if (launchChordWatch(id, accel, watchMode)) return true;
+  chordWatchers.delete(id);
   return false;
 }
 
-function tryRegisterDictationShortcut(accel) {
-  unregisterDictationShortcut();
-  stopChordWatch();
-  const candidate = accel || settings.shortcut || hotkeys.defaultShortcut();
+function tryRegisterDictationShortcut(id, accel) {
+  unregisterDictationShortcut(id);
+  const entry = shortcutById(id);
+  const candidate = accel || (entry && entry.accelerator) || hotkeys.defaultShortcut();
+  const entryMode = hotkeys.normalizeDictationMode(entry && entry.mode);
   if (sameShortcut(candidate, settings.pasteLastShortcut)) {
     return { ok: false, reason: formatShortcutLabel(candidate) + ' is already used to paste your last dictation.' };
   }
+  for (const other of dictationShortcuts()) {
+    if (other.id !== id && sameShortcut(candidate, other.accelerator)) {
+      return { ok: false, reason: formatShortcutLabel(candidate) + ' is already used for dictation.' };
+    }
+  }
+  if (process.platform === 'win32' && settings.gameShortcutEnabled && sameShortcut(candidate, settings.gameShortcut)) {
+    return { ok: false, reason: formatShortcutLabel(candidate) + ' is already your game shortcut.' };
+  }
   if (hotkeys.isModifierOnly(candidate)) {
-    if (!startChordWatch(candidate)) {
+    if (!startChordWatch(id, candidate, entryMode)) {
       return { ok: false, reason: formatShortcutLabel(candidate) + ' could not be watched. Try another combination.' };
     }
-    registeredShortcut = null;
     return { ok: true, reason: '' };
   }
   // A lone key toggles from the watcher's release, like a modifier-only chord:
@@ -4614,11 +4881,11 @@ function tryRegisterDictationShortcut(accel) {
   // kept from the app in front -- F5 does not also reload the page.
   const lone = hotkeys.isLoneKey(candidate) && chordWatchSupported();
   try {
-    const ok = globalShortcut.register(candidate, lone ? () => {} : dictationHotkeyHandler);
+    const ok = globalShortcut.register(candidate, lone ? () => {} : () => dictationHotkeyHandler(id));
     if (!ok) return { ok: false, reason: shortcutFailureReason(candidate, false) };
-    registeredShortcut = candidate;
-    if (chordWatchSupported() && !startChordWatch(candidate)) {
-      unregisterDictationShortcut();
+    registeredGlobals.set(id, candidate);
+    if (chordWatchSupported() && !startChordWatch(id, candidate, entryMode)) {
+      unregisterDictationShortcut(id);
       return { ok: false, reason: formatShortcutLabel(candidate) + ' could not be watched. Try another combination.' };
     }
     return { ok: true, reason: '' };
@@ -4630,7 +4897,7 @@ function tryRegisterDictationShortcut(accel) {
 function tryRegisterPasteLastShortcut(accel) {
   unregisterPasteLastShortcut();
   const candidate = accel || settings.pasteLastShortcut || 'CommandOrControl+Alt+V';
-  if (sameShortcut(candidate, settings.shortcut)) {
+  if (dictationShortcutInUse(candidate)) {
     return { ok: false, reason: formatShortcutLabel(candidate) + ' is already used for dictation.' };
   }
   try {
@@ -4724,7 +4991,7 @@ function launchGameWatch(accel) {
         if (isPtt() && pttOwner === 'game' && (mode === 'arming' || mode === 'recording')) requestPttStop();
       } else if (isPtt()) {
         if (msg === 'DOWN' || msg === 'DOWN modified') pttPress({ game: true });
-        else if (msg === 'UP clean' || msg === 'UP dirty') pttRelease(false, { game: true, heldMs });
+        else if (msg === 'UP clean' || msg === 'UP dirty') pttRelease(false, { game: true, heldMs, mode: primaryShortcut().mode });
       } else if (msg === 'UP clean' || msg === 'UP dirty') {
         gameToggle();
       }
@@ -4751,6 +5018,11 @@ function launchGameWatch(accel) {
   return true;
 }
 
+// True when any dictation shortcut answers to this chord.
+function dictationShortcutInUse(accel, exceptId) {
+  return dictationShortcuts().some((s) => s.id !== exceptId && sameShortcut(accel, s.accelerator));
+}
+
 function unregisterGameShortcut() {
   if (registeredGameShortcut) {
     try { globalShortcut.unregister(registeredGameShortcut); } catch (_) {}
@@ -4767,7 +5039,7 @@ function tryRegisterGameShortcut(accel) {
   // app until the user turns game typing on.
   if (process.platform !== 'win32' || settings.gameShortcutEnabled !== true) return { ok: true, reason: '' };
   const candidate = accel || settings.gameShortcut || GAME_SHORTCUT_DEFAULT;
-  if (sameShortcut(candidate, settings.shortcut)) {
+  if (dictationShortcutInUse(candidate)) {
     return { ok: false, reason: formatShortcutLabel(candidate) + ' is already used for dictation.' };
   }
   if (sameShortcut(candidate, settings.pasteLastShortcut)) {
@@ -4797,23 +5069,24 @@ function registerHotkeys() {
   // simply not the one the user picked, with nothing to say why. The notice
   // stands until the shortcut is changed or the app is restarted.
   //
-  // settings.shortcut is reassigned but deliberately not saved -- next launch
+  // The fallback is reassigned but deliberately not saved -- next launch
   // should try the user's real choice again, in case whatever was holding the
   // chord is gone.
   const notices = [];
 
-  const dictation = tryRegisterDictationShortcut(settings.shortcut);
-  if (!dictation.ok) {
-    settings.shortcut = hotkeys.defaultShortcut();
-    const fallback = tryRegisterDictationShortcut(settings.shortcut);
-    notices.push(dictation.reason + (fallback.ok
-      ? ' Dictation is on ' + formatShortcutLabel(settings.shortcut) + ' for now.'
-      : ' Dictation has no shortcut right now.'));
+  for (const entry of dictationShortcuts()) {
+    const res = tryRegisterDictationShortcut(entry.id, entry.accelerator);
+    if (res.ok) continue;
+    entry.accelerator = hotkeys.defaultShortcut();
+    const fallback = tryRegisterDictationShortcut(entry.id, entry.accelerator);
+    notices.push(res.reason + (fallback.ok
+      ? ' Dictation is on ' + formatShortcutLabel(entry.accelerator) + ' for now.'
+      : ' One dictation shortcut has no keybind right now.'));
   }
 
   const paste = tryRegisterPasteLastShortcut(settings.pasteLastShortcut);
   if (!paste.ok) {
-    settings.pasteLastShortcut = sameShortcut(settings.shortcut, 'CommandOrControl+Alt+V')
+    settings.pasteLastShortcut = dictationShortcuts().some((s) => sameShortcut(s.accelerator, 'CommandOrControl+Alt+V'))
       // "Period" is not an accelerator name Electron accepts -- it throws on
       // conversion, which this function's catch turned into "no paste hotkey at
       // all". The literal character is the spelling that registers.
@@ -5345,48 +5618,56 @@ ipcMain.handle('settings-set', async (_e, patch) => {
     return { appTheme: settings.appTheme };
   }
 
-  if (patch.dictateMode === 'ptt' || patch.dictateMode === 'toggle') {
-    settings.dictateMode = patch.dictateMode;
-    if (patch.dictateMode === 'toggle') pttReleasePending = false;
+  if (patch.dictateMode !== undefined) {
+    // Legacy single-mode patch: applies to the primary shortcut.
+    const mode = hotkeys.normalizeDictationMode(patch.dictateMode);
+    if (hotkeys.DICTATION_MODES.includes(mode)) setShortcutMode(primaryShortcut().id, mode);
   }
 
   if (typeof patch.shortcut === 'string' && patch.shortcut.trim()) {
-    const prev = settings.shortcut;
-    const next = patch.shortcut.trim();
-    if (sameShortcut(next, settings.pasteLastShortcut)) {
-      return Object.assign(snapshot(), {
-        shortcutError: formatShortcutLabel(next) + ' is already used to paste your last dictation.',
-      });
-    }
-    if (process.platform === 'win32' && settings.gameShortcutEnabled && sameShortcut(next, settings.gameShortcut)) {
-      return Object.assign(snapshot(), {
-        shortcutError: formatShortcutLabel(next) + ' is already your game shortcut.',
-      });
-    }
-    settings.shortcut = next;
-    const res = tryRegisterDictationShortcut(next);
-    // The picker reports a chord on key-down, so the keys are still held as
-    // the new registration goes live. Treat them as held until the watcher
-    // says otherwise; a hotkey auto-repeat arriving before it has even
-    // started must not become a recording.
-    if (res.ok) chordStaleHeld = true;
+    // Legacy single-chord patch: applies to the primary shortcut.
+    const res = applyShortcutAccelerator(primaryShortcut().id, patch.shortcut.trim());
     if (!res.ok) {
-      settings.shortcut = prev;
-      tryRegisterDictationShortcut(prev);
-      // Say which chord and why, not just "unavailable" -- a Windows-reserved
-      // combination is indistinguishable from a broken app otherwise.
       return Object.assign(snapshot(), { shortcutError: res.reason });
     }
-    // The chord the user just picked works, so any standing launch-time notice
-    // about the old one is stale.
-    hotkeyNotice = '';
-    saveSettings();
+  }
+
+  if (typeof patch.shortcutAdd === 'string' && patch.shortcutAdd.trim()) {
+    const res = addDictationShortcut(patch.shortcutAdd.trim());
+    if (!res.ok) {
+      return Object.assign(snapshot(), { shortcutError: res.reason });
+    }
+    return Object.assign(snapshot(), { shortcutAddedId: res.id });
+  }
+
+  if (patch.shortcutUpdate && typeof patch.shortcutUpdate === 'object') {
+    const update = patch.shortcutUpdate;
+    if (typeof update.accelerator === 'string' && update.accelerator.trim()) {
+      const res = applyShortcutAccelerator(update.id, update.accelerator.trim());
+      if (!res.ok) {
+        return Object.assign(snapshot(), { shortcutError: res.reason });
+      }
+    }
+    if (update.mode !== undefined) {
+      const entry = shortcutById(update.id);
+      if (!entry) {
+        return Object.assign(snapshot(), { shortcutError: 'That shortcut no longer exists.' });
+      }
+      setShortcutMode(update.id, update.mode);
+    }
+  }
+
+  if (typeof patch.shortcutRemove === 'string' && patch.shortcutRemove) {
+    const res = removeDictationShortcut(patch.shortcutRemove);
+    if (!res.ok) {
+      return Object.assign(snapshot(), { shortcutError: res.reason });
+    }
   }
 
   if (typeof patch.pasteLastShortcut === 'string' && patch.pasteLastShortcut.trim()) {
     const prev = settings.pasteLastShortcut;
     const next = patch.pasteLastShortcut.trim();
-    if (sameShortcut(next, settings.shortcut)) {
+    if (dictationShortcutInUse(next)) {
       return Object.assign(snapshot(), {
         shortcutError: formatShortcutLabel(next) + ' is already used for dictation.',
       });
@@ -5854,8 +6135,8 @@ if (!gotLock) {
     if (clipboardPaste) clipboardPaste.restore();
     globalShortcut.unregisterAll();
     pttReleasePending = false;
-    // A watcher left running would outlive the app and hold a powershell process.
-    stopChordWatch();
+    // Watchers left running would outlive the app and hold helper processes.
+    unregisterDictationShortcut();
     stopGameWatch();
     stopForegroundWatch();
     stopPsServers();

@@ -80,7 +80,7 @@ let shortcutLabel = 'Ctrl+Win';
 let pttLocked = false;
 
 function recordingTitle(dictateMode) {
-  return dictateMode === 'ptt' && !pttLocked
+  return (dictateMode === 'ptt' || dictateMode === 'both') && !pttLocked
     ? 'Release ' + shortcutLabel + ' to finish'
     : 'Press ' + shortcutLabel + ' again to finish';
 }
@@ -2300,7 +2300,7 @@ if (window.vell) {
     if (typeof s.keepLiveAudio === 'boolean') keepLiveAudio = s.keepLiveAudio;
     if (s.microphone) micDeviceId = s.microphone;
     if (s.dictateMode) {
-      document.body.classList.toggle('ptt', s.dictateMode === 'ptt');
+      document.body.classList.toggle('ptt', s.dictateMode === 'ptt' || s.dictateMode === 'both');
     }
     if (typeof s.pttLocked === 'boolean') {
       const locked = s.pttLocked;

@@ -85,9 +85,18 @@ function snapshot() {
   return {
     entries,
     phrases: Array.isArray(dictionary.phrases) ? dictionary.phrases : [],
-    dictateMode: settings.dictateMode === 'ptt' ? 'ptt' : 'toggle',
+    dictateMode: settings.dictateMode === 'both' ? 'both' : settings.dictateMode === 'ptt' ? 'ptt' : 'toggle',
     shortcut: settings.shortcut,
     shortcutLabel: formatShortcutLabel(settings.shortcut),
+    shortcuts: Array.isArray(settings.shortcuts) && settings.shortcuts.length ? settings.shortcuts.map((s) => ({
+      id: String(s.id), accelerator: s.accelerator,
+      label: s.label || formatShortcutLabel(s.accelerator),
+      mode: s.mode === 'both' ? 'both' : s.mode === 'ptt' ? 'ptt' : 'toggle',
+    })) : [{
+      id: 'preview-primary', accelerator: settings.shortcut,
+      label: formatShortcutLabel(settings.shortcut),
+      mode: settings.dictateMode === 'both' ? 'both' : settings.dictateMode === 'ptt' ? 'ptt' : 'toggle',
+    }],
     pasteLastShortcut: settings.pasteLastShortcut || 'CommandOrControl+Alt+V',
     pasteLastShortcutLabel: formatShortcutLabel(settings.pasteLastShortcut || 'CommandOrControl+Alt+V'),
     launchAtLogin: !!settings.launchAtLogin,
@@ -155,7 +164,42 @@ window.vell = (function () {
     onHistory: function (cb) { historyCbs.push(cb); },
     setSettings: function (patch) {
       if (!patch || typeof patch !== 'object') return Promise.resolve(clone());
-      if (patch.dictateMode === 'ptt' || patch.dictateMode === 'toggle') payload.dictateMode = patch.dictateMode;
+      if (patch.dictateMode === 'ptt' || patch.dictateMode === 'toggle' || patch.dictateMode === 'both') {
+        payload.dictateMode = patch.dictateMode;
+        if (payload.shortcuts && payload.shortcuts[0]) {
+          payload.shortcuts = payload.shortcuts.map((s, i) => i === 0 ? Object.assign({}, s, { mode: patch.dictateMode }) : s);
+        }
+      }
+      if (patch.shortcutUpdate && typeof patch.shortcutUpdate === 'object') {
+        var update = patch.shortcutUpdate;
+        payload.shortcuts = (payload.shortcuts || []).map(function (s) {
+          if (String(s.id) !== String(update.id)) return s;
+          var next = Object.assign({}, s);
+          if (typeof update.accelerator === 'string' && update.accelerator.trim()) {
+            next.accelerator = update.accelerator.trim();
+            next.label = next.accelerator.replace(/CommandOrControl/g, 'Ctrl').replace(/Super/g, 'Win');
+          }
+          if (update.mode === 'toggle' || update.mode === 'ptt' || update.mode === 'both') next.mode = update.mode;
+          return next;
+        });
+        if (payload.shortcuts[0]) {
+          payload.shortcut = payload.shortcuts[0].accelerator;
+          payload.shortcutLabel = payload.shortcuts[0].label;
+          payload.dictateMode = payload.shortcuts[0].mode;
+        }
+      }
+      if (typeof patch.shortcutAdd === 'string' && patch.shortcutAdd.trim()) {
+        var accel = patch.shortcutAdd.trim();
+        payload.shortcuts = (payload.shortcuts || []).concat([{
+          id: 'preview-' + payload.shortcuts.length + '-' + Date.now(),
+          accelerator: accel,
+          label: accel.replace(/CommandOrControl/g, 'Ctrl').replace(/Super/g, 'Win'),
+          mode: 'toggle',
+        }]);
+      }
+      if (typeof patch.shortcutRemove === 'string' && patch.shortcutRemove && (payload.shortcuts || []).length > 1) {
+        payload.shortcuts = payload.shortcuts.filter(function (s) { return String(s.id) !== String(patch.shortcutRemove); });
+      }
       if (typeof patch.shortcut === 'string') {
         payload.shortcut = patch.shortcut;
         payload.shortcutLabel = patch.shortcut.replace(/CommandOrControl/g, 'Ctrl').replace(/Command/g, 'Cmd').replace(/Super/g, 'Win');

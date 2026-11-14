@@ -8,6 +8,7 @@ function prepare(h, mode) {
   h.run(`
     // Dictation needs an account. This test is not about sign-in, so it has one.
     accountManager = { signedIn: () => true, token: () => '', snapshot: () => ({ signedIn: true, plan: 'free' }) };
+    settings.shortcuts = [{ id: 's1', accelerator: 'CommandOrControl+Shift+Space', mode: '${mode || 'ptt'}' }];
     settings.shortcut = 'CommandOrControl+Shift+Space';
     settings.dictateMode = '${mode || 'ptt'}';
     sidecarState = 'ready'; mode = 'idle';
@@ -20,11 +21,19 @@ function prepare(h, mode) {
   `);
 }
 
+function watcherProc(h, id) {
+  return h.run(`chordWatchers.get('${id || 's1'}').proc`);
+}
+
+function useChord(h, accel) {
+  h.run(`settings.shortcuts[0].accelerator = '${accel}'; settings.shortcut = '${accel}';`);
+}
+
 async function testReleaseDuringArming() {
   const h = mainHarness();
   try {
     prepare(h, 'ptt');
-    h.run('startRecording(true)');
+    h.run('startRecording(true, { shortcutId: "s1", shortcutMode: "ptt" })');
     assert.strictEqual(h.run('mode'), 'arming');
     assert.strictEqual(h.context.pttStates[0].prepareOnly, false,
       'PTT must open the microphone without waiting for media pause');
@@ -52,7 +61,7 @@ async function testNativeWatcherOwnsPttEdges() {
   const h = mainHarness();
   try {
     prepare(h, 'ptt');
-    const result = h.run("tryRegisterDictationShortcut('CommandOrControl+Shift+Space')");
+    const result = h.run("tryRegisterDictationShortcut('s1', 'CommandOrControl+Shift+Space')");
     assert.strictEqual(result.ok, true);
     assert.strictEqual(h.shortcuts.has('CommandOrControl+Shift+Space'), true,
       'normal chords remain reserved through Electron');
@@ -63,7 +72,7 @@ async function testNativeWatcherOwnsPttEdges() {
     assert.strictEqual(h.run('mode'), 'idle',
       'Electron key-down is ignored in PTT mode to avoid duplicate starts');
 
-    const watcher = h.launches[0].proc;
+    const watcher = watcherProc(h, 's1');
     watcher.stdout.emit('data', 'DOWN\n');
     assert.strictEqual(h.run('mode'), 'arming',
       'the physical DOWN edge starts PTT');
@@ -93,16 +102,16 @@ async function testStaleHoldAfterShortcutChange() {
     const set = h.handlers.get('settings-set');
     await set({}, { shortcut: 'CommandOrControl+Shift+D' });
     assert.strictEqual(h.run('settings.shortcut'), 'CommandOrControl+Shift+D');
-    assert.strictEqual(h.run('chordStaleHeld'), true,
+    assert.strictEqual(h.run('watcherStaleHeld("s1")'), true,
       'a chord picked on key-down counts as held until the watcher reports');
-    const watcher = h.launches.at(-1).proc;
+    const watcher = watcherProc(h, 's1');
     watcher.stdout.emit('data', 'HELD\n');
     assert.strictEqual(h.run('mode'), 'idle',
       'a chord already down when the watcher starts is not a DOWN edge');
     watcher.stdout.emit('data', 'UP stale\n');
     assert.strictEqual(h.run('mode'), 'idle',
       'letting go of the chord used to pick the shortcut records nothing');
-    assert.strictEqual(h.run('chordStaleHeld'), false);
+    assert.strictEqual(h.run('watcherStaleHeld("s1")'), false);
     watcher.stdout.emit('data', 'DOWN\n');
     assert.strictEqual(h.run('mode'), 'arming',
       'the next real press still starts push to talk');
@@ -122,7 +131,7 @@ async function testToggleIgnoresAutoRepeatAfterShortcutChange() {
     fire();
     assert.strictEqual(h.run('mode'), 'idle',
       'keyboard auto-repeat of the chord still held from the picker is ignored');
-    const watcher = h.launches.at(-1).proc;
+    const watcher = watcherProc(h, 's1');
     watcher.stdout.emit('data', 'FREE\n');
     fire();
     assert.strictEqual(h.run('mode'), 'arming',
@@ -132,14 +141,36 @@ async function testToggleIgnoresAutoRepeatAfterShortcutChange() {
 }
 
 // A tap is a press let go before a word could have been spoken. Push to talk
-// keeps recording after one and ends on the next press, whose own release is
-// not a second stop.
-async function testTapLocksPushToTalk() {
+// is hold-only: a tap that short discards the recording via cancelListen.
+// Both mode keeps the old behavior: a tap locks on and the next press ends it.
+async function testPttTapCancels() {
   const h = mainHarness();
   try {
     prepare(h, 'ptt');
-    h.run("tryRegisterDictationShortcut('CommandOrControl+Super')");
-    const watcher = h.launches[0].proc;
+    useChord(h, 'CommandOrControl+Super');
+    h.run("tryRegisterDictationShortcut('s1', 'CommandOrControl+Super')");
+    const watcher = watcherProc(h, 's1');
+    watcher.stdout.emit('data', 'DOWN\n');
+    assert.strictEqual(h.run('mode'), 'arming');
+    watcher.stdout.emit('data', 'UP clean\n');
+    assert.strictEqual(h.run('mode'), 'cancel', 'a tap in ptt mode cancels the dictation');
+    assert.strictEqual(h.run('pttLocked'), false, 'a tap in ptt mode does not lock');
+    assert.strictEqual(h.run('pttReleasePending'), false, 'a cancelled tap is not a pending stop');
+    const cancelTimer = Array.from(h.timers.values()).find(t => t.delay === 1200);
+    assert(cancelTimer, 'cancel shows briefly before returning to idle');
+    cancelTimer.fn();
+    assert.strictEqual(h.run('mode'), 'idle', 'the cancelled tap returns to idle');
+    console.log('ok a tap in ptt mode cancels instead of locking');
+  } finally { await h.close(); }
+}
+
+async function testTapLocksPushToTalk() {
+  const h = mainHarness();
+  try {
+    prepare(h, 'both');
+    useChord(h, 'CommandOrControl+Super');
+    h.run("tryRegisterDictationShortcut('s1', 'CommandOrControl+Super')");
+    const watcher = watcherProc(h, 's1');
     watcher.stdout.emit('data', 'DOWN\n');
     assert.strictEqual(h.run('mode'), 'arming');
     watcher.stdout.emit('data', 'UP clean\n');
@@ -171,9 +202,10 @@ async function testDirtyTapStillCancels() {
   const h = mainHarness();
   try {
     prepare(h, 'ptt');
-    h.run("tryRegisterDictationShortcut('CommandOrControl+Super')");
+    useChord(h, 'CommandOrControl+Super');
+    h.run("tryRegisterDictationShortcut('s1', 'CommandOrControl+Super')");
     h.run('flashCancel = () => { mode = "cancel"; }');
-    const watcher = h.launches[0].proc;
+    const watcher = watcherProc(h, 's1');
     watcher.stdout.emit('data', 'DOWN\n');
     watcher.stdout.emit('data', 'UP dirty\n');
     assert.strictEqual(h.run('mode'), 'cancel', 'Ctrl+Win+Left tapped is still not a dictation');
@@ -189,8 +221,9 @@ async function testLoneKeyIgnoresGameplayKeys() {
   const h = mainHarness();
   try {
     prepare(h, 'ptt');
-    h.run("tryRegisterDictationShortcut('F8')");
-    const watcher = h.launches[0].proc;
+    useChord(h, 'F8');
+    h.run("tryRegisterDictationShortcut('s1', 'F8')");
+    const watcher = watcherProc(h, 's1');
     watcher.stdout.emit('data', 'FREE\n');
     watcher.stdout.emit('data', 'DOWN\n');
     assert.strictEqual(h.run('mode'), 'arming');
@@ -205,11 +238,12 @@ async function testLoneKeyIgnoresGameplayKeys() {
   const t = mainHarness();
   try {
     prepare(t, 'toggle');
-    t.run("tryRegisterDictationShortcut('F8')");
+    useChord(t, 'F8');
+    t.run("tryRegisterDictationShortcut('s1', 'F8')");
     t.shortcuts.get('F8')();
     assert.strictEqual(t.run('mode'), 'idle',
       'the Electron key-down does not toggle a lone key; the watcher does');
-    const watcher = t.launches[0].proc;
+    const watcher = watcherProc(t, 's1');
     watcher.stdout.emit('data', 'FREE\n');
     watcher.stdout.emit('data', 'DOWN\n');
     assert.strictEqual(t.run('mode'), 'idle', 'toggle waits for the release');
@@ -225,14 +259,14 @@ async function testStaleReleaseStillEndsPtt() {
   const h = mainHarness();
   try {
     prepare(h, 'ptt');
-    h.run("tryRegisterDictationShortcut('CommandOrControl+Shift+Space')");
-    const first = h.launches[0].proc;
+    h.run("tryRegisterDictationShortcut('s1', 'CommandOrControl+Shift+Space')");
+    const first = watcherProc(h, 's1');
     first.stdout.emit('data', 'DOWN\n');
     assert.strictEqual(h.run('mode'), 'arming');
     first.emit('exit', 1);
     const restart = Array.from(h.timers.values()).find(timer => timer.delay === 250);
     restart.fn();
-    const second = h.launches[1].proc;
+    const second = watcherProc(h, 's1');
     second.stdout.emit('data', 'HELD\n');
     assert.strictEqual(h.run('mode'), 'arming', 'a stale hold does not restart the recording');
     second.stdout.emit('data', 'UP stale\n');
@@ -257,8 +291,9 @@ async function testWatcherTimesTheHold() {
   try {
     prepare(h, 'ptt');
     const diag = captureDiag(h);
-    h.run("tryRegisterDictationShortcut('CommandOrControl+Super')");
-    const watcher = h.launches[0].proc;
+    useChord(h, 'CommandOrControl+Super');
+    h.run("tryRegisterDictationShortcut('s1', 'CommandOrControl+Super')");
+    const watcher = watcherProc(h, 's1');
     watcher.stdout.emit('data', 'FREE\nDOWN\nUP clean 2000\n');
     assert.strictEqual(h.run('pttLocked'), false, 'a two-second hold read late is not a tap');
     assert.strictEqual(h.run('pttReleasePending'), true, 'it ends the dictation once the mic is open');
@@ -271,10 +306,11 @@ async function testWatcherTimesTheHold() {
 
   const t = mainHarness();
   try {
-    prepare(t, 'ptt');
+    prepare(t, 'both');
     const diag = captureDiag(t);
-    t.run("tryRegisterDictationShortcut('CommandOrControl+Super')");
-    const watcher = t.launches[0].proc;
+    useChord(t, 'CommandOrControl+Super');
+    t.run("tryRegisterDictationShortcut('s1', 'CommandOrControl+Super')");
+    const watcher = watcherProc(t, 's1');
     watcher.stdout.emit('data', 'FREE\nDOWN\n');
     t.run('pttPressedAt = Date.now() - 1000');
     watcher.stdout.emit('data', 'UP clean 120\n');
@@ -293,8 +329,9 @@ async function testFreeWatcherEndsMissedRelease() {
   try {
     prepare(h, 'ptt');
     const diag = captureDiag(h);
-    h.run("tryRegisterDictationShortcut('CommandOrControl+Super')");
-    const first = h.launches[0].proc;
+    useChord(h, 'CommandOrControl+Super');
+    h.run("tryRegisterDictationShortcut('s1', 'CommandOrControl+Super')");
+    const first = watcherProc(h, 's1');
     first.stdout.emit('data', 'FREE\nDOWN\n');
     h.ipcEvents.get('capture-ready')({ sender: h.run('overlayWin.webContents') });
     first.stderr.emit('data', 'Add-Type : compile failed\r\n');
@@ -306,7 +343,7 @@ async function testFreeWatcherEndsMissedRelease() {
     assert.strictEqual(lost.recording, true, 'the log says a hold was in flight');
     assert.strictEqual(lost.stderr, 'Add-Type : compile failed');
     Array.from(h.timers.values()).find(timer => timer.delay === 250).fn();
-    const second = h.launches[1].proc;
+    const second = watcherProc(h, 's1');
     second.stdout.emit('data', 'FREE\n');
     assert.strictEqual(h.run('mode'), 'transcribing', 'the missed release ends the recording');
     assert.strictEqual(diag('ptt-release-missed').length, 1);
@@ -314,15 +351,16 @@ async function testFreeWatcherEndsMissedRelease() {
 
   const t = mainHarness();
   try {
-    prepare(t, 'ptt');
-    t.run("tryRegisterDictationShortcut('CommandOrControl+Super')");
-    const first = t.launches[0].proc;
+    prepare(t, 'both');
+    useChord(t, 'CommandOrControl+Super');
+    t.run("tryRegisterDictationShortcut('s1', 'CommandOrControl+Super')");
+    const first = watcherProc(t, 's1');
     first.stdout.emit('data', 'FREE\nDOWN\nUP clean 90\n');
     t.ipcEvents.get('capture-ready')({ sender: t.run('overlayWin.webContents') });
     assert.strictEqual(t.run('pttLocked'), true);
     first.emit('exit', 1);
     Array.from(t.timers.values()).find(timer => timer.delay === 250).fn();
-    t.launches[1].proc.stdout.emit('data', 'FREE\n');
+    watcherProc(t, 's1').stdout.emit('data', 'FREE\n');
     assert.strictEqual(t.run('mode'), 'recording', 'a tapped dictation was not waiting for a release');
   } finally { await t.close(); }
 
@@ -330,8 +368,9 @@ async function testFreeWatcherEndsMissedRelease() {
   try {
     prepare(s, 'ptt');
     const diag = captureDiag(s);
-    s.run("tryRegisterDictationShortcut('CommandOrControl+Super')");
-    s.run('stopChordWatch()');
+    useChord(s, 'CommandOrControl+Super');
+    s.run("tryRegisterDictationShortcut('s1', 'CommandOrControl+Super')");
+    s.run('stopChordWatch("s1")');
     await new Promise(resolve => setImmediate(resolve));
     assert.strictEqual(s.launches[0].proc.killed, true);
     assert.strictEqual(diag('key-watch-lost').length, 0, 'stopping a watcher on purpose is not a loss');
@@ -345,6 +384,7 @@ Promise.resolve()
   .then(testFreeWatcherEndsMissedRelease)
   .then(testNativeWatcherOwnsPttEdges)
   .then(testStaleReleaseStillEndsPtt)
+  .then(testPttTapCancels)
   .then(testTapLocksPushToTalk)
   .then(testDirtyTapStillCancels)
   .then(testLoneKeyIgnoresGameplayKeys)
