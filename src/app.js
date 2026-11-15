@@ -508,6 +508,11 @@ let restartingAsAdmin = false;
 
 let micDevices = [];
 let defaultMicId = null;
+// A getUserMedia open happened this session, so labels are unlocked and the
+// default is known. Opening the microphone makes macOS drop a Bluetooth
+// headset to its low-quality hands-free profile for a moment, so this must
+// stay a once-per-session event, never part of every refresh.
+let defaultMicKnown = false;
 let micListLoading = false;
 
 let view = 'dictation';
@@ -991,6 +996,18 @@ async function detectDefaultMicId() {
   }
 }
 
+function listInputDevices(all) {
+  return (all || []).filter((d) => {
+    if (!d || d.kind !== 'audioinput' || !d.deviceId) return false;
+    if (d.deviceId === 'default' || d.deviceId === 'communications') return false;
+    return true;
+  });
+}
+
+function inputDeviceIds(inputs) {
+  return listInputDevices(inputs).map((d) => d.deviceId).sort();
+}
+
 async function refreshMicrophones() {
   const select = settingInputs.microphone;
   if (!select || micListLoading || !navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
@@ -999,13 +1016,24 @@ async function refreshMicrophones() {
   select.disabled = showLoading;
   select.classList.toggle('is-loading', showLoading);
   try {
-    defaultMicId = await detectDefaultMicId();
     const all = await navigator.mediaDevices.enumerateDevices();
-    micDevices = all.filter((d) => {
-      if (d.kind !== 'audioinput' || !d.deviceId) return false;
-      if (d.deviceId === 'default' || d.deviceId === 'communications') return false;
-      return true;
-    });
+    let inputs = listInputDevices(all);
+    // Device labels are empty until microphone permission is granted, and the
+    // system default can only be named by briefly opening the microphone --
+    // which dips Bluetooth audio. So the open happens at most once per
+    // session, and only while labels are still missing. Afterwards a plain
+    // enumerateDevices keeps the tray and General current for free.
+    const labelsMissing = inputs.some((d) => !d.label);
+    const idsChanged = JSON.stringify(inputDeviceIds(inputs)) !== JSON.stringify(inputDeviceIds(micDevices));
+    if (labelsMissing && (!defaultMicKnown || idsChanged)) {
+      const id = await detectDefaultMicId();
+      if (id) {
+        defaultMicId = id;
+        defaultMicKnown = true;
+        inputs = listInputDevices(await navigator.mediaDevices.enumerateDevices());
+      }
+    }
+    micDevices = inputs;
   } catch (_) {
     // Keep the previous list if Windows temporarily cannot enumerate devices.
   } finally {

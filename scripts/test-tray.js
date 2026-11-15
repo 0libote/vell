@@ -264,6 +264,12 @@ check('preload exposes the report channel', preloadSrc.includes('reportMicDevice
 check('main only trusts its own window', /mic-devices'[\s\S]{0,200}e\.sender !== historyWin\.webContents/.test(mainSrc), true);
 check('a new list rebuilds the menu', /mic-devices'[\s\S]{0,420}refreshTray\(\)/.test(mainSrc), true);
 
+// Opening the microphone dips Bluetooth headsets to their low-quality
+// hands-free profile, so enumeration must not open it on every refresh.
+check('the mic opens at most once per session', appSrc.includes('defaultMicKnown'), true);
+check('a refresh with labels never opens the mic',
+  /labelsMissing = inputs\.some\(\(d\) => !d\.label\)[\s\S]{0,600}if \(labelsMissing && \(!defaultMicKnown \|\| idsChanged\)\)/.test(appSrc), true);
+
 // A settings deep link naming a pane the markup does not have would open the
 // window onto nothing.
 const panes = new Set((appHtml.match(/data-cat="([a-z-]+)"/g) || []).map((s) => s.slice(10, -1)));
