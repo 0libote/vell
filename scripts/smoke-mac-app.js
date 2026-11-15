@@ -184,7 +184,7 @@ async function main() {
   }
 
   const kids = descendants(child.pid);
-  const helper = kids.filter((p) => p.command.includes('/Contents/Resources/helper/voxden-helper'));
+  const helper = kids.filter((p) => p.command.includes('/Contents/Resources/helper/vell-helper'));
   for (const p of kids) note('child', p.pid + ' ' + p.command.replace(APP, '<app>').slice(0, 160));
   check('the Swift helper serves from the bundle', helper.some((p) => /-Action serve/.test(p.command)));
   check('a renderer process runs', kids.some((p) => /Helper \(Renderer\)/.test(p.command)));

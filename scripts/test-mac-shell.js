@@ -142,31 +142,54 @@ ok('a Mac hides the mute switch, which the Mac helper cannot act on',
 function loadAfterPack(execLog, platformName) {
   const module = { exports: {} };
   const env = {};
+  const removed = [];
   vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'build', 'after-pack.js'), 'utf8'), {
     module, __dirname: path.join(ROOT, 'build'), console: { log: () => {} },
     process: { env, platform: platformName },
     require: (name) => {
       if (name === 'child_process') return { execFileSync: (file, args) => execLog.push([file].concat(args)) };
-      if (name === 'fs') return { existsSync: () => true, chmodSync: () => {} };
+      if (name === 'fs') return {
+        existsSync: () => true,
+        chmodSync: () => {},
+        readdirSync: (dir) => {
+          const p = String(dir).replace(/\\/g, '/');
+          if (p.endsWith('onnxruntime-node/bin/napi-v6')) {
+            return ['darwin', 'linux', 'win32'].map((n) => ({ name: n, isDirectory: () => true }));
+          }
+          if (p.endsWith('napi-v6/darwin')) {
+            return ['arm64', 'x64'].map((n) => ({ name: n, isDirectory: () => true }));
+          }
+          return [];
+        },
+        rmSync: (p) => { removed.push(String(p)); },
+      };
       return require(name);
     },
   });
-  return { afterPack: module.exports, env };
+  return { afterPack: module.exports, env, removed };
 }
 
 (async () => {
   const log = [];
-  const { afterPack } = loadAfterPack(log, 'darwin');
+  const pack = loadAfterPack(log, 'darwin');
   const context = {
     electronPlatformName: 'darwin',
+    // The real electron-builder passes its numeric Arch enum, not a name.
+    arch: require('builder-util').Arch.arm64,
     appOutDir: '/out/mac-arm64',
-    packager: { appInfo: { productFilename: 'Voxden' } },
+    packager: { appInfo: { productFilename: 'Vell' } },
   };
-  await afterPack(context);
-  const app = path.join('/out/mac-arm64', 'Voxden.app');
+  await pack.afterPack(context);
+  const app = path.join('/out/mac-arm64', 'Vell.app');
   const res = path.join(app, 'Contents', 'Resources');
+  const ortBin = path.join(res, 'app.asar.unpacked', 'node_modules', 'onnxruntime-node', 'bin', 'napi-v6');
+  eq('foreign-platform onnxruntime bindings are pruned',
+    pack.removed.slice().sort(),
+    [path.join(ortBin, 'linux'), path.join(ortBin, 'win32'), path.join(ortBin, 'darwin', 'x64')].sort());
+  ok('the current platform binding is kept',
+    !pack.removed.some((p) => p === path.join(ortBin, 'darwin') || p === path.join(ortBin, 'darwin', 'arm64')));
   eq('the helper binary is signed before the bundle', log.slice(0, 1).map((c) => c[c.length - 1]),
-    [path.join(res, 'helper', 'voxden-helper')]);
+    [path.join(res, 'helper', 'vell-helper')]);
   const bundle = log[1];
   ok('the bundle is signed ad hoc, deep, with the hardened runtime and entitlements',
     bundle[0] === 'codesign' && bundle.includes('--deep') && bundle[bundle.indexOf('--sign') + 1] === '-'
@@ -176,8 +199,13 @@ function loadAfterPack(execLog, platformName) {
   eq('three codesign calls in all', log.length, 3);
 
   const winLog = [];
-  await loadAfterPack(winLog, 'win32').afterPack({ electronPlatformName: 'win32', appOutDir: 'x', packager: context.packager });
+  const winPack = loadAfterPack(winLog, 'win32');
+  await winPack.afterPack({ electronPlatformName: 'win32', appOutDir: 'x', packager: context.packager });
   eq('a Windows pack signs nothing', winLog, []);
+  const winRes = path.join('x', 'Vell.app', 'Contents', 'Resources');
+  const winBin = path.join(winRes, 'app.asar.unpacked', 'node_modules', 'onnxruntime-node', 'bin', 'napi-v6');
+  eq('a Windows pack prunes the other platforms instead',
+    winPack.removed.slice().sort(), [path.join(winBin, 'darwin'), path.join(winBin, 'linux')].sort());
 
   const idLog = [];
   const withIdentity = loadAfterPack(idLog, 'darwin');

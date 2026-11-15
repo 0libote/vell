@@ -39,12 +39,40 @@ function signAdHoc(appPath, binaries, log = console.log) {
   log('after-pack: signed ad hoc and verified ' + appPath);
 }
 
+// onnxruntime-node ships native bindings for every platform inside the npm
+// package, and asarUnpack copies all of them beside the asar. Only the
+// platform being packed can ever load, so the rest is deleted here: ~70MB
+// of linux/win32 bindings on a Mac build, and the reverse on Windows.
+//
+// context.arch is electron-builder's numeric Arch enum, not a name, so it is
+// translated back first; anything unrecognised disables arch pruning rather
+// than deleting the binding the app needs.
+function pruneForeignBindings(resources, platformName, arch) {
+  const { Arch } = require('builder-util');
+  const archName = typeof arch === 'string' ? arch : Arch[arch];
+  const bin = path.join(resources, 'app.asar.unpacked', 'node_modules', 'onnxruntime-node', 'bin', 'napi-v6');
+  if (!fs.existsSync(bin)) return;
+  for (const entry of fs.readdirSync(bin, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const full = path.join(bin, entry.name);
+    if (entry.name !== platformName) {
+      fs.rmSync(full, { recursive: true, force: true });
+      continue;
+    }
+    if (typeof archName !== 'string') continue;
+    for (const sub of fs.readdirSync(full, { withFileTypes: true })) {
+      if (sub.isDirectory() && sub.name !== archName) fs.rmSync(path.join(full, sub.name), { recursive: true, force: true });
+    }
+  }
+}
+
 module.exports = async function afterPack(context) {
-  if (context.electronPlatformName !== 'darwin') return;
   const app = context.packager.appInfo.productFilename + '.app';
   const appPath = path.join(context.appOutDir, app);
   const resources = path.join(appPath, 'Contents', 'Resources');
-  const binaries = [path.join(resources, 'helper', 'voxden-helper')];
+  pruneForeignBindings(resources, context.electronPlatformName, context.arch);
+  if (context.electronPlatformName !== 'darwin') return;
+  const binaries = [path.join(resources, 'helper', 'vell-helper')];
   for (const file of binaries) {
     if (!fs.existsSync(file)) throw new Error('after-pack: ' + file + ' is missing');
     fs.chmodSync(file, 0o755);

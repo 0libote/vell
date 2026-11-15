@@ -25,7 +25,7 @@ on:
         default: true
       sentence:
         description: What the fake microphone says on every recording
-        default: 'Hello from the Mac build. This is a test of Voxden dictation.'
+        default: 'Hello from the Mac build. This is a test of Vell dictation.'
 
 # Reads the repository and nothing else; the job never pushes or releases.
 permissions:

@@ -42,6 +42,10 @@ async function main() {
   // load from inside an asar).
   const binding = path.join(resources, 'app.asar.unpacked', 'node_modules', 'onnxruntime-node', 'bin', 'napi-v6', 'win32', 'x64', 'onnxruntime_binding.node');
   assert.ok(fs.existsSync(binding), 'unpacked onnxruntime binding missing: ' + binding);
+  const ortBin = path.join(resources, 'app.asar.unpacked', 'node_modules', 'onnxruntime-node', 'bin', 'napi-v6');
+  for (const foreign of ['darwin', 'linux']) {
+    assert.ok(!fs.existsSync(path.join(ortBin, foreign)), 'stale ' + foreign + ' onnxruntime binding ships on Windows');
+  }
   // The Voz SDK ships inside the asar.
   const vozPkg = JSON.parse(asar.extractFile(archive, 'node_modules/@desert-ant-labs/voz/package.json').toString('utf8'));
   assert.strictEqual(vozPkg.name, '@desert-ant-labs/voz');

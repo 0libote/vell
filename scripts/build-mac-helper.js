@@ -1,6 +1,6 @@
 'use strict';
 
-// Compiles helper/mac/main.swift into build/mac-helper/voxden-helper with the
+// Compiles helper/mac/main.swift into build/mac-helper/vell-helper with the
 // command line tools' swiftc; no Xcode project. The binary is packaged by
 // build.mac.extraResources and started by main.js on macOS the way
 // win32.ps1 is on Windows. Off macOS there is nothing to build.
@@ -12,7 +12,7 @@ const { spawnSync } = require('child_process');
 const ROOT = path.join(__dirname, '..');
 const SOURCE = path.join(ROOT, 'helper', 'mac', 'main.swift');
 const OUT_DIR = path.join(ROOT, 'build', 'mac-helper');
-const OUT = path.join(OUT_DIR, 'voxden-helper');
+const OUT = path.join(OUT_DIR, 'vell-helper');
 
 function buildMacHelper({ quiet = false } = {}) {
   if (process.platform !== 'darwin') {

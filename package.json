@@ -138,8 +138,8 @@
       },
       "extraResources": [
         {
-          "from": "build/mac-helper/voxden-helper",
-          "to": "helper/voxden-helper"
+          "from": "build/mac-helper/vell-helper",
+          "to": "helper/vell-helper"
         }
       ]
     },

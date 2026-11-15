@@ -354,7 +354,7 @@ function initPaths() {
     NOTIFICATIONS_FILE = path.join(DATA, 'notifications.json');
     VOCAB_SEED = path.join(res, 'scripts', 'vocabulary-seed.json');
     WIN32 = path.join(res, 'scripts', 'win32.ps1');
-    HELPER = path.join(res, 'helper', 'voxden-helper');
+    HELPER = path.join(res, 'helper', 'vell-helper');
     MODELS = path.join(app.getPath('userData'), 'models');
     ASR_RUNTIME = path.join(app.getPath('userData'), 'asr-runtime');
     ASR_MODELS = path.join(app.getPath('userData'), 'asr-models');
@@ -373,7 +373,7 @@ function initPaths() {
     SETTINGS_FILE = path.join(DATA, 'settings.json');
     NOTIFICATIONS_FILE = path.join(DATA, 'notifications.json');
     WIN32 = path.join(ROOT, 'scripts', 'win32.ps1');
-    HELPER = path.join(ROOT, 'build', 'mac-helper', 'voxden-helper');
+    HELPER = path.join(ROOT, 'build', 'mac-helper', 'vell-helper');
     MODELS = path.join(ROOT, 'models');
     ASR_RUNTIME = path.join(ROOT, 'models', 'asr-runtime');
     ASR_MODELS = path.join(ROOT, 'models', 'asr-models');

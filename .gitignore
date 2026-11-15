@@ -17,14 +17,6 @@ training/work/
 scripts/vocabulary-pack.personal.json
 # Prompt scripts carrying private vocabulary; see training/record.py --prompts.
 *.personal.txt
-dist-runtime/
-dist-runtime-extracted/
-dist-cuda-pack/
-dist-model/
-
-dist-runtime-v3/
-dist-qwen-cuda-pack/
-dist-qwen-rocm-pack/
 .claude/
 
 # Account service database

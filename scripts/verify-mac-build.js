@@ -131,7 +131,7 @@ function checkApp(app, label) {
   const res = path.join(app, 'Contents', 'Resources');
   const binaries = [
     ['main executable', exe],
-    ['platform helper', path.join(res, 'helper', 'voxden-helper')],
+    ['platform helper', path.join(res, 'helper', 'vell-helper')],
   ];
   for (const [name, file] of binaries) {
     if (!check(name + ' exists', fs.existsSync(file), path.relative(app, file))) continue;
@@ -155,6 +155,10 @@ function checkApp(app, label) {
     check('Resources/' + rel, fs.existsSync(path.join(res, rel)));
   }
   check('no Python sidecar ships anymore', !fs.existsSync(path.join(res, 'sidecar')));
+  const ortBin = path.join(res, 'app.asar.unpacked', 'node_modules', 'onnxruntime-node', 'bin', 'napi-v6');
+  for (const foreign of ['linux', 'win32']) {
+    check('no ' + foreign + ' onnxruntime binding ships on a Mac build', !fs.existsSync(path.join(ortBin, foreign)));
+  }
   for (const rel of [path.join('scripts', 'win32.ps1'), path.join('scripts', 'correction-watch.ps1'), path.join('pack-tools', '7za.exe')]) {
     check('no Windows-only Resources/' + rel, !fs.existsSync(path.join(res, rel)));
   }

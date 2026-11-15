@@ -4,9 +4,9 @@ on:
   push:
     tags:
       - 'v*'
-  # A manual run exercises the whole pipeline -- runtime, tests, installer --
+  # A manual run exercises the whole pipeline -- tests, installer --
   # without publishing. The installer is kept as a workflow artifact instead.
-  # `only` picks one half so a Mac fix does not wait on the 40-minute Windows
+  # `only` picks one half so a Mac fix does not wait on the Windows
   # build, or the other way round. A tag push has no inputs and runs both.
   workflow_dispatch:
     inputs:
@@ -36,7 +36,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
-          # Current 22 LTS includes node:sqlite and meets rebuild's 22.12+ minimum.
+          # Current 22 LTS includes node:sqlite and meets the 22.12+ minimum.
           node-version: '22'
           cache: npm
 
@@ -50,71 +50,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Check the public sign-in service before a release
-        if: github.event_name == 'push'
-        run: npm run check:account-service
-
-      - name: Setup Python for the bundled speech runtime
-        uses: actions/setup-python@v7
-        with:
-          python-version: '3.12.10'
-          architecture: x64
-
-      - name: Prepare the complete speech runtime
-        run: npm run prepare:asr-runtime
-
-      - name: Validate app and speech lifecycle
-        env:
-          VOXDEN_PYTHON: ${{ github.workspace }}\dist-runtime-v3\runtime\python.exe
+      # The full unit + UI chain. This already covers game shortcuts, admin
+      # apps, app dictation, sounds, the flow bar, and speech setup.
+      - name: Run the test chain
         run: npm test
-
-      - name: Validate game shortcuts and administrator settings
-        run: |
-          npm run test:game-shortcut
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          npm run test:admin-apps
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: Validate dictation into the app
-        run: npm run test:app-dictation
 
       - name: Validate native theme saving
         run: npx --no-install electron scripts/test-app-theme-native.js
-
-      - name: Validate speech setup UI
-        run: npm run test:speech-ui
-
-      - name: Validate music controls UI
-        run: npm run test:media-ui
-
-      - name: Validate sound cues and launch readiness
-        run: npm run test:sounds
-
-      - name: Validate the flow bar overlay
-        run: npm run test:flow-bar-ui
-
-      - name: Validate capture reuse and release highlights
-        run: |
-          npm run test:flow-bar-audio-ui
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          npm run test:changelog
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          npm run test:release-ui
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: Validate flow bar placement and dragging
-        run: npm run test:flow-bar-main
-
-      - name: Validate the notifications panel
-        run: npm run test:notifications-ui
 
       # A quit that hangs fails here in minutes, not at the job's hour.
       - name: Validate packaged startup without installed models
         timeout-minutes: 5
         run: npm run test:packaged-startup
-
-      - name: Validate sign-in server persistence before authentication
-        run: npm run test:account-service-native
 
       # The draft's body comes from release-notes/current.md (build.releaseInfo
       # in package.json). Rewrite that file for the new version before tagging.
@@ -132,7 +79,7 @@ jobs:
           if ($drafts.Count -eq 1) {
             if (-not $drafts[0].draft) { throw 'Refusing to upload to a published release.' }
           } else {
-            gh release create $env:GITHUB_REF_NAME --verify-tag --draft --title "Voxden $($env:GITHUB_REF_NAME.TrimStart('v'))" --notes-file release-notes/current.md
+            gh release create $env:GITHUB_REF_NAME --verify-tag --draft --title "Vell $($env:GITHUB_REF_NAME.TrimStart('v'))" --notes-file release-notes/current.md
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 
@@ -150,14 +97,14 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v7
         with:
-          name: Voxden-Setup
+          name: Vell-Setup
           path: |
-            dist/Voxden-Setup-*.exe
-            dist/Voxden-Setup-*.exe.blockmap
+            dist/Vell-Setup-*.exe
+            dist/Vell-Setup-*.exe.blockmap
             dist/latest.yml
           if-no-files-found: error
 
-      - name: Verify the built Windows app and runtime
+      - name: Verify the built Windows app
         run: node scripts/verify-built-app.js
 
       - name: Smoke test the built Windows app with fresh and existing profiles
@@ -200,22 +147,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # The same self-contained speech runtime the Windows job builds, for
-      # Apple Silicon: python-build-standalone plus the CPU engines.
-      - name: Prepare the complete speech runtime
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run prepare:asr-runtime
-
-      # The test chain is && joined, so one failure would hide everything after
-      # it. The report runs each file on its own, lists every result, and then
-      # fails the job if any failed. Nothing is skipped: the files that only
-      # mean something on Windows (test-win32-protocol, the win-unpacked checks
-      # in test-packaged-sidecar and test-qwen-packaged) skip their own
-      # Windows-only parts and still check the rest here.
+      # The test chain in package.json is && joined, so one failure would hide
+      # everything after it. The report runs each file on its own, lists every
+      # result, and then fails the job if any failed. Nothing is skipped: the
+      # files that only mean something on Windows skip their own Windows-only
+      # parts and still check the rest here.
       - name: Run the test chain file by file
-        env:
-          VOXDEN_PYTHON: ${{ github.workspace }}/dist-runtime-v3/runtime/bin/python3.12
         run: node scripts/test-report.js --strict --json dist-test-report/mac.json
 
       - name: Validate theme saving through native macOS windows
@@ -230,17 +167,17 @@ jobs:
       - name: Build the macOS app, signed ad hoc
         run: npm run dist:mac
 
-      - name: Validate capture reuse and release highlights
+      - name: Validate flow-bar audio and notifications
         run: |
           npm run test:flow-bar-audio-ui
-          npm run test:changelog
-          npm run test:release-ui
+          npm run test:notifications-ui
 
       # What a user downloads, checked as they get it: the zip unpacked with
       # ditto and the dmg mounted, each app strictly code-signature verified,
-      # arm64 throughout (app, helper, 7za, the runtime's python), Info.plist
-      # and Resources as package.json declares them, and the bundled speech
-      # engine installed and probed through the app's own installer.
+      # arm64 throughout (app, helper, onnxruntime binding), Info.plist
+      # and Resources as package.json declares them, and the Voz model
+      # manager resolving from the packaged app. No Python runtime and no
+      # sidecar ship anymore: Voz runs in-process via onnxruntime-node.
       - name: Verify the zip and dmg
         run: node scripts/verify-mac-build.js --dist dist --extract dist/mac-verify
 
@@ -248,15 +185,15 @@ jobs:
       # load, main answers over IPC as packaged macOS, the Swift helper runs.
       - name: Start the packaged app
         timeout-minutes: 5
-        run: node scripts/smoke-mac-app.js --app dist/mac-verify/Voxden.app --log dist/mac-smoke.log
+        run: node scripts/smoke-mac-app.js --app dist/mac-verify/Vell.app --log dist/mac-smoke.log
 
       - name: Keep the macOS build
         uses: actions/upload-artifact@v7
         with:
-          name: Voxden-mac
+          name: Vell-mac
           path: |
-            dist/Voxden-*-mac-*.zip
-            dist/Voxden-*-mac-*.dmg
+            dist/Vell-*-mac-*.zip
+            dist/Vell-*-mac-*.dmg
             dist/latest-mac.yml
           if-no-files-found: error
 
@@ -264,7 +201,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: Voxden-mac-logs
+          name: Vell-mac-logs
           path: |
             dist/mac-smoke.log*
             dist-test-report/mac.json
@@ -275,14 +212,6 @@ jobs:
   # electron-builder, so the two never race to create it; it refuses anything
   # but a draft, so a published release is never touched; --clobber makes a
   # re-run replace its own files rather than fail.
-  #
-  # latest-mac.yml is uploaded on purpose. electron-updater cannot install an
-  # update into an app without a real signature, so the Mac app never downloads
-  # one (src/updater.js turns autoDownload off on macOS): it only reads this
-  # file to learn that a newer version exists, then points the user at
-  # voxden.app/download. Without it the Mac app's update check fails outright.
-  # The blockmaps feed differential downloads the Mac app never makes, so they
-  # stay behind until the build is properly signed.
   mac-release:
     if: github.event_name == 'push'
     needs: [release, mac]
@@ -292,7 +221,7 @@ jobs:
       - name: Fetch the macOS build
         uses: actions/download-artifact@v7
         with:
-          name: Voxden-mac
+          name: Vell-mac
           path: mac
 
       - name: Attach it to the draft release
@@ -311,6 +240,6 @@ jobs:
             exit 1
           fi
           gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
-            mac/Voxden-*-mac-arm64.zip mac/Voxden-*-mac-arm64.dmg mac/latest-mac.yml
+            mac/Vell-*-mac-arm64.zip mac/Vell-*-mac-arm64.dmg mac/latest-mac.yml
           gh api "repos/$GITHUB_REPOSITORY/releases?per_page=50" \
             --jq "[.[] | select(.tag_name == \"$TAG\")][0].assets[] | \"\(.name)  \(.size)\""

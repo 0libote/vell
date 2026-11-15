@@ -5,8 +5,8 @@
   so each of these is needed for the thing it names) and, once there is an
   Apple Developer identity, by electron-builder's own signing.
   allow-jit: Electron/V8 compiles JavaScript at runtime.
-  disable-library-validation + allow-unsigned-executable-memory: the bundled
-  Python speech sidecar loads its own unsigned native libraries.
+  disable-library-validation + allow-unsigned-executable-memory: the unpacked
+  onnxruntime-node native binding loads unsigned inside the app.
   device.audio-input: microphone access for dictation.
   automation.apple-events: reserved for future media control (pausing playback).
 -->
