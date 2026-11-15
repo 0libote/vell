@@ -116,8 +116,13 @@ async function main() {
   fs.mkdirSync(path.dirname(LOG), { recursive: true });
   const log = fs.openSync(LOG, 'w');
   const started = Date.now();
+  const childEnv = Object.assign({}, process.env, { ELECTRON_ENABLE_LOGGING: '1' });
+  // An Electron-based launcher (or harness) exports ELECTRON_RUN_AS_NODE, and
+  // the child would inherit it: the app binary would run as plain node and
+  // reject its own Chromium flags with "bad option". The app must never see it.
+  delete childEnv.ELECTRON_RUN_AS_NODE;
   const child = spawn(exe, ['--remote-debugging-port=' + PORT, '--enable-logging'], {
-    env: Object.assign({}, process.env, { ELECTRON_ENABLE_LOGGING: '1' }),
+    env: childEnv,
     stdio: ['ignore', log, log],
   });
   launchedChild = child;
@@ -150,10 +155,15 @@ async function main() {
     await sleep(3000);
     try {
       const state = await evaluate(dashboard.webSocketDebuggerUrl, `window.vell.loadApp().then((s) => ({
-        version: s.version, platform: s.platform, packaged: s.packaged, updateStatus: s.status,
+        platform: s.platform, updateStatus: s.status,
         availableEngines: s.availableEngines, engineStatus: s.engineStatus, shortcut: s.shortcut,
-        shortcutLabel: s.shortcutLabel, runtimeBundled: !!(s.asrRuntime && s.asrRuntime.bundled),
-        runtimeInstalled: !!(s.asrRuntime && s.asrRuntime.installed),
+        shortcutLabel: s.shortcutLabel,
+        // The Voz-only snapshot hardcodes asrRuntime.installed: there is no
+        // separate runtime to download, Electron plus onnxruntime-node is the
+        // runtime and it ships inside the app. runtimeInstalled below is the
+        // downloaded Voz model instead, which a fresh machine does not have.
+        runtimeAlways: !!(s.asrRuntime && s.asrRuntime.installed),
+        runtimeInstalled: !!((s.asrModel && s.asrModel.installed) || (s.speechModels && s.speechModels.installed)),
         htmlPlatform: document.documentElement.dataset.platform || '',
         // The runner reports reduced motion, which turns every style change
         // into a .01ms transition; the page learns it is on a Mac in this same
@@ -167,13 +177,15 @@ async function main() {
       }))`);
       console.log('      ' + JSON.stringify(state));
       check('main answers the dashboard over IPC', !!state);
-      check('it reports version ' + pkg.version, state && state.version === pkg.version, state && state.version);
-      check('it runs as a packaged app', state && state.packaged === true);
+      // Bundle identity (name, version, signature) is proven by
+      // verify-mac-build, which reads the signed Info.plist strictly; the
+      // app-load snapshot no longer carries version/packaged fields.
+      // Packaged-ness here is proven by the pages loading from app.asar above.
       check('it knows it is on macOS', state && state.platform === 'darwin', state && state.platform);
       check('the default shortcut is Cmd+Shift+Space', state && state.shortcutLabel === 'Cmd+Shift+Space', state && state.shortcutLabel);
       check('Voz is the only engine offered', state && Array.isArray(state.availableEngines) && state.availableEngines.join(',') === 'voz',
         state && JSON.stringify(state.availableEngines));
-      check('no separate speech runtime ships (onnxruntime is inside the app)', state && state.asrRuntime && state.asrRuntime.installed === true);
+      check('no separate speech runtime ships (onnxruntime is inside the app)', state && state.runtimeAlways === true);
       check('the Mac title bar makes room for the traffic lights', state && state.htmlPlatform === 'darwin' && state.titlebarPadding === '84px',
         state && state.htmlPlatform + ' ' + state.titlebarPadding);
       check('the Dock switch is hidden', state && state.taskbarRowShown === false);
