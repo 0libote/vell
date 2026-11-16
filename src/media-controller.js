@@ -18,10 +18,14 @@ function createMediaController({ pause, resume, onError = () => {} }) {
   async function restore() {
     if (!owned.size) return;
     const ids = [...owned];
-    // Do not keep retrying play commands after a failed restore. The user may
-    // subsequently pause or stop the player themselves.
+    try {
+      await resume(ids);
+    } catch (err) {
+      // Keep ownership so the next end() can retry. The queue's onError
+      // reports it; clearing here would desync pause/resume.
+      throw err;
+    }
     owned.clear();
-    await resume(ids);
   }
 
   function begin(enabled = true, preparation = null) {

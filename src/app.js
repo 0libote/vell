@@ -2733,17 +2733,12 @@ function renderSearchEmpty() {
 // The edit is a correction to one transcript, not yet a standing rule. Say
 // what actually happened rather than promising the next dictation will change.
 function showProposedToast(pairs) {
-  const el = document.getElementById('learn-toast');
-  if (!el || !pairs || !pairs.length || !suggestionsOn()) return;
+  if (!pairs || !pairs.length || !suggestionsOn()) return;
+  if (typeof window.showAppToast !== 'function') return;
   const first = pairs[0];
   const extra = pairs.length > 1 ? ' and ' + (pairs.length - 1) + ' more' : '';
-  el.textContent = 'Suggested “' + first.from + '” → “' + first.to + '”'
-    + extra + '. Add it in Dictionary to use it everywhere.';
-  el.hidden = false;
-  clearTimeout(showProposedToast._t);
-  showProposedToast._t = setTimeout(() => {
-    el.hidden = true;
-  }, 3400);
+  window.showAppToast('Suggested “' + first.from + '” → “' + first.to + '”'
+    + extra + '. Add it in Dictionary to use it everywhere.', 3400);
 }
 
 function editingCardId() {

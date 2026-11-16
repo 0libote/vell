@@ -102,124 +102,18 @@ html[data-platform="darwin"] .titlebar .brand-lockup { padding-left: 84px; }
 
 .island-link.is-active .island-icon { color: var(--mint); }
 
-/* Polish's Pro marker: a tiny gold tag after the label. renderPolish hides it
-   for a Pro account. */
-.titlebar .island-link .nav-pro {
-  margin-left: -2px;
-  padding: 2px 4px 1px;
-  border: 1px solid var(--pro-border);
-  border-radius: 5px;
-  background: var(--pro-surface);
-  color: var(--pro-accent);
-  font-size: 8px;
-  font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: 0.08em;
-}
-
-/* A hairline between the sections and the cloud status; with no status after
-   it, nothing to divide. */
+/* A hairline between the sections; hidden when it would divide nothing. */
 .island-rule {
   flex: none;
   width: 1px;
   height: 18px;
   margin: 0 4px 0 6px;
   background: rgba(255, 255, 255, 0.18);
+  display: none;
 }
-
-.island:not(:has(.island-cloud:not([hidden]), .island-pro:not([hidden]))) .island-rule { display: none; }
-
-/* --- Cloud status ---------------------------------------------------------- */
-
-.titlebar .island-cloud {
-  appearance: none;
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 32px;
-  margin: 0;
-  padding: 0 13px 0 8px;
-  border: 0;
-  border-radius: 16px;
-  background: transparent;
-  color: var(--island-text);
-  font: inherit;
-  line-height: 1;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background-color 180ms ease, color 180ms ease;
-}
-
-.titlebar .island-cloud:hover {
-  background: rgba(255, 255, 255, 0.07);
-  color: #fff;
-}
-
-.island-cloud strong {
-  color: #fff;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-/* The ring shows what is left, from twelve o'clock round. 40.21 is its
-   circumference; --credits-left is a plain 0 to 100 set by renderCloudCredits. */
-.island-ring {
-  flex: none;
-  display: block;
-  transform: rotate(-90deg);
-}
-
-.island-ring circle {
-  fill: none;
-  stroke-width: 2.2;
-}
-
-.island-ring-track { stroke: #26302C; }
-
-.titlebar .island-ring-arc {
-  stroke: var(--mint);
-  stroke-linecap: round;
-  stroke-dasharray: 40.21px;
-  stroke-dashoffset: calc(0.4021px * (100 - var(--credits-left, 100)));
-  transition: stroke-dashoffset 280ms ease, stroke 280ms ease;
-  animation: island-ring-in 1.2s 200ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
-}
-
-@keyframes island-ring-in {
-  from { stroke-dashoffset: 40.21px; }
-}
-
-.island-cloud.is-warn .island-ring-arc { stroke: var(--warning); }
-.island-cloud.is-high .island-ring-arc { stroke: #f0b08a; }
-.island-cloud.is-critical .island-ring-arc { stroke: var(--red); }
-.island-cloud.is-critical strong { color: var(--red); }
-
-/* The upsell for an account without Pro: the gold button of Billing, small
-   enough to sit in the capsule. */
-.titlebar .island-pro {
-  appearance: none;
-  flex: none;
-  height: 26px;
-  margin: 0 2px 0 4px;
-  padding: 0 12px;
-  border: 1px solid var(--pro-accent);
-  border-radius: 13px;
-  background: var(--pro-fill);
-  color: var(--pro-ink);
-  font: inherit;
-  font-size: 11.5px;
-  font-weight: 650;
-  line-height: 1;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background 150ms ease;
-}
-
-.titlebar .island-pro:hover { background: var(--pro-hover); }
 
 /* Focus is a mint ring that stays inside the capsule's padding. */
-.titlebar :is(.island-link, .island-cloud, .island-pro):focus-visible {
+.titlebar :is(.island-link):focus-visible {
   outline: 2px solid var(--mint);
   outline-offset: 1px;
 }
@@ -279,27 +173,6 @@ html[data-platform="darwin"] .titlebar-end { padding-right: 16px; }
 
 .titlebar .notif-badge { border-color: var(--titlebar-bg); }
 
-.titlebar .account-btn {
-  margin-left: 12px;
-}
-
-.titlebar .account-btn.is-pro {
-  border-color: transparent;
-  background: var(--pro-surface);
-  color: var(--pro-accent);
-  box-shadow: 0 0 0 1.5px #C9A24B;
-}
-
-.titlebar .account-btn.is-pro:hover,
-.titlebar .account-btn.is-pro.is-open {
-  box-shadow: 0 0 0 1.5px #C9A24B, 0 0 12px rgba(224, 182, 90, 0.35);
-}
-
-.titlebar .account-btn:focus-visible {
-  outline: 2px solid var(--mint);
-  outline-offset: 2px;
-}
-
 /* --- Making room ------------------------------------------------------------
    fitIsland() in app.js measures the header and gives it fit-1, then fit-1 and
    fit-2, and so on, as the window narrows; each rung keeps the ones before it.
@@ -314,12 +187,8 @@ html[data-platform="darwin"] .titlebar-end { padding-right: 16px; }
 }
 
 .titlebar.fit-1 .island-link:not(.is-active) .island-label,
-/* 2: the meter loses the word after its figure. */
-.titlebar.fit-2 .island-cloud-text > span,
-/* 3: every section is an icon, the meter is its ring alone, and the wordmark
-   steps aside for the logo. */
+/* 3: every section is an icon, and the wordmark steps aside for the logo. */
 .titlebar.fit-3 .island-link .island-label,
-.titlebar.fit-3 .island-cloud-text,
 .titlebar.fit-3 .brand {
   position: absolute;
   width: 1px;
@@ -331,34 +200,14 @@ html[data-platform="darwin"] .titlebar-end { padding-right: 16px; }
   white-space: nowrap;
 }
 
-.titlebar.fit-3 :is(.island-link, .island-cloud) {
+.titlebar.fit-3 :is(.island-link) {
   width: 32px;
   padding: 0;
   justify-content: center;
 }
 
-/* An icon has no room for the tag, so Polish keeps a gold dot at its corner. */
-.titlebar.fit-1 .island-link:not(.is-active) .nav-pro,
-.titlebar.fit-3 .island-link .nav-pro {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 6px;
-  height: 6px;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  border: 0;
-  border-radius: 50%;
-  background: var(--pro-accent);
-  font-size: 0;
-}
-
-/* 4: the meter steps out and the Go Pro button stays; 5: no room even for
-   that. Plans & billing is still in Settings. */
-.titlebar.fit-4 .island-cloud { display: none; }
-.titlebar.fit-4 .island:not(:has(.island-pro:not([hidden]))) .island-rule { display: none; }
-.titlebar.fit-5 :is(.island-rule, .island-pro) { display: none; }
+/* 4-5: spare rungs kept so fitIsland() (5 rungs) keeps working; nothing left
+   to hide at these widths. */
 
 @media (prefers-reduced-motion: reduce) {
   .titlebar .island-ring-arc { animation: none; transition: none; }

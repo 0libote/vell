@@ -229,17 +229,29 @@ async function extractZip(zipPath, destination, options) {
 
     await fsPromises.mkdir(destination, { recursive: true });
     let done = 0;
-    for (const { entry, target } of planned) {
-      if (opts.signal && opts.signal.aborted) throw new ZipError('Extraction cancelled.');
-      if (isDirectoryEntry(entry)) {
-        await fsPromises.mkdir(target, { recursive: true });
-      } else {
-        await extractEntry(handle, entry, target);
-        const mode = process.platform === 'win32' ? 0 : unixExecuteMode(entry);
-        if (mode) await fsPromises.chmod(target, mode);
+    const written = [];
+    try {
+      for (const { entry, target } of planned) {
+        if (opts.signal && opts.signal.aborted) throw new ZipError('Extraction cancelled.');
+        if (isDirectoryEntry(entry)) {
+          await fsPromises.mkdir(target, { recursive: true });
+        } else {
+          await extractEntry(handle, entry, target);
+          written.push(target);
+          const mode = process.platform === 'win32' ? 0 : unixExecuteMode(entry);
+          if (mode) await fsPromises.chmod(target, mode);
+        }
+        done += 1;
+        if (opts.onProgress) opts.onProgress(done, planned.length);
       }
-      done += 1;
-      if (opts.onProgress) opts.onProgress(done, planned.length);
+    } catch (err) {
+      // Roll back files this call wrote so a mid-extract failure cannot
+      // leave a half-extracted runtime behind. Directories are left alone:
+      // the destination may pre-exist with user files.
+      for (const target of written.reverse()) {
+        try { await fsPromises.unlink(target); } catch (_) {}
+      }
+      throw err;
     }
     return { files: planned.length };
   } finally {

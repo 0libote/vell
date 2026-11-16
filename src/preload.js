@@ -6,14 +6,42 @@ const { contextBridge, ipcRenderer } = require('electron');
 // and there are a handful of tones, so each answer is asked for once and
 // kept. Asked asynchronously: a synchronous request that nothing answers
 // freezes the page, and a failed one just leaves the plain sample.
+const MAX_STYLE_PREVIEWS = 20;
+const MAX_WAV_BYTES = 64 * 1024 * 1024;
 const stylePreviews = new Map();
+
+function toAudioBytes(input) {
+  const view = input instanceof ArrayBuffer ? new Uint8Array(input) : input;
+  const bytes = Buffer.from(view || []);
+  if (!bytes.length) throw new Error('No audio provided.');
+  if (bytes.length > MAX_WAV_BYTES) throw new Error('Audio clip too large.');
+  return bytes;
+}
+
+// Every on* subscription returns an unsubscribe, so a remounted renderer
+// cannot stack duplicate handlers on the same channel.
+function subscribe(channel, cb, mapPayload) {
+  const listener = (_e, payload) => cb(mapPayload ? mapPayload(payload) : payload);
+  ipcRenderer.on(channel, listener);
+  return () => ipcRenderer.removeListener(channel, listener);
+}
+
+function readBootstrapTheme() {
+  try {
+    if (process.argv.includes('--voxden-theme-bootstrap')) {
+      return ipcRenderer.sendSync('app-theme-get');
+    }
+  } catch (_) {}
+  return 'voxden';
+}
 
 contextBridge.exposeInMainWorld('vell', {
   // Only the main window opts in. Read once per document, before its styles
   // paint; a reload gets the latest saved preference without a dark flash.
-  initialAppTheme: process.argv.includes('--voxden-theme-bootstrap')
-    ? ipcRenderer.sendSync('app-theme-get') : 'voxden',
-  onAppTheme: (cb) => ipcRenderer.on('app-theme-changed', (_e, theme) => cb(theme)),
+  // Sync only on the bootstrap path main sets up; async everywhere else.
+  initialAppTheme: readBootstrapTheme(),
+  getAppTheme: () => ipcRenderer.invoke('app-theme-get').catch(() => 'voxden'),
+  onAppTheme: (cb) => subscribe('app-theme-changed', cb, (theme) => theme),
   ready: () => ipcRenderer.send('hud-ready'),
   captureReady: (timing) => ipcRenderer.send('capture-ready', timing),
   captureEnded: () => ipcRenderer.send('capture-ended'),
@@ -24,33 +52,26 @@ contextBridge.exposeInMainWorld('vell', {
   toggle: () => ipcRenderer.invoke('toggle'),
   cancel: () => ipcRenderer.send('hud-cancel'),
   confirm: () => ipcRenderer.send('hud-confirm'),
-  onState: (cb) => {
-    ipcRenderer.on('state', (_e, payload) => cb(payload));
-  },
-  onCursor: (cb) => {
-    ipcRenderer.on('hud-cursor', (_e, payload) => cb(payload));
-  },
-  onDragEnd: (cb) => {
-    ipcRenderer.on('hud-drag-end', () => cb());
-  },
-  onPing: (cb) => {
-    ipcRenderer.on('hud-ping', (_e, seq) => cb(seq));
-  },
+  onState: (cb) => subscribe('state', cb),
+  onCursor: (cb) => subscribe('hud-cursor', cb),
+  onDragEnd: (cb) => subscribe('hud-drag-end', () => cb()),
+  onPing: (cb) => subscribe('hud-ping', cb),
   pong: (seq) => ipcRenderer.send('hud-pong', seq),
   frame: (seq) => ipcRenderer.send('hud-frame', seq),
   diag: (event, fields) => ipcRenderer.send('hud-diag', String(event || ''), fields || {}),
   transcribeLocal: (wav, options) => {
-    const bytes = Buffer.from(wav instanceof ArrayBuffer ? new Uint8Array(wav) : wav);
+    const bytes = toAudioBytes(wav);
     return ipcRenderer.invoke('transcribe-local', bytes, options || {});
   },
   parkAudio: (wav) => {
-    const bytes = Buffer.from(wav instanceof ArrayBuffer ? new Uint8Array(wav) : wav);
+    const bytes = toAudioBytes(wav);
     return ipcRenderer.invoke('park-audio', bytes);
   },
   // Raw 16-bit PCM from a dictation still in progress. One-way: the recording
-  // path must not wait on a disk write.
+  // path must not wait on a disk write. Capped so a stuck flush cannot flood.
   flushAudio: (pcm, sampleRate) => {
     const bytes = Buffer.from(pcm instanceof ArrayBuffer ? new Uint8Array(pcm) : pcm);
+    if (!bytes.length || bytes.length > MAX_WAV_BYTES) return;
     ipcRenderer.send('capture-flush', bytes, sampleRate);
   },
   transcript: (text) => ipcRenderer.send('transcript', text),
@@ -63,18 +84,20 @@ contextBridge.exposeInMainWorld('vell', {
     const sample = String(text || '').slice(0, 500);
     const key = JSON.stringify([sample, String(tone || ''), clean === true]);
     if (!stylePreviews.has(key)) {
+      // Bounded LRU: the sample never changes and tones are few, but a leak
+      // here would pin a promise per keystroke variant forever.
+      if (stylePreviews.size >= MAX_STYLE_PREVIEWS) {
+        const oldest = stylePreviews.keys().next().value;
+        stylePreviews.delete(oldest);
+      }
       stylePreviews.set(key, ipcRenderer.invoke('style-preview', sample, tone, clean === true)
         .then((styled) => (typeof styled === 'string' ? styled : sample))
         .catch(() => { stylePreviews.delete(key); return sample; }));
     }
     return stylePreviews.get(key);
   },
-  onHistory: (cb) => {
-    ipcRenderer.on('history-updated', (_e, payload) => cb(payload));
-  },
-  onOpenSettings: (cb) => {
-    ipcRenderer.on('open-settings', (_e, cat) => cb(cat));
-  },
+  onHistory: (cb) => subscribe('history-updated', cb),
+  onOpenSettings: (cb) => subscribe('open-settings', cb),
   reportMicDevices: (payload) => ipcRenderer.send('mic-devices', payload),
   editEntry: (id, text) => ipcRenderer.invoke('history-edit', id, text),
   copyEntry: (id, which) => ipcRenderer.invoke('history-copy', id, which),

@@ -5,7 +5,6 @@ const label = document.getElementById('label');
 const btnCancel = document.getElementById('btn-cancel');
 const btnConfirm = document.getElementById('btn-confirm');
 const btnUndo = document.getElementById('btn-undo');
-const btnPolish = document.getElementById('btn-polish');
 const orbTrigger = document.getElementById('orb-trigger');
 const orbFinish = document.getElementById('orb-finish');
 const orbDiscard = document.getElementById('orb-discard');
@@ -120,10 +119,6 @@ const HOVER_STAY_H = 46;     // must cover the open 32px capsule
 const HOVER_BOTTOM = 10;     // gap from the zone's floor to the window edge
 
 let canRetry = false;
-// What main offers to polish on the result on screen: { label, credits }, or
-// null when Polish is not open to this account.
-let polishOffer = null;
-let polishPending = false;
 let successEntryId = '';
 let lastSuccessText = '';
 let editingSuccess = false;
@@ -297,15 +292,6 @@ function syncOrbControls() {
   // A preference can discard retained audio while the result is still open.
   // Refresh these controls without replaying the result or its editable text.
   pill.classList.toggle('can-retry', retryOutcome);
-  // Polish sits beside Retry on a fresh result. Not while its words are being
-  // edited: the edit changes what there is to polish.
-  const polishOutcome = hudMode === 'success' && !!polishOffer && !!successEntryId && !editingSuccess && !polishPending;
-  pill.classList.toggle('can-polish', polishOutcome);
-  if (btnPolish) {
-    btnPolish.tabIndex = shown && polishOutcome ? 0 : -1;
-    btnPolish.title = polishOffer ? 'Polish · ' + polishOffer.label : 'Polish';
-    btnPolish.setAttribute('aria-label', polishOffer ? 'Polish this dictation, ' + polishOffer.label : 'Polish this dictation');
-  }
   if (btnCancel) btnCancel.tabIndex = sharedRecording ? 0 : -1;
   if (btnConfirm) {
     btnConfirm.tabIndex = sharedRecording || retry ? 0 : -1;
@@ -1669,8 +1655,16 @@ async function startCapture(useEngine, hold) {
     });
   } catch (err) {
     if (gen !== captureGen || !capturing) return;
-    failCapture(gen, err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')
-      ? 'Mic blocked — allow microphone access' : 'Microphone unavailable — check your input device');
+    const name = err && err.name;
+    if (name === 'NotAllowedError' || name === 'SecurityError') {
+      failCapture(gen, 'Mic blocked — allow microphone access');
+    } else if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+      failCapture(gen, 'No microphone found — check your input device');
+    } else if (name === 'NotReadableError' || name === 'AbortError') {
+      failCapture(gen, 'Microphone is busy — close the app using it and try again');
+    } else {
+      failCapture(gen, 'Microphone unavailable — check your input device');
+    }
     return;
   }
 
@@ -1713,15 +1707,10 @@ async function startCapture(useEngine, hold) {
     // below the 0.8 default so the spectrum still moves with a syllable; the
     // per-bar filter in updateWave takes the rest of the noise out.
     analyser.smoothingTimeConstant = 0.55;
-    // About the same span of audio per callback at either rate: audio still
-    // in an unfilled buffer when the user stops is never delivered, and 4096
-    // frames at 16 kHz would be a quarter of a second of their last word.
-    processor = context.createScriptProcessor(context.sampleRate <= 24000 ? 1024 : 4096, 1, 1);
     let lastAudioAt = 0;
-    processor.onaudioprocess = (e) => {
+    const handleAudioFrame = (raw) => {
       if (!capturing || gen !== captureGen) return;
       try {
-        const raw = new Float32Array(e.inputBuffer.getChannelData(0));
         if (!raw.length) return;
         lastAudioAt = performance.now();
         if (!micLive) {
@@ -1751,10 +1740,56 @@ async function startCapture(useEngine, hold) {
         failCapture(gen, 'Could not read microphone audio — try again');
       }
     };
+    // Preferred path: AudioWorklet (ScriptProcessor is deprecated and will
+    // be removed from Chromium). Falls back automatically on failure.
+    let workletNode = null;
+    try {
+      if (context.audioWorklet && typeof context.audioWorklet.addModule === 'function') {
+        const workletCode = 'class VellCaptureProcessor extends AudioWorkletProcessor {'
+          + 'process(inputs) {'
+          + '  const ch = inputs && inputs[0] && inputs[0][0];'
+          + '  if (ch && ch.length) this.port.postMessage(ch.slice(0));'
+          + '  return true;'
+          + '}'
+          + '}'
+          + 'registerProcessor("vell-capture", VellCaptureProcessor);';
+        const blob = new Blob([workletCode], { type: 'application/javascript' });
+        const url = URL.createObjectURL(blob);
+        try {
+          await context.audioWorklet.addModule(url);
+          workletNode = new AudioWorkletNode(context, 'vell-capture', { numberOfInputs: 1, numberOfOutputs: 0 });
+          workletNode.port.onmessage = (ev) => {
+            const data = ev.data;
+            if (data && data.length) handleAudioFrame(new Float32Array(data));
+          };
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      }
+    } catch (_) {
+      workletNode = null;
+    }
+    if (workletNode) {
+      processor = workletNode;
+    } else {
+      // About the same span of audio per callback at either rate: audio still
+      // in an unfilled buffer when the user stops is never delivered, and 4096
+      // frames at 16 kHz would be a quarter of a second of their last word.
+      // Deprecated fallback only; removed once the worklet path proves stable.
+      processor = context.createScriptProcessor(context.sampleRate <= 24000 ? 1024 : 4096, 1, 1);
+      processor.onaudioprocess = (e) => handleAudioFrame(new Float32Array(e.inputBuffer.getChannelData(0)));
+    }
     sourceNode.connect(analyser);
     sourceNode.connect(processor);
-    captureSink = context.createMediaStreamDestination();
-    processor.connect(captureSink);
+    // ScriptProcessor needs a destination to run; the worklet has no outputs
+    // and must not be connected downstream.
+    const isWorklet = typeof AudioWorkletNode !== 'undefined' && processor instanceof AudioWorkletNode;
+    if (!isWorklet) {
+      captureSink = context.createMediaStreamDestination();
+      processor.connect(captureSink);
+    } else {
+      captureSink = null;
+    }
     capMarks.graphReady = performance.now();
     if (!capturing || gen !== captureGen) {
       teardownAudio();
@@ -1787,13 +1822,25 @@ async function startCapture(useEngine, hold) {
         }
       };
       recognition.onend = () => {
-        if (capturing && !wantsLocalAsr() && recognition) {
-          try { recognition.start(); } catch (_) {}
+        // Guard the tight restart loop: only restart if the service ended
+        // itself mid-capture, with a small backoff and a cap.
+        if (!capturing || wantsLocalAsr() || !recognition) return;
+        recognition._restarts = (recognition._restarts || 0) + 1;
+        if (recognition._restarts > 5) {
+          failCapture(gen, 'Speech service unavailable — try again');
+          return;
         }
+        setTimeout(() => {
+          if (capturing && !wantsLocalAsr() && recognition) {
+            try { recognition.start(); } catch (_) {}
+          }
+        }, Math.min(1000 * recognition._restarts, 3000));
       };
       recognition.onerror = (ev) => {
-        if (ev.error === 'not-allowed') {
+        if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
           window.vell.captureFailed('Mic blocked — allow microphone access');
+        } else if (ev.error === 'network' || ev.error === 'service-not-allowed') {
+          failCapture(gen, 'Speech service unavailable — check your connection');
         }
       };
       try { recognition.start(); } catch (_) {}
@@ -1821,7 +1868,11 @@ function failCapture(gen, message) {
 function teardownAudio(reuse = true) {
   if (captureWatch) clearInterval(captureWatch);
   captureWatch = 0;
-  if (processor) processor.onaudioprocess = null;
+  if (processor) {
+    try { processor.onaudioprocess = null; } catch (_) {}
+    try { processor.port && processor.port.close(); } catch (_) {}
+    try { processor.port && (processor.port.onmessage = null); } catch (_) {}
+  }
   try { processor && processor.disconnect(); } catch (_) {}
   try { captureSink && captureSink.disconnect(); } catch (_) {}
   if (captureSink && captureSink.stream) {
@@ -2139,21 +2190,6 @@ if (btnConfirm) {
   });
 }
 
-if (btnPolish) {
-  // Clicking Polish must leave the caret right after the words it replaces.
-  btnPolish.addEventListener('mousedown', e => e.preventDefault());
-  btnPolish.addEventListener('click', e => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (hudMode !== 'success' || !successEntryId || !polishOffer || editingSuccess || polishPending
-      || !window.vell || typeof window.vell.polishEntry !== 'function') return;
-    polishPending = true;
-    syncFlowVisual();
-    // Main shows the progress and the outcome on this bar.
-    window.vell.polishEntry(successEntryId).catch(() => {}).finally(() => { polishPending = false; });
-  });
-}
-
 if (btnUndo) {
   // Clicking Undo must leave the caret in the app the user is correcting.
   btnUndo.addEventListener('mousedown', e => e.preventDefault());
@@ -2319,11 +2355,6 @@ if (window.vell) {
       pill.title = 'Voxden';
     }
     if (s.mode === 'recording' || (!s.mode && hudMode === 'recording')) pill.title = recordingTitle(s.dictateMode);
-    // Every new state says afresh whether its result can be polished.
-    if (s.mode) {
-      polishOffer = s.mode === 'success' && s.polish ? s.polish : null;
-      polishPending = false;
-    }
     if (s.mode === 'arming') {
       setHud('arming');
       if (s.playStartCue) reportStartCue(s.cueToken, playCue('start'));

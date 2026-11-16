@@ -83,7 +83,13 @@ function isLatin(value) {
 }
 
 function foldLetters(value) {
-  return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  // Shared with dictionary.foldLetters: Latin folds to a-z0-9, anything else
+  // keeps its own letters instead of folding to empty (which made every
+  // non-Latin pair look identical).
+  const t = String(value || '').normalize('NFC').toLowerCase();
+  const ascii = t.replace(/[^a-z0-9]+/g, '');
+  if (ascii) return ascii;
+  return t.replace(/[^\p{L}\p{N}\p{M}]+/gu, '');
 }
 
 // Is this span of transcript made only of words that mean something on their
